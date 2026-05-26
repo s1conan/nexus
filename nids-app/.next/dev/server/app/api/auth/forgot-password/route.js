@@ -1,0 +1,11 @@
+var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/auth/forgot-password/route.js")
+R.c("server/chunks/d0f8d_next_937b2a33._.js")
+R.c("server/chunks/d0f8d_@supabase_postgrest-js_dist_index_mjs_beed8677._.js")
+R.c("server/chunks/d0f8d_@supabase_auth-js_dist_module_7c1221f6._.js")
+R.c("server/chunks/d0f8d_postal-mime_src_181f9bbc._.js")
+R.c("server/chunks/d0f8d_svix_dist_4baad21b._.js")
+R.c("server/chunks/d0f8d_21c7d251._.js")
+R.c("server/chunks/[root-of-the-server]__8b70dd0e._.js")
+R.c("server/chunks/1cecb__next-internal_server_app_api_auth_forgot-password_route_actions_c7ed0b32.js")
+R.m("[project]/nids-app/node_modules/next/dist/esm/build/templates/app-route.js { INNER_APP_ROUTE => \"[project]/nids-app/app/api/auth/forgot-password/route.ts [app-route] (ecmascript)\" } [app-route] (ecmascript)")
+module.exports=R.m("[project]/nids-app/node_modules/next/dist/esm/build/templates/app-route.js { INNER_APP_ROUTE => \"[project]/nids-app/app/api/auth/forgot-password/route.ts [app-route] (ecmascript)\" } [app-route] (ecmascript)").exports
