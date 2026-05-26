@@ -1,12 +1,19 @@
 {
   "/_global-error/page": "app/_global-error/page.js",
   "/_not-found/page": "app/_not-found/page.js",
-  "/auth/callback/route": "app/auth/callback/route.js",
+  "/api/approve/route": "app/api/approve/route.js",
+  "/api/auth/forgot-password/route": "app/api/auth/forgot-password/route.js",
+  "/api/auth/set-password/route": "app/api/auth/set-password/route.js",
+  "/api/auth/verify-token/route": "app/api/auth/verify-token/route.js",
+  "/api/send-email/route": "app/api/send-email/route.js",
+  "/auth/callback/page": "app/auth/callback/page.js",
   "/companies/page": "app/companies/page.js",
+  "/component-test/page": "app/component-test/page.js",
   "/dashboard/page": "app/dashboard/page.js",
   "/favicon.ico/route": "app/favicon.ico/route.js",
   "/page": "app/page.js",
   "/products/page": "app/products/page.js",
+  "/reset-password/page": "app/reset-password/page.js",
   "/signup/page": "app/signup/page.js",
   "/users/page": "app/users/page.js"
 }

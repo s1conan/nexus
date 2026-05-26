@@ -41,6 +41,36 @@
       "namedRegex": "^/_not\\-found(?:/)?$"
     },
     {
+      "page": "/api/approve",
+      "regex": "^/api/approve(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/approve(?:/)?$"
+    },
+    {
+      "page": "/api/auth/forgot-password",
+      "regex": "^/api/auth/forgot\\-password(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/forgot\\-password(?:/)?$"
+    },
+    {
+      "page": "/api/auth/set-password",
+      "regex": "^/api/auth/set\\-password(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/set\\-password(?:/)?$"
+    },
+    {
+      "page": "/api/auth/verify-token",
+      "regex": "^/api/auth/verify\\-token(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/verify\\-token(?:/)?$"
+    },
+    {
+      "page": "/api/send-email",
+      "regex": "^/api/send\\-email(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/send\\-email(?:/)?$"
+    },
+    {
       "page": "/auth/callback",
       "regex": "^/auth/callback(?:/)?$",
       "routeKeys": {},
@@ -51,6 +81,12 @@
       "regex": "^/companies(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/companies(?:/)?$"
+    },
+    {
+      "page": "/component-test",
+      "regex": "^/component\\-test(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/component\\-test(?:/)?$"
     },
     {
       "page": "/dashboard",
@@ -69,6 +105,12 @@
       "regex": "^/products(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/products(?:/)?$"
+    },
+    {
+      "page": "/reset-password",
+      "regex": "^/reset\\-password(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/reset\\-password(?:/)?$"
     },
     {
       "page": "/signup",

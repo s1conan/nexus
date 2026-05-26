@@ -191,11 +191,9 @@ export const SITE_CONTENT = {
     LOGIN_SUBTITLE: "Masukkan kredensial Anda untuk mengakses Nexus",
     LOGIN_ERROR_PENDING: "Akun Anda sedang menunggu persetujuan dari administrator.",
     LOGIN_ERROR_INVALID: "Nama pengguna atau kata sandi salah.",
-    LOGIN_ERROR_NO_PROFILE: "Akun berhasil diautentikasi tetapi tidak ada profil yang ditemukan. Silakan hubungi dukungan.",
     LABEL_USERNAME: "Nama Pengguna",
-
-    LABEL_PASSWORD: "Kata Sandi",
     PLACEHOLDER_USERNAME: "admin",
+    LABEL_PASSWORD: "Kata Sandi",
     PLACEHOLDER_PASSWORD: "••••••••",
     BUTTON_LOGIN: "Masuk",
     LINK_SIGNUP: "Daftar",
@@ -321,7 +319,6 @@ export const SITE_CONTENT = {
     // Validation Errors
     ERROR_INVALID_EMAIL: "Silakan masukkan alamat email yang valid.",
     ERROR_PASSWORD_SHORT: "Kata sandi harus minimal 6 karakter.",
-    ERROR_PASSWORD_MISMATCH: "Kata sandi tidak cocok.",
     ERROR_EMAIL_EXISTS: "Alamat email ini sudah digunakan.",
     ERROR_USERNAME_EXISTS: "Nama pengguna ini sudah diambil. Silakan coba yang lain.",
     ERROR_PHONE_EXISTS: "Nomor telepon ini sudah terdaftar.",
@@ -338,14 +335,27 @@ export const SITE_CONTENT = {
     LABEL_USERNAME_FIELD: "Nama Pengguna",
     PLACEHOLDER_LOGIN_FALLBACK: "admin atau email@example.com",
 
-    // Reset Password
+    // Reset Password / Forgot Password
     TITLE_RESET_PWD: "Atur Ulang Kata Sandi",
-    MSG_RESET_LINK_SENT: "Link Keamanan Dikirim",
-    MSG_RESET_SENT: "Jika akun dengan email ini ada, Anda akan segera menerima tautan atur ulang kata sandi.",
+    DESC_RESET_PWD: "Perbarui kata sandi Nexus Anda dengan aman.",
+    TITLE_SETUP_ACC: "Pengaturan Akun",
+    DESC_SETUP_ACC: "Selesaikan aktivasi akun Nexus Anda.",
+    LABEL_NEW_PASSWORD: "Kata Sandi Baru",
+    LABEL_CONFIRM_PASSWORD: "Konfirmasi Kata Sandi Baru",
+    BUTTON_SET_NEW_PWD: "Atur Kata Sandi Baru",
+    MSG_VERIFYING_TOKEN: "Memverifikasi token keamanan...",
+    ERROR_EXPIRED_LINK: "Tautan keamanan ini telah kedaluwarsa. Silakan hubungi administrator Anda.",
+    ERROR_INVALID_LINK: "Tautan keamanan tidak valid. Silakan gunakan tautan yang disediakan di email Anda.",
+    MSG_SECURITY_UPDATED: "Keamanan Diperbarui",
+    MSG_RESET_LINK_SENT: "Tautan Keamanan Dikirim",
+    DESC_SECURITY_REDIRECT: "Kata sandi Anda telah berhasil diatur. Anda sedang dialihkan ke halaman login.",
     LINK_FORGOT_PWD: "Lupa kata sandi?",
+    TITLE_FORGOT_PWD: "Atur Ulang Kata Sandi",
+    DESC_FORGOT_PWD: "Masukkan alamat email Anda dan kami akan mengirimkan tautan untuk mengatur ulang kata sandi Anda.",
+    MSG_RESET_SENT: "Jika akun dengan email ini ada, Anda akan segera menerima tautan atur ulang kata sandi.",
+    BUTTON_SEND_LINK: "Kirim Tautan",
+    ERROR_PASSWORD_MISMATCH: "Kata sandi tidak cocok. Silakan coba lagi.",
   }
 }
 
 export type ContentKey = keyof typeof SITE_CONTENT.en
-
-

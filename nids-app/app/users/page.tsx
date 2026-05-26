@@ -122,7 +122,7 @@ export default function UsersPage() {
       }
 
       if (roleRes.data) {
-        const rolesList = roleRes.data.map(r => r.role)
+        const rolesList = roleRes.data.map((r: any) => r.role)
         console.log("Users: Roles from DB:", rolesList)
         setRoles(rolesList)
       }

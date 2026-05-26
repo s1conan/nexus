@@ -7,6 +7,7 @@ import { notify } from "@/lib/notifications"
 
 interface UserProfile {
   id: string
+  auth_id: string | null
   username: string
   email: string
   full_name: string | null
@@ -185,14 +186,14 @@ export function AuthProvider({
       lastSyncedUserId.current = initialUser.id
     } else if (!initialUser) {
       console.log("Auth: [DEBUG] Checking manual session...")
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (mounted) syncProfile(user)
+      supabase.auth.getUser().then((res: any) => {
+        if (mounted) syncProfile(res.data.user)
       }).catch(() => {
         if (mounted) setLoading(false)
       })
     }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
       if (!mounted) return
       console.log(`Auth: [DEBUG] Event: ${event}`)
 

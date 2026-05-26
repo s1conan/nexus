@@ -113,7 +113,7 @@ self.__SERVER_FILES_MANIFEST={
         "transform": "lodash/{{member}}"
       }
     },
-    "outputFileTracingRoot": "A:\\Projects\\nids\\nids-app",
+    "outputFileTracingRoot": "A:\\Projects\\nids",
     "cacheComponents": false,
     "cacheLife": {
       "default": {
@@ -306,12 +306,12 @@ self.__SERVER_FILES_MANIFEST={
     "bundlePagesRouterDependencies": false,
     "configFileName": "next.config.mjs",
     "turbopack": {
-      "root": "A:\\Projects\\nids\\nids-app"
+      "root": "A:\\Projects\\nids"
     },
     "distDirRoot": ".next"
   },
   "appDir": "A:\\Projects\\nids\\nids-app",
-  "relativeAppDir": "",
+  "relativeAppDir": "nids-app",
   "files": [
     ".next\\routes-manifest.json",
     ".next\\server\\pages-manifest.json",

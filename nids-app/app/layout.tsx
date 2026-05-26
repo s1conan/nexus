@@ -13,6 +13,7 @@ import { LayoutWrapper } from "@/components/layout-wrapper"
 import { AuthProvider } from "@/components/auth-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { createServerSideClient } from "@/lib/supabase-server"
+import { Language } from "@/lib/site-content"
 
 export default async function RootLayout({
   children,
@@ -20,13 +21,13 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
   // Fetch session and profile on the server for instant initialization
-  let initialLang: string = 'en'
+  let initialLang: Language = 'en'
   let initialUser: any = null
   let initialProfile: any = null
 
   try {
     const supabase = await createServerSideClient()
-    
+
     // Add a simple timeout race to prevent server hanging on slow DB
     const { data: { user } } = await Promise.race([
       supabase.auth.getUser(),

@@ -87,7 +87,7 @@ export function AppSidebar() {
     return userDisplayName
       .split(/\s+/)
       .filter(Boolean)
-      .map(namePart => namePart[0])
+      .map((namePart: string) => namePart[0])
       .join('')
       .substring(0, 2)
       .toUpperCase()
