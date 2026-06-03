@@ -1,3 +1,0 @@
-{
-  "/api/auth/verify-token/route": "app/api/auth/verify-token/route.js"
-}

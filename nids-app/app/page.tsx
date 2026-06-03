@@ -107,7 +107,7 @@ export default function LoginPage() {
       console.log("Login: Searching for profile record...")
       const { data: profileRecord, error: lookupError } = await supabase
         .from('profiles')
-        .select('id, email, is_active')
+        .select('id, email, is_active, preferred_language')
         .or(`username.eq.${input},email.eq.${input}`)
         .maybeSingle()
 
@@ -154,12 +154,18 @@ export default function LoginPage() {
         }
 
         // 4. Update last_login, preferred_language and redirect
+        const updateData: any = {
+          last_login: new Date().toISOString()
+        }
+
+        const localLang = typeof window !== 'undefined' ? localStorage.getItem("nids_pref_lang") : null
+        if (!profileRecord.preferred_language || (localLang && localLang !== profileRecord.preferred_language)) {
+          updateData.preferred_language = lang
+        }
+
         await supabase
           .from('profiles')
-          .update({ 
-            last_login: new Date().toISOString(),
-            preferred_language: lang // Persist the language chosen on login page
-          })
+          .update(updateData)
           .eq('auth_id', authData.user.id)
 
         console.log("Login: Redirecting...")

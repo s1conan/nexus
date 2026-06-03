@@ -50,7 +50,7 @@ export default function UsersPage() {
   const [isDialogOpen, setIsDialogOpen] = usePersistedState("users_dialog_open", false)
   const [editingUser, setEditingUser] = usePersistedState<any>("users_editing_data", null)
 
-  const modules = ['companies', 'products', 'quotes', 'orders', 'shipments', 'invoices']
+  const modules = ['companies', 'products', 'deposit', 'quotation', 'purchase-order', 'delivery-order', 'invoice', 'payments', 'shipments', 'users', 'settings', 'component-test']
   const actions = ['view', 'insert', 'edit', 'delete', 'print']
 
   const getStatusInfo = (user: any) => {
@@ -335,7 +335,7 @@ export default function UsersPage() {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{dict.TITLE_MANAGE_USER}</DialogTitle>
           </DialogHeader>

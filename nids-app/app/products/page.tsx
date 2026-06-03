@@ -32,8 +32,10 @@ import { cn } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { usePersistedState } from "@/hooks/use-persisted-state"
+import { NumberInput } from "@/components/number-input"
 
-import { formatCurrency, formatNumber } from "@/lib/formatters"
+import { formatCurrency } from "@/lib/formatters"
+import { ButtonLoader } from "@/components/button-loader"
 
 export default function ProductsPage() {
   const { dict, config, lang } = useDictionary()
@@ -43,6 +45,7 @@ export default function ProductsPage() {
   const [isOpen, setIsOpen] = usePersistedState("products_dialog_open", false)
   const [editingProduct, setEditingProduct] = usePersistedState<any>("products_editing_data", null)
   const [searchQuery, setSearchQuery] = usePersistedState("products_search", "")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = usePersistedState("products_form_data", {
     sku: "",
@@ -51,17 +54,13 @@ export default function ProductsPage() {
     is_active: true
   })
 
-  // Helper to parse formatted string back to number
-  const parseNumber = (val: string) => {
-    return parseFloat(val.replace(/,/g, '')) || 0
-  }
-
   async function fetchProducts() {
     setLoading(true)
     try {
       const { data, error } = await supabase
         .from("products")
         .select("*")
+        .order('is_active', { ascending: false })
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -101,31 +100,35 @@ export default function ProductsPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     const payload = { ...formData }
 
     try {
       if (editingProduct) {
         const { error } = await supabase.from("products").update(payload).eq("id", editingProduct.id)
         if (error) throw error
-        notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SAVE_SUCCESS)
+        notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", ""), dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`))
       } else {
         const { error } = await supabase.from("products").insert([payload])
         if (error) throw error
-        notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SAVE_SUCCESS)
+        notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", ""), dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`))
       }
       setIsOpen(false)
       fetchProducts()
     } catch (err: any) {
       console.error("Products: Save error:", err)
       notify.error(dict.MSG_SAVE_FAILED, err.message || "An unexpected error occurred")
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1 className="page-title">{dict.TITLE_PRODUCTS}</h1>
-
+        <h1 className="page-title"><Package className="size-5 mr-2 inline-block text-primary" />{dict.TITLE_PRODUCTS}</h1>
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
             <Button onClick={() => handleOpenDialog()}>
@@ -139,7 +142,7 @@ export default function ProductsPage() {
                 {editingProduct ? dict.TITLE_EDIT_PRODUCT : dict.TITLE_ADD_PRODUCT}
               </DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-5">
+            <form onSubmit={handleSubmit} id="products-form" className="flex flex-col gap-4 p-5">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="sku">{dict.LABEL_SKU}</Label>
                 <div className="flex items-center gap-3">
@@ -151,14 +154,14 @@ export default function ProductsPage() {
                     className="flex-1"
                     required
                   />
-                  <div className="flex flex-col items-center gap-0.5">
+                  <div className="flex flex-col items-center gap-0.5 min-w-[60px]">
                     <Switch
                       id="is_active"
                       checked={formData.is_active}
                       onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
                     />
                     <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none mt-1.5">
-                      {formData.is_active ? dict.LABEL_ACTIVE : dict.LABEL_DEACTIVATED}
+                      {formData.is_active ? dict.LABEL_IS_ACTIVE : dict.LABEL_IS_INACTIVE}
                     </span>
                   </div>
                 </div>
@@ -175,31 +178,27 @@ export default function ProductsPage() {
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="base_price">{dict.LABEL_BASE_PRICE}</Label>
-                <Input
+                <NumberInput
                   id="base_price"
-                  type="text"
-                  inputMode="decimal"
                   className="text-right font-mono"
-                  value={formatNumber(formData.base_price)}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/[^0-9.]/g, '')
-                    setFormData({ ...formData, base_price: parseNumber(val) })
-                  }}
+                  value={formData.base_price}
+                  onChange={(val) => setFormData({ ...formData, base_price: val })}
                   required
                 />
               </div>
 
-              <DialogFooter className="mt-2 gap-2 *:w-full *:flex-1 h-22 sm:h-auto">
-                <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="flex-1">
-                  <X data-icon="inline-start" />
-                  {dict.BUTTON_CANCEL}
-                </Button>
-                <Button type="submit" className="">
-                  <Save data-icon="inline-start" />
-                  {dict.BUTTON_SAVE}
-                </Button>
-              </DialogFooter>
+
             </form>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="flex-1">
+                <X data-icon="inline-start" />
+                {dict.BUTTON_CANCEL}
+              </Button>
+              <Button type="submit" form="products-form" disabled={isSubmitting}  >
+                {isSubmitting ? <ButtonLoader /> : <Save data-icon="inline-start" />}
+                {dict.BUTTON_SAVE}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
@@ -220,7 +219,7 @@ export default function ProductsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead><Package className="size-4 mr-2 inline-block" />{dict.LABEL_NAME}</TableHead>
+              <TableHead>{dict.LABEL_NAME}</TableHead>
               <TableHead>{dict.LABEL_SKU}</TableHead>
               <TableHead className="text-right">{dict.LABEL_BASE_PRICE}</TableHead>
               <TableHead className="text-right">{dict.LABEL_ACTIONS}</TableHead>
@@ -263,12 +262,11 @@ export default function ProductsPage() {
                     <TableCell className="text-right font-mono">{formatCurrency(product.base_price, lang === 'id' ? 'id-ID' : 'en-US')}</TableCell>
                     <TableCell className="text-right">
                       <Button
-                        variant="secondary"
+                        variant="table_action"
                         size="sm"
                         onClick={() => handleOpenDialog(product)}
                       >
-                        <Pencil className="size-4 md:mr-2" />
-                        <span className="hidden md:inline">{dict.BUTTON_EDIT}</span>
+                        <Pencil className="size-4" />
                       </Button>
                     </TableCell>
                   </TableRow>

@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
 function Dialog({
+  modal = false,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+  return <DialogPrimitive.Root data-slot="dialog" modal={modal} {...props} />
 }
 
 function DialogTrigger({
@@ -33,17 +34,21 @@ function DialogClose({
 
 function DialogOverlay({
   className,
+  isLocal,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+}: React.ComponentProps<"div"> & { isLocal?: boolean }) {
   return (
-    <DialogPrimitive.Overlay
-      data-slot="dialog-overlay"
-      className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
-        className
-      )}
-      {...props}
-    />
+
+      <div
+        data-slot="dialog-overlay"
+        className={cn(
+          isLocal ? "absolute" : "fixed",
+          "inset-0 isolate z-50 bg-black/20 backdrop-blur-[1.5px] duration-200 animate-in fade-in-0",
+          className
+        )}
+        {...props}
+      />
+
   )
 }
 
@@ -55,32 +60,52 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const [container, setContainer] = React.useState<HTMLElement | null>(null)
+  const [isLocal, setIsLocal] = React.useState(false)
+
+  // Find the nearest .page-container to portal into
+  const markerRef = React.useCallback((node: HTMLDivElement | null) => {
+    if (node) {
+      const parent = node.closest('.page-container')
+      if (parent instanceof HTMLElement) {
+        setContainer(parent)
+        setIsLocal(true)
+      }
+    }
+  }, [])
+
   return (
-    <DialogPortal>
-      <DialogOverlay />
-      <DialogPrimitive.Content
-        data-slot="dialog-content"
-        onPointerDownOutside={(e) => e.preventDefault()}
-        className={cn(
-          "fixed top-1/2 left-1/2 z-50 flex flex-col w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-          className
-        )}
-        {...props}
-      >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close data-slot="dialog-close" asChild>
-            <Button
-              variant="destructive"
-              className="absolute top-1.5 right-1.5 size-7 shadow-none rounded-md border-none p-0 flex items-center justify-center bg-red-600 hover:bg-red-700 text-white right-2"
-            >
-              <XIcon className="size-4" strokeWidth={3} />
-              <span className="sr-only">Close</span>
-            </Button>
-          </DialogPrimitive.Close>
-        )}
-      </DialogPrimitive.Content>
-    </DialogPortal>
+    <>
+      <div ref={markerRef} style={{ display: 'none' }} />
+      <DialogPortal container={container || undefined}>
+        <DialogOverlay isLocal={isLocal} />
+        <DialogPrimitive.Content
+          data-slot="dialog-content"
+          onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onFocusOutside={(e) => e.preventDefault()}
+          className={cn(
+            isLocal ? "absolute" : "fixed",
+            "top-1/2 left-1/2 z-50 flex flex-col max-h-[85vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            className
+          )}
+          {...props}
+        >
+          {children}
+          {showCloseButton && (
+            <DialogPrimitive.Close data-slot="dialog-close" asChild>
+              <Button
+                variant="close"
+                className="z-51 bg-transparent border-none absolute top-1.5 right-1.5 size-7 shadow-none rounded-full p-0 flex items-center justify-center hover:bg-destructive/80 text-primary-foreground right-2"
+              >
+                <XIcon className="size-4" strokeWidth={3} />
+                <span className="sr-only">Close</span>
+              </Button>
+            </DialogPrimitive.Close>
+          )}
+        </DialogPrimitive.Content>
+      </DialogPortal>
+    </>
   )
 }
 
@@ -88,7 +113,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 bg-primary px-5 py-3 text-primary-foreground text-sm font-medium select-none rounded-t-xl shrink-0", className)}
+      className={cn("flex flex-col gap-2 bg-primary px-5 py-3 text-primary-foreground text-sm font-medium select-none rounded-t-xl shrink-0 sticky top-0 z-50", className)}
       {...props}
     />
   )
@@ -106,7 +131,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "flex flex-col sm:flex-row gap-3 border-t shrink-0 bg-muted/5 rounded-b-xl pt-3",
+        "flex flex-col sm:flex-row gap-3 border-t shrink-0 bg-muted/5 rounded-b-xl pt-3 m-5 mt-2 gap-2 *:w-full *:flex-1",
         className
       )}
       {...props}

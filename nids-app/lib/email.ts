@@ -138,5 +138,30 @@ export const emailTemplates = {
   invoice: (orderId: string, amount: string) => ({
     subject: `Invoice for Order #${orderId}`,
     html: `<h1>Invoice</h1><p>Amount: ${amount}</p>`
+  }),
+
+  quotation: (companyName: string, quotationNumber: string, content: string) => ({
+    subject: `Quotation ${quotationNumber} from PT Anugerah Buana Sriwijaya`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h1 style="color: #0f172a; font-size: 24px; margin-bottom: 16px;">Quotation ${quotationNumber}</h1>
+        <p style="color: #475569; font-size: 16px; line-height: 24px">
+          Dear ${companyName},
+        </p>
+        <p style="color: #475569; font-size: 16px; line-height: 24px">
+          Please find below the details of your quotation.
+        </p>
+        <div style="background-color: #f8fafc; padding: 16px; border-radius: 6px; margin: 24px 0;">
+          ${content}
+        </div>
+        <p style="color: #475569; font-size: 16px; line-height: 24px">
+          For full details including terms and bank accounts, please refer to the attached document in the portal.
+        </p>
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 32px 0;">
+        <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+          &copy; ${new Date().getFullYear()} PT Anugerah Buana Sriwijaya. All rights reserved.
+        </p>
+      </div>
+    `
   })
 }

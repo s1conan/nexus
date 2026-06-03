@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@plugin "@tailwindcss/typography";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -17,6 +19,8 @@
     --secondary-foreground: oklch(1.0000 0 0);
     --muted: oklch(0.9551 0 0);
     --muted-foreground: oklch(0.3211 0 0);
+    --danger: oklch(63.348% 0.25204 28.552);
+    --danger-foreground: oklch(1.0000 0 0);
     --accent: oklch(77.055% 0.11863 255.924);
     --accent-foreground: oklch(0.1913 0 0);
     --destructive: oklch(0.5694 0.2336 29.2339);
@@ -49,20 +53,14 @@
     --info-foreground: oklch(0.40 0.12 254.624);
 
     --radius: 0.45rem;
-    --shadow-x: 4px;
-    --shadow-y: 4px;
-    --shadow-blur: 3.5px;
-    --shadow-spread: -0.5px;
-    --shadow-opacity: 0.53;
-    --shadow-color: hsl(0 0% 0%);
-    --shadow-2xs: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.27);
-    --shadow-xs: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.27);
-    --shadow-sm: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.53), 4px 1px 2px -1.5px hsl(0 0% 0% / 0.53);
-    --shadow: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.53), 4px 1px 2px -1.5px hsl(0 0% 0% / 0.53);
-    --shadow-md: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.53), 4px 2px 4px -1.5px hsl(0 0% 0% / 0.53);
-    --shadow-lg: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.53), 4px 4px 6px -1.5px hsl(0 0% 0% / 0.53);
-    --shadow-xl: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.53), 4px 8px 10px -1.5px hsl(0 0% 0% / 0.53);
-    --shadow-2xl: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 1.33);
+    --shadow-2xs: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+    --shadow-xs: 0 1px 3px 0 rgba(0, 0, 0, 0.03), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+    --shadow-sm: 0 2px 5px 0 rgba(0, 0, 0, 0.04), 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+    --shadow: 0 4px 10px 0 rgba(0, 0, 0, 0.05), 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+    --shadow-md: 0 8px 16px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+    --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.08), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
+    --shadow-xl: 0 20px 32px -8px rgba(0, 0, 0, 0.1), 0 8px 16px -4px rgba(0, 0, 0, 0.05);
+    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
     --tracking-normal: 0em;
     --spacing: 0.25rem;
 }
@@ -101,20 +99,14 @@
     --sidebar-border: oklch(1.0000 0 0);
     --sidebar-ring: oklch(0.7044 0.1872 23.1858);
     --radius: 0.45rem;
-    --shadow-x: 4px;
-    --shadow-y: 4px;
-    --shadow-blur: 3.5px;
-    --shadow-spread: -0.5px;
-    --shadow-opacity: 0.53;
-    --shadow-color: hsl(0 0% 0%);
-    --shadow-2xs: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.27);
-    --shadow-xs: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.27);
-    --shadow-sm: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.53), 4px 1px 2px -1.5px hsl(0 0% 0% / 0.53);
-    --shadow: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.53), 4px 1px 2px -1.5px hsl(0 0% 0% / 0.53);
-    --shadow-md: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.53), 4px 2px 4px -1.5px hsl(0 0% 0% / 0.53);
-    --shadow-lg: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.53), 4px 4px 6px -1.5px hsl(0 0% 0% / 0.53);
-    --shadow-xl: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 0.53), 4px 8px 10px -1.5px hsl(0 0% 0% / 0.53);
-    --shadow-2xl: 4px 4px 3.5px -0.5px hsl(0 0% 0% / 1.33);
+    --shadow-2xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-xs: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+    --shadow-sm: 0 2px 5px 0 rgba(0, 0, 0, 0.15), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow: 0 4px 10px 0 rgba(0, 0, 0, 0.2), 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 8px 16px -2px rgba(0, 0, 0, 0.25), 0 2px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.3), 0 4px 12px -2px rgba(0, 0, 0, 0.15);
+    --shadow-xl: 0 20px 32px -8px rgba(0, 0, 0, 0.4), 0 8px 16px -4px rgba(0, 0, 0, 0.2);
+    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 
     /* Semantic Status Colors (Dark) */
     --success: oklch(87.332% 0.24724 148.604);
@@ -140,6 +132,8 @@
     --color-secondary-foreground: var(--secondary-foreground);
     --color-muted: var(--muted);
     --color-muted-foreground: var(--muted-foreground);
+    --color-danger: var(--danger);
+    --color-danger-foreground: var(--danger-foreground);
     --color-accent: var(--accent);
     --color-accent-foreground: var(--accent-foreground);
     --color-destructive: var(--destructive);
@@ -205,6 +199,31 @@
     scrollbar-width: none;
 }
 
+/* Tiptap List Styles & Spacing Overrides */
+.prose ul {
+  list-style-type: disc !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.25em !important;
+  margin-bottom: 0.25em !important;
+}
+
+.prose ol {
+  list-style-type: decimal !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.25em !important;
+  margin-bottom: 0.25em !important;
+}
+
+.prose p {
+  margin-top: 0.25em !important;
+  margin-bottom: 0.25em !important;
+}
+
+.prose li {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
 @layer base {
     * {
         @apply border-border outline-ring/20;
@@ -219,7 +238,7 @@
 
 
     .page-container {
-        @apply flex flex-col gap-6;
+        @apply flex flex-col gap-6 relative min-h-[92dvh] p-4;
     }
 
     .page-header {

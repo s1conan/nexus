@@ -14,6 +14,9 @@ interface UserProfile {
   phone: string | null
   role: string
   permissions: any | null
+  role_permissions?: {
+    permissions: any
+  }
   is_active: boolean
   last_login: string | null
   preferred_language: string | null
@@ -27,6 +30,7 @@ interface AuthContextType {
   changeLanguage: (newLang: any) => Promise<void>
   hasPermission: (module: string, action: 'view' | 'insert' | 'edit' | 'delete' | 'print') => boolean
   passwordResetRequired: boolean
+  resolvedPermissions: any
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -45,7 +49,12 @@ export function AuthProvider({
   const [user, setUser] = useState<any | null>(initialUser)
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile)
   const [loading, setLoading] = useState(!initialUser)
-  const [resolvedPermissions, setResolvedPermissions] = useState<any>(null)
+  const [resolvedPermissions, setResolvedPermissions] = useState<any>(() => {
+    if (initialProfile) {
+      return initialProfile.permissions || initialProfile.role_permissions?.permissions || {}
+    }
+    return null
+  })
   const { dict, lang, setLanguage } = useDictionary()
   
   // Refs for stable state tracking across renders
@@ -105,8 +114,8 @@ export function AuthProvider({
       return
     }
     
-    // Skip if user is same and not a forced update
-    if (!force && userData?.id === lastSyncedUserId.current && profile) {
+    // Skip if user is same and not a forced update AND we already have permissions
+    if (!force && userData?.id === lastSyncedUserId.current && profile && resolvedPermissions) {
       console.log("Auth: [DEBUG] User already synced, skipping")
       setLoading(false)
       return
@@ -122,11 +131,13 @@ export function AuthProvider({
         lastSyncedUserId.current = userData.id
         
         const p = await getProfile(userData.id)
-        setProfile(p)
-        
-        if (p?.preferred_language && !isUpdatingLang.current) {
-          console.log("Auth: [DEBUG] Syncing UI to DB preference:", p.preferred_language)
-          setLanguage(p.preferred_language as any)
+        if (p) {
+          setProfile(p)
+          
+          if (p.preferred_language && !isUpdatingLang.current) {
+            console.log("Auth: [DEBUG] Syncing UI to DB preference:", p.preferred_language)
+            setLanguage(p.preferred_language as any)
+          }
         }
       } else {
         console.log("Auth: [DEBUG] syncProfile clearing state")
@@ -149,7 +160,7 @@ export function AuthProvider({
       setLoading(false)
       console.log("Auth: [DEBUG] syncProfile finished")
     }
-  }, [getProfile, setLanguage, profile])
+  }, [getProfile, setLanguage, profile, resolvedPermissions])
 
   const changeLanguage = useCallback(async (newLang: any) => {
     if (newLang === lang || isUpdatingLang.current) return
@@ -178,14 +189,13 @@ export function AuthProvider({
   useEffect(() => {
     let mounted = true
 
-    if (initialUser && !userRef.current) {
-      console.log("Auth: [DEBUG] Applying initial SSR state")
-      const perms = initialProfile?.permissions || (initialProfile as any)?.role_permissions?.permissions || {}
-      setResolvedPermissions(perms)
+    if (initialUser) {
+      console.log("Auth: [DEBUG] initialUser present, ensuring state consistency")
+      // State is already initialized in useState, but we can verify refs
       userRef.current = initialUser
       lastSyncedUserId.current = initialUser.id
-    } else if (!initialUser) {
-      console.log("Auth: [DEBUG] Checking manual session...")
+    } else {
+      console.log("Auth: [DEBUG] No initialUser, checking manual session...")
       supabase.auth.getUser().then((res: any) => {
         if (mounted) syncProfile(res.data.user)
       }).catch(() => {
@@ -220,7 +230,11 @@ export function AuthProvider({
       setProfile(null)
       setResolvedPermissions(null)
       if (typeof window !== 'undefined') {
-        Object.keys(localStorage).forEach(key => { if (key.startsWith('nids_')) localStorage.removeItem(key) })
+        Object.keys(localStorage).forEach(key => { 
+          if (key.startsWith('nids_') && key !== 'nids_pref_lang') {
+            localStorage.removeItem(key) 
+          }
+        })
       }
       await supabase.auth.signOut()
     } finally {
@@ -235,8 +249,8 @@ export function AuthProvider({
   }, [resolvedPermissions])
 
   const value = useMemo(() => ({
-    user, profile, loading, signOut, changeLanguage, hasPermission, passwordResetRequired
-  }), [user, profile, loading, signOut, changeLanguage, hasPermission, passwordResetRequired])
+    user, profile, loading, signOut, changeLanguage, hasPermission, passwordResetRequired, resolvedPermissions
+  }), [user, profile, loading, signOut, changeLanguage, hasPermission, passwordResetRequired, resolvedPermissions])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

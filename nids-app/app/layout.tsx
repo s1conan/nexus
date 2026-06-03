@@ -13,7 +13,12 @@ import { LayoutWrapper } from "@/components/layout-wrapper"
 import { AuthProvider } from "@/components/auth-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { createServerSideClient } from "@/lib/supabase-server"
-import { Language } from "@/lib/site-content"
+import { Language, SITE_CONFIG } from "@/lib/site-content"
+
+export const metadata = {
+  title: SITE_CONFIG.brandName,
+  description: SITE_CONFIG.companyName,
+}
 
 export default async function RootLayout({
   children,

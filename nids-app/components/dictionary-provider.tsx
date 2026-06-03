@@ -21,8 +21,21 @@ export function DictionaryProvider({
 }) {
   const [lang, setLang] = useState<Language>(initialLang)
 
+  // Load language from localStorage on mount (for persistent user preference)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedLang = localStorage.getItem("nids_pref_lang") as Language
+      if (savedLang && (savedLang === 'en' || savedLang === 'id')) {
+        setLang(savedLang)
+      }
+    }
+  }, [])
+
   const setLanguage = useCallback((newLang: Language) => {
     setLang(newLang)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem("nids_pref_lang", newLang)
+    }
   }, [])
 
   // Update HTML lang attribute
