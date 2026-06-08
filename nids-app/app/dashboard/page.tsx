@@ -9,8 +9,8 @@ export default function Home() {
   const { dict, config, lang } = useDictionary()
 
   return (
-    <div className="page-container">
-      <div className="page-header">
+    <div className="flex flex-col gap-6 p-6 h-full overflow-auto custom-scrollbar">
+      <div className="flex items-center justify-between">
         <h1 className="page-title">{dict.DASHBOARD_TITLE}</h1>
       </div>
 

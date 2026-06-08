@@ -1,5 +1,3 @@
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
 import { format } from "date-fns"
 
 interface CompanyInfo {
@@ -13,16 +11,24 @@ interface CompanyInfo {
 interface QuotationData {
   quotation_number: string
   quotation_date: string
+  expiry_date?: string
   company_name: string
-  content: string
-  discounts: { label: string; value: number }[]
-  note: string
+  contact_person?: string
+  product_name?: string
+  unit_price?: number
+  minimum_order?: number
+  content?: string
+  discounts?: { label: string; value: number }[]
+  note?: string
   terms_conditions: string
-  closing_remarks: string
-  bank_accounts: { name: string; bank_name: string; account_number: string; account_name: string; branch: string }[]
+  closing_remarks?: string
+  bank_accounts?: { name: string; bank_name: string; account_number: string; account_name: string; branch: string }[]
 }
 
 export async function generateQuotationPDF(company: CompanyInfo, data: QuotationData, options: { save?: boolean, output?: "datauri" | "blob" } = { save: true }) {
+  const { default: jsPDF } = await import("jspdf")
+  const { default: autoTable } = await import("jspdf-autotable")
+  
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
   const margin = 20
@@ -101,7 +107,7 @@ export async function generateQuotationPDF(company: CompanyInfo, data: Quotation
 
   // 3. Content
   doc.setFont("helvetica", "normal")
-  const contentText = stripHtml(data.content)
+  const contentText = stripHtml(data.content || "")
   const contentLines = doc.splitTextToSize(contentText, pageWidth - margin * 2)
   doc.text(contentLines, margin, currentY)
   currentY += (contentLines.length * 5) + 10
@@ -210,6 +216,9 @@ interface DeliveryOrderData {
 }
 
 export async function generateDeliveryOrderPDF(company: CompanyInfo, data: DeliveryOrderData, options: { save?: boolean, output?: "datauri" | "blob" } = { save: true }) {
+  const { default: jsPDF } = await import("jspdf")
+  const { default: autoTable } = await import("jspdf-autotable")
+
   // A5 format (148 x 210 mm)
   const doc = new jsPDF({
     orientation: "portrait",

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
@@ -14,47 +14,58 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { 
-  Plus, 
-  Search, 
-  Pencil, 
-  Save, 
-  X, 
-  Trash2, 
+import {
+  Plus,
+  Search,
+  Pencil,
+  Save,
+  X,
+  Trash2,
   Truck,
   Hash,
   Package,
-  PlusCircle,
   MinusCircle
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
+import { usePersistedState } from "@/hooks/use-persisted-state"
+import { ButtonLoader } from "@/components/button-loader"
+import { NumberInput } from "@/components/number-input"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 export default function VehiclesPage() {
   const { dict } = useDictionary()
   const { hasPermission, profile } = useAuth()
   const supabase = createClient()
-  
+
   const [vehicles, setVehicles] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   // Dialog State
-  const [isOpen, setIsOpen] = useState(false)
-  const [editingItem, setEditingItem] = useState<any>(null)
-  
+  const [isOpen, setIsOpen] = usePersistedState("vehicles_dialog_open", false)
+  const [editingItem, setEditingItem] = usePersistedState<any>("vehicles_editing_data", null)
+
   // Filter States
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchQuery, setSearchQuery] = usePersistedState("vehicles_search", "")
 
   // Form State
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = usePersistedState("vehicles_form_data", {
     license_number: "",
     vehicle_type: "Truck",
     capacity: 0,
     is_active: true,
-    compartments: [] as { compartment_number: number; capacity: number }[]
+    compartments: [{ compartment_number: 1, capacity: 8000 }] as { compartment_number: number; capacity: number }[]
   })
 
   // Fetch Data
@@ -111,7 +122,11 @@ export default function VehiclesPage() {
   }
 
   // Actions
-  const handleSave = async () => {
+  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     try {
       const payload = {
         license_number: formData.license_number,
@@ -123,20 +138,23 @@ export default function VehiclesPage() {
           capacity: c.capacity
         }))
       }
-      
+
       if (editingItem) {
         const { error } = await supabase.from("vehicles").update(payload).eq("id", editingItem.id)
         if (error) throw error
+        notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", ""), dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.license_number}]`))
       } else {
         const { error } = await supabase.from("vehicles").insert([payload])
         if (error) throw error
+        notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", ""), dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.license_number}]`))
       }
 
-      notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", dict.MENU_VEHICLES))
       setIsOpen(false)
       fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -167,210 +185,226 @@ export default function VehiclesPage() {
     setFormData({ ...formData, compartments: reindexed })
   }
 
-  // Search filter
-  const filteredVehicles = useMemo(() => {
-    return vehicles.filter(v => 
-      v.license_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (v.vehicle_type || "").toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }, [vehicles, searchQuery])
-
   return (
     <div className="page-container">
+      {/* Page Header */}
       <div className="page-header">
-        <h1 className="page-title flex items-center gap-2">
-          <Truck className="size-5 text-primary" />
+        <h1 className="page-title">
+          <Truck className="size-5 mr-2 inline-block text-primary" />
           {dict.MENU_VEHICLES}
         </h1>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="size-4 mr-2" />
-          {dict.BUTTON_ADD}
-        </Button>
+
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <Button size="sm" onClick={() => handleOpenDialog()}>
+            <Plus data-icon="inline-start" />
+            {dict.BUTTON_ADD}
+          </Button>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                <Truck className="size-5 mr-2 inline-block" /> {editingItem ? dict.BUTTON_EDIT : dict.BUTTON_ADD} {dict.MENU_VEHICLES}
+              </DialogTitle>
+            </DialogHeader>
+
+            <form onSubmit={handleSave} id="vehicles-form" className="flex flex-col gap-4 p-5">
+              <div className="flex-1 overflow-auto py-2 space-y-6">
+                <div className="grid grid-cols-2 gap-4 pl-1">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="license">{dict.LABEL_LICENSE_NUMBER}</Label>
+                    <input
+                      id="license"
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-bold"
+                      value={formData.license_number}
+                      onChange={e => setFormData({ ...formData, license_number: e.target.value.toUpperCase() })}
+                      placeholder="B 1234 XYZ"
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="type">{dict.LABEL_VEHICLE_TYPE}</Label>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        id="type"
+                        value={formData.vehicle_type}
+                        onChange={e => setFormData({ ...formData, vehicle_type: e.target.value })}
+                        placeholder="e.g. Tanker, Truck"
+                        required
+                      />
+                      <div className="flex flex-col items-center gap-0.5 min-w-[60px]">
+                        <Switch
+                          id="is_active"
+                          checked={formData.is_active}
+                          onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                        />
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none mt-1.5">
+                          {formData.is_active ? (dict.LABEL_IS_ACTIVE || 'Active') : (dict.LABEL_IS_INACTIVE || 'Inactive')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pl-1">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="total_cap">{dict.LABEL_TOTAL_CAPACITY}</Label>
+                    <NumberInput
+                      id="total_cap"
+                      value={formData.capacity}
+                      onChange={val => setFormData({ ...formData, capacity: val })}
+                      badge="L"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <h3 className="font-semibold text-base flex items-center gap-2">
+                      <Package className="size-4 text-primary" /> {dict.LABEL_COMPARTMENTS}
+                    </h3>
+                    <Button type="button" variant="outline" size="sm" onClick={addCompartment}>
+                      <Plus className="size-4" />
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                    {formData.compartments.map((comp, idx) => (
+                      <div key={idx} className="flex items-center gap-4 bg-muted/20 p-3 rounded-lg border border-border/50">
+                        <Label htmlFor={`compartment-${idx}`} className="flex items-center gap-2 font-bold text-primary min-w-[60px]">
+                          <Hash className="size-4" /> {comp.compartment_number}
+                        </Label>
+                        <div className="flex-1">
+                          <NumberInput
+                            id={`compartment-${idx}`}
+                            value={comp.capacity}
+                            onChange={val => {
+                              const newComps = [...formData.compartments]
+                              newComps[idx].capacity = val
+                              setFormData({ ...formData, compartments: newComps })
+                            }}
+                            badge="L"
+                            required
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-destructive"
+                          onClick={() => removeCompartment(idx)}
+                          disabled={formData.compartments.length === 1}
+                        >
+                          <MinusCircle className="size-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </form>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+                <X data-icon="inline-start" />
+                {dict.BUTTON_CANCEL}
+              </Button>
+              <Button type="submit" form="vehicles-form" disabled={isSubmitting}>
+                {isSubmitting ? <ButtonLoader /> : <Save data-icon="inline-start" />}
+                {dict.BUTTON_SAVE}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <div className="action-bar flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+      {/* Action Bar / Filters */}
+      <div className="action-bar">
         <div className="relative flex-1 w-full max-w-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-          <Input 
-            placeholder={dict.SEARCH_PLACEHOLDER} 
-            className="pl-9" 
+          <Input
+            placeholder={dict.SEARCH_PLACEHOLDER}
+            className="pl-8"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
 
+      {/* Data Area */}
       <Card className="data-card">
         <Table>
-          <TableHeader className="bg-muted/30 sticky top-0 z-10">
+          <TableHeader>
             <TableRow>
-              <TableHead>License Number</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Compartments</TableHead>
-              <TableHead>Total Capacity</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">{dict.LABEL_ACTIONS}</TableHead>
+              <TableHead className="px-7">{dict.LABEL_LICENSE_NUMBER}</TableHead>
+              <TableHead>{dict.LABEL_VEHICLE_TYPE}</TableHead>
+              <TableHead>{dict.LABEL_COMPARTMENTS}</TableHead>
+              <TableHead className="text-right">{dict.LABEL_TOTAL_CAPACITY}</TableHead>
+              <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="p-0"><SectionLoader /></TableCell>
-              </TableRow>
-            ) : filteredVehicles.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell>
-              </TableRow>
-            ) : filteredVehicles.map(v => (
-              <TableRow key={v.id}>
-                <TableCell className="font-bold">{v.license_number}</TableCell>
-                <TableCell>{v.vehicle_type}</TableCell>
-                <TableCell>{v.compartments?.length || 0} Comp.</TableCell>
-                <TableCell>{v.capacity?.toLocaleString()}</TableCell>
-                <TableCell>
-                  <div className={cn(
-                    "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase w-fit",
-                    v.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                  )}>
-                    {v.is_active ? dict.LABEL_ACTIVE : dict.LABEL_DEACTIVATED}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="size-8" onClick={() => handleOpenDialog(v)}>
-                      <Pencil className="size-4" />
-                    </Button>
-                    {canDelete && (
-                      <Button variant="ghost" size="icon" className="size-8 text-destructive" onClick={() => handleDelete(v.id)}>
-                        <Trash2 className="size-4" />
-                      </Button>
-                    )}
-                  </div>
+                <TableCell colSpan={5} className="p-0">
+                  <SectionLoader />
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              (() => {
+                const filtered = vehicles.filter(v =>
+                  v.license_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  (v.vehicle_type || "").toLowerCase().includes(searchQuery.toLowerCase())
+                )
+
+                if (filtered.length === 0) {
+                  return (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8">{dict.NO_DATA}</TableCell>
+                    </TableRow>
+                  )
+                }
+
+                return filtered.map((v) => (
+                  <TableRow key={v.id} className="group">
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "size-2 rounded-full",
+                          v.is_active ? "bg-green-500" : "bg-muted-foreground/30"
+                        )} />
+                        <span>{v.license_number}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{v.vehicle_type}</TableCell>
+                    <TableCell>{v.compartments?.length || 0} Comp.</TableCell>
+                    <TableCell className="text-right font-mono">{v.capacity?.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="table_action"
+                          size="sm"
+                          onClick={() => handleOpenDialog(v)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        {canDelete && (
+                          <Button
+                            variant="table_action"
+                            size="sm"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => handleDelete(v.id)}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              })()
+            )}
           </TableBody>
         </Table>
       </Card>
-
-      {/* Vehicle Modal */}
-      {isOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="flex flex-col w-full max-w-2xl max-h-[90vh] rounded-xl bg-background text-sm ring-1 ring-border shadow-2xl overflow-hidden">
-            <div className="flex flex-row items-center justify-between gap-2 bg-primary px-5 py-4 text-primary-foreground shrink-0">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Truck className="size-5" />
-                {editingItem ? dict.BUTTON_EDIT : dict.BUTTON_ADD} {dict.MENU_VEHICLES}
-              </h2>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => setIsOpen(false)} 
-                className="size-8 rounded-full hover:bg-white/20 text-white"
-              >
-                <X className="size-5" />
-              </Button>
-            </div>
-
-            <div className="flex-1 overflow-auto p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="license">License Number</Label>
-                  <Input
-                    id="license"
-                    value={formData.license_number}
-                    onChange={e => setFormData({ ...formData, license_number: e.target.value.toUpperCase() })}
-                    placeholder="B 1234 XYZ"
-                    className="font-bold"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="type">Vehicle Type</Label>
-                  <Input
-                    id="type"
-                    value={formData.vehicle_type}
-                    onChange={e => setFormData({ ...formData, vehicle_type: e.target.value })}
-                    placeholder="e.g. Tanker, Truck"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="total_cap">Total Capacity</Label>
-                  <Input
-                    id="total_cap"
-                    type="number"
-                    value={formData.capacity}
-                    onChange={e => setFormData({ ...formData, capacity: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="flex items-center gap-2 mt-auto pb-2">
-                  <input
-                    type="checkbox"
-                    id="active"
-                    checked={formData.is_active}
-                    onChange={e => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="size-4"
-                  />
-                  <Label htmlFor="active" className="cursor-pointer">Active</Label>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <h3 className="font-semibold text-base flex items-center gap-2">
-                    <Package className="size-4 text-primary" /> {dict.LABEL_COMPARTMENTS}
-                  </h3>
-                  <Button variant="outline" size="sm" onClick={addCompartment}>
-                    <PlusCircle className="size-4 mr-1" /> Add
-                  </Button>
-                </div>
-
-                <div className="space-y-3">
-                  {formData.compartments.map((comp, idx) => (
-                    <div key={idx} className="flex items-center gap-4 bg-muted/20 p-3 rounded-lg border border-border/50">
-                      <div className="flex items-center gap-2 font-bold text-primary min-w-[80px]">
-                        <Hash className="size-3" /> {comp.compartment_number}
-                      </div>
-                      <div className="flex-1 grid gap-1">
-                        <Label className="text-[10px] uppercase">Capacity</Label>
-                        <Input
-                          type="number"
-                          className="h-8"
-                          value={comp.capacity}
-                          onChange={e => {
-                            const newComps = [...formData.compartments]
-                            newComps[idx].capacity = Number(e.target.value)
-                            setFormData({ ...formData, compartments: newComps })
-                          }}
-                        />
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="size-8 text-destructive self-end"
-                        onClick={() => removeCompartment(idx)}
-                        disabled={formData.compartments.length === 1}
-                      >
-                        <MinusCircle className="size-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row justify-end gap-3 border-t shrink-0 bg-muted/30 px-6 py-4">
-              <Button variant="outline" onClick={() => setIsOpen(false)} className="px-8">{dict.BUTTON_CANCEL}</Button>
-              <Button onClick={handleSave} className="px-10 font-bold">
-                <Save className="size-4 mr-2" />
-                {dict.BUTTON_SAVE}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

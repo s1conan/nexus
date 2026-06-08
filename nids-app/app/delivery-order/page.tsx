@@ -14,23 +14,22 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { 
-  Plus, 
-  Search, 
-  Pencil, 
-  Save, 
-  X, 
-  Printer, 
-  Trash2, 
-  ChevronDown, 
-  CheckCircle2, 
+import {
+  Plus,
+  Search,
+  Pencil,
+  Save,
+  X,
+  Printer,
+  Trash2,
+  ChevronDown,
+  CheckCircle2,
   Truck,
   Calendar,
   User as UserIcon,
   Car,
   Hash,
   Package,
-  MinusCircle
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -44,6 +43,13 @@ import {
   DropdownMenuSubContent,
   DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
@@ -52,13 +58,15 @@ import { RichTextEditor } from "@/components/rich-text-editor"
 import { LiveSearch } from "@/components/live-search"
 import { format } from "date-fns"
 import { generateDeliveryOrderPDF } from "@/lib/pdf-generator"
-import Gallery from "@/components/Gallery"
+import dynamic from "next/dynamic"
+
+const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
 export default function DeliveryOrdersPage() {
   const { dict, lang } = useDictionary()
   const { hasPermission, profile } = useAuth()
   const supabase = createClient()
-  
+
   const [orders, setOrders] = useState<any[]>([])
   const [companies, setCompanies] = useState<any[]>([])
   const [products, setProducts] = useState<any[]>([])
@@ -66,11 +74,11 @@ export default function DeliveryOrdersPage() {
   const [companyInfo, setCompanyInfo] = useState<any>(null)
   const [previewDoc, setPreviewDoc] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  
+
   // Dialog State
   const [isOpen, setIsOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<any>(null)
-  
+
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -84,9 +92,8 @@ export default function DeliveryOrdersPage() {
     quantity: 0,
     driver_name: "",
     vehicle_id: "",
-    vehicle_number: "", // Fallback or display
+    vehicle_number: "",
     status: "Draft",
-    
     note: "",
     is_note_enabled: true,
     compartment_details: [] as { vehicle_compartment_id: string; compartment_number: number; seal_number: string; quantity: number }[]
@@ -116,9 +123,7 @@ export default function DeliveryOrdersPage() {
 
       if (sRes.data) {
         const info: any = {}
-        sRes.data.forEach((r: any) => {
-          info[r.name] = r.value
-        })
+        sRes.data.forEach((r: any) => { info[r.name] = r.value })
         setCompanyInfo(info)
       }
     } catch (err: any) {
@@ -207,9 +212,8 @@ export default function DeliveryOrdersPage() {
   const handleSave = async () => {
     try {
       const { compartment_details, ...payload } = formData
-      
       let doId = editingItem?.id
-      
+
       if (editingItem) {
         const { error } = await supabase.from("delivery_orders").update(payload).eq("id", editingItem.id)
         if (error) throw error
@@ -219,11 +223,8 @@ export default function DeliveryOrdersPage() {
         doId = data.id
       }
 
-      // Handle compartments
-      // Simplest way for update: delete old and insert new
       if (doId) {
         await supabase.from("delivery_order_compartments").delete().eq("delivery_order_id", doId)
-        
         if (compartment_details.length > 0) {
           const compsToInsert = compartment_details.map(c => ({
             delivery_order_id: doId,
@@ -312,7 +313,7 @@ export default function DeliveryOrdersPage() {
 
   // Search filter
   const filteredOrders = useMemo(() => {
-    return orders.filter(o => 
+    return orders.filter(o =>
       o.do_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (o.company?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       (o.product?.sku || "").toLowerCase().includes(searchQuery.toLowerCase())
@@ -331,106 +332,236 @@ export default function DeliveryOrdersPage() {
 
   return (
     <div className="page-container">
+      {/* Page Header */}
       <div className="page-header">
-        <h1 className="page-title flex items-center gap-2">
-          <Truck className="size-5 text-primary" />
+        <h1 className="page-title">
+          <Truck className="size-5 mr-2 inline-block text-primary" />
           {dict.MENU_DELIVERY_ORDER}
         </h1>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="size-4 mr-2" />
-          {dict.BUTTON_NEW_DO}
-        </Button>
+
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <Button size="sm" onClick={() => handleOpenDialog()}>
+            <Plus data-icon="inline-start" />
+            {dict.BUTTON_NEW_DO}
+          </Button>
+          <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+            <DialogHeader className="p-5 border-b sticky top-0 bg-background z-10">
+              <DialogTitle>
+                {editingItem ? dict.BUTTON_EDIT + " DO" : dict.BUTTON_NEW_DO}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="p-6 space-y-8">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-1 space-y-6">
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-base flex items-center gap-2 border-b pb-2"><Hash className="size-4 text-primary" /> Basic Information</h3>
+                    <div className="grid gap-2">
+                      <Label htmlFor="donum">{dict.LABEL_DO_NUMBER}</Label>
+                      <Input id="donum" value={formData.do_number} onChange={e => setFormData({ ...formData, do_number: e.target.value })} disabled={!canEditNum} className="font-mono font-bold" />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>{dict.LABEL_COMPANY_NAME}</Label>
+                      <LiveSearch
+                        data={companies}
+                        value={formData.company_id}
+                        onSelect={val => setFormData({ ...formData, company_id: val })}
+                        keyField="id"
+                        displayField="name"
+                        searchColumns={["name", "contact_person"]}
+                        visualColumns={[{ key: "name", header: dict.LABEL_COMPANY_NAME, className: "w-3/5 font-medium", primary: true }, { key: "contact_person", header: dict.LABEL_CONTACT_PERSON, className: "w-2/5" }]}
+                        placeholder={dict.SEARCH_PLACEHOLDER}
+                        emptyMessage={dict.NO_DATA}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>{dict.LABEL_SKU}</Label>
+                      <LiveSearch
+                        data={products}
+                        value={formData.product_id}
+                        onSelect={val => setFormData({ ...formData, product_id: val })}
+                        keyField="id"
+                        displayField={(p) => `${p.sku} - ${p.name}`}
+                        searchColumns={["sku", "name"]}
+                        visualColumns={[{ key: "sku", header: dict.LABEL_SKU, className: "w-1/3 font-mono" }, { key: "name", header: dict.LABEL_PRODUCT_NAME, className: "w-2/3", primary: true }]}
+                        placeholder={dict.SEARCH_PLACEHOLDER}
+                        emptyMessage={dict.NO_DATA}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="qty">{dict.LABEL_QUANTITY}</Label>
+                      <Input id="qty" type="number" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })} className="text-lg font-bold" />
+                    </div>
+                  </div>
+                </div>
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-base flex items-center gap-2 border-b pb-2"><Calendar className="size-4 text-primary" /> Dates & Logistics</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label className="text-xs">{dict.LABEL_DO_DATE}</Label>
+                          <Input type="date" value={formData.do_date} onChange={e => setFormData({ ...formData, do_date: e.target.value })} />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="text-xs">{dict.LABEL_SHIPMENT_DATE}</Label>
+                          <Input type="date" value={formData.shipment_date} onChange={e => setFormData({ ...formData, shipment_date: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label className="flex items-center gap-2"><UserIcon className="size-4" /> {dict.LABEL_DRIVER_NAME}</Label>
+                        <Input value={formData.driver_name} onChange={e => setFormData({ ...formData, driver_name: e.target.value })} placeholder="Enter driver name" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label className="flex items-center gap-2"><Car className="size-4" /> {dict.LABEL_VEHICLE}</Label>
+                        <LiveSearch
+                          data={vehicles}
+                          value={formData.vehicle_id}
+                          onSelect={handleVehicleSelect}
+                          keyField="id"
+                          displayField="license_number"
+                          searchColumns={["license_number", "vehicle_type"]}
+                          visualColumns={[{ key: "license_number", header: "License", className: "w-1/2 font-bold", primary: true }, { key: "vehicle_type", header: "Type", className: "w-1/2" }]}
+                          placeholder="Select a vehicle..."
+                          emptyMessage="No vehicles found."
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-base flex items-center gap-2 border-b pb-2"><Package className="size-4 text-primary" /> {dict.LABEL_COMPARTMENTS}</h3>
+                      <div className="space-y-3 max-h-[300px] overflow-auto pr-2">
+                        {formData.compartment_details.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">Select a vehicle to see compartments</div>
+                        ) : (
+                          formData.compartment_details.map((comp, idx) => (
+                            <Card key={idx} className="p-3 bg-muted/20">
+                              <div className="flex items-center justify-between mb-2"><span className="font-bold text-primary">Komp {comp.compartment_number}</span></div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="grid gap-1">
+                                  <Label className="text-[10px] uppercase">{dict.LABEL_SEAL_NUMBER}</Label>
+                                  <Input size={1} className="h-8 text-xs" value={comp.seal_number} onChange={e => {
+                                    const newDetails = [...formData.compartment_details]
+                                    newDetails[idx].seal_number = e.target.value
+                                    setFormData({ ...formData, compartment_details: newDetails })
+                                  }} />
+                                </div>
+                                <div className="grid gap-1">
+                                  <Label className="text-[10px] uppercase">{dict.LABEL_QUANTITY}</Label>
+                                  <Input type="number" className="h-8 text-xs font-bold" value={comp.quantity} onChange={e => {
+                                    const newDetails = [...formData.compartment_details]
+                                    newDetails[idx].quantity = Number(e.target.value)
+                                    setFormData({ ...formData, compartment_details: newDetails })
+                                  }} />
+                                </div>
+                              </div>
+                            </Card>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-base border-b pb-2">Additional Notes</h3>
+                    <RichTextEditor
+                      label={dict.LABEL_NOTE}
+                      value={formData.note}
+                      onChange={val => setFormData(prev => ({ ...prev, note: val || "" }))}
+                      isEnabled={formData.is_note_enabled}
+                      onToggleEnabled={val => setFormData(prev => ({ ...prev, is_note_enabled: val }))}
+                      placeholder="..."
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="mt-2 sticky bottom-0 bg-background z-10 border-t pt-4 gap-2 *:w-full *:flex-1 h-22 sm:h-auto">
+              <Button variant="outline" onClick={() => setIsOpen(false)} className="px-8">{dict.BUTTON_CANCEL}</Button>
+              <Button onClick={handleSave} className="px-10 font-bold"><Save className="size-4 mr-2" />{dict.BUTTON_SAVE_DO}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <div className="action-bar flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+      {/* Action Bar / Filters */}
+      <div className="action-bar">
         <div className="relative flex-1 w-full max-w-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-          <Input 
-            placeholder={dict.SEARCH_PLACEHOLDER} 
-            className="pl-9" 
+          <Input
+            placeholder={dict.SEARCH_PLACEHOLDER}
+            className="pl-8"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
 
+      {/* Data Area */}
       <Card className="data-card">
         <Table>
-          <TableHeader className="bg-muted/30 sticky top-0 z-10">
+          <TableHeader>
             <TableRow>
-              <TableHead>{dict.LABEL_NAME} (No.)</TableHead>
+              <TableHead className="px-7">{dict.LABEL_NAME} (No.)</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
-              <TableHead>{dict.LABEL_SKU}</TableHead>
               <TableHead>{dict.LABEL_DO_DATE}</TableHead>
               <TableHead>{dict.LABEL_VEHICLE}</TableHead>
               <TableHead>{dict.LABEL_QUANTITY}</TableHead>
               <TableHead>{dict.LABEL_STATUS}</TableHead>
-              <TableHead className="text-right">{dict.LABEL_ACTIONS}</TableHead>
+              <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} className="p-0"><SectionLoader /></TableCell>
+                <TableCell colSpan={7} className="p-0"><SectionLoader /></TableCell>
               </TableRow>
             ) : filteredOrders.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell>
-              </TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell></TableRow>
             ) : filteredOrders.map(o => (
-              <TableRow key={o.id}>
+              <TableRow key={o.id} className="group">
                 <TableCell className="font-medium">{o.do_number}</TableCell>
                 <TableCell>{o.company?.name || "-"}</TableCell>
-                <TableCell className="text-xs font-mono">{o.product?.sku || "-"}</TableCell>
-                <TableCell>{format(new Date(o.do_date), "dd MMM yyyy")}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{format(new Date(o.do_date), "dd MMM yyyy")}</TableCell>
                 <TableCell>
                   <div className="flex flex-col gap-0.5">
-                    <span className="font-medium">{o.vehicle?.license_number || o.vehicle_number || "-"}</span>
+                    <span className="font-medium text-xs">{o.vehicle?.license_number || o.vehicle_number || "-"}</span>
                     <span className="text-[10px] text-muted-foreground">{o.driver_name}</span>
                   </div>
                 </TableCell>
-                <TableCell>{o.quantity}</TableCell>
+                <TableCell className="text-sm">{o.quantity}</TableCell>
                 <TableCell>
                   <div className={cn(
                     "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase w-fit",
                     o.status === "Delivered" ? "bg-green-100 text-green-700" :
-                    o.status === "Cancelled" ? "bg-red-100 text-red-700" :
-                    o.status === "Shipped" ? "bg-blue-100 text-blue-700" :
-                    "bg-amber-100 text-amber-700"
+                      o.status === "Cancelled" ? "bg-red-100 text-red-700" :
+                        o.status === "Shipped" ? "bg-blue-100 text-blue-700" :
+                          "bg-amber-100 text-amber-700"
                   )}>
                     {o.status}
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="size-8" onClick={() => handleOpenDialog(o)}>
+                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(o)}>
                       <Pencil className="size-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="size-8" onClick={() => handlePrint(o)}>
+                    <Button variant="table_action" size="sm" onClick={() => handlePrint(o)}>
                       <Printer className="size-4" />
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="size-8">
+                        <Button variant="secondary" size="icon" className="size-8">
                           <ChevronDown className="size-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>
-                            <CheckCircle2 className="size-4 mr-2" /> {dict.MSG_STATUS_UPDATED}
-                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubTrigger><CheckCircle2 className="size-4 mr-2" /> Status</DropdownMenuSubTrigger>
                           <DropdownMenuPortal>
                             <DropdownMenuSubContent>
-                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Shipped')} className="text-blue-600">
-                                Shipped
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Delivered')} className="text-green-600">
-                                Delivered
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Cancelled')} className="text-red-600">
-                                Cancelled
-                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Shipped')} className="text-blue-600">Shipped</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Delivered')} className="text-green-600">Delivered</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Cancelled')} className="text-red-600">Cancelled</DropdownMenuItem>
                             </DropdownMenuSubContent>
                           </DropdownMenuPortal>
                         </DropdownMenuSub>
@@ -451,225 +582,6 @@ export default function DeliveryOrdersPage() {
           </TableBody>
         </Table>
       </Card>
-
-      {/* DO Modal */}
-      {isOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="flex flex-col w-full max-w-5xl max-h-[95vh] rounded-xl bg-background text-sm ring-1 ring-border shadow-2xl overflow-hidden">
-            <div className="flex flex-row items-center justify-between gap-2 bg-primary px-5 py-4 text-primary-foreground shrink-0">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Truck className="size-5" />
-                {editingItem ? dict.BUTTON_EDIT + " DO" : dict.BUTTON_NEW_DO}
-              </h2>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => setIsOpen(false)} 
-                className="size-8 rounded-full hover:bg-white/20 text-white"
-              >
-                <X className="size-5" />
-              </Button>
-            </div>
-
-            <div className="flex-1 overflow-auto p-6 space-y-8">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Basic Info Column */}
-                <div className="lg:col-span-1 space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="font-semibold text-base flex items-center gap-2 border-b pb-2">
-                      <Hash className="size-4 text-primary" /> Basic Information
-                    </h3>
-                    
-                    <div className="grid gap-2">
-                      <Label htmlFor="donum">{dict.LABEL_DO_NUMBER}</Label>
-                      <Input
-                        id="donum"
-                        value={formData.do_number}
-                        onChange={e => setFormData({ ...formData, do_number: e.target.value })}
-                        disabled={!canEditNum}
-                        className="font-mono font-bold"
-                      />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label>{dict.LABEL_COMPANY_NAME}</Label>
-                      <LiveSearch
-                        data={companies}
-                        value={formData.company_id}
-                        onSelect={val => setFormData({ ...formData, company_id: val })}
-                        keyField="id"
-                        displayField="name"
-                        searchColumns={["name", "contact_person"]}
-                        visualColumns={[
-                          { key: "name", header: dict.LABEL_COMPANY_NAME, className: "w-3/5 font-medium", primary: true },
-                          { key: "contact_person", header: dict.LABEL_CONTACT_PERSON, className: "w-2/5" }
-                        ]}
-                        placeholder={dict.SEARCH_PLACEHOLDER}
-                        emptyMessage={dict.NO_DATA}
-                      />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label>{dict.LABEL_SKU}</Label>
-                      <LiveSearch
-                        data={products}
-                        value={formData.product_id}
-                        onSelect={val => setFormData({ ...formData, product_id: val })}
-                        keyField="id"
-                        displayField={(p) => `${p.sku} - ${p.name}`}
-                        searchColumns={["sku", "name"]}
-                        visualColumns={[
-                          { key: "sku", header: dict.LABEL_SKU, className: "w-1/3 font-mono" },
-                          { key: "name", header: dict.LABEL_PRODUCT_NAME, className: "w-2/3", primary: true }      
-                        ]}
-                        placeholder={dict.SEARCH_PLACEHOLDER}
-                        emptyMessage={dict.NO_DATA}
-                      />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="qty">{dict.LABEL_QUANTITY}</Label>
-                      <Input
-                        id="qty"
-                        type="number"
-                        value={formData.quantity}
-                        onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })}
-                        className="text-lg font-bold"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Logistics Column */}
-                <div className="lg:col-span-2 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <h3 className="font-semibold text-base flex items-center gap-2 border-b pb-2">
-                        <Calendar className="size-4 text-primary" /> Dates & Logistics
-                      </h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                          <Label className="text-xs">{dict.LABEL_DO_DATE}</Label>
-                          <Input
-                            type="date"
-                            value={formData.do_date}
-                            onChange={e => setFormData({ ...formData, do_date: e.target.value })}
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label className="text-xs">{dict.LABEL_SHIPMENT_DATE}</Label>
-                          <Input
-                            type="date"
-                            value={formData.shipment_date}
-                            onChange={e => setFormData({ ...formData, shipment_date: e.target.value })}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid gap-2">
-                        <Label className="flex items-center gap-2"><UserIcon className="size-4" /> {dict.LABEL_DRIVER_NAME}</Label>
-                        <Input
-                          value={formData.driver_name}
-                          onChange={e => setFormData({ ...formData, driver_name: e.target.value })}
-                          placeholder="Enter driver name"
-                        />
-                      </div>
-
-                      <div className="grid gap-2">
-                        <Label className="flex items-center gap-2"><Car className="size-4" /> {dict.LABEL_VEHICLE}</Label>
-                        <LiveSearch
-                          data={vehicles}
-                          value={formData.vehicle_id}
-                          onSelect={handleVehicleSelect}
-                          keyField="id"
-                          displayField="license_number"
-                          searchColumns={["license_number", "vehicle_type"]}
-                          visualColumns={[
-                            { key: "license_number", header: "License", className: "w-1/2 font-bold", primary: true },
-                            { key: "vehicle_type", header: "Type", className: "w-1/2" }
-                          ]}
-                          placeholder="Select a vehicle..."
-                          emptyMessage="No vehicles found."
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <h3 className="font-semibold text-base flex items-center gap-2 border-b pb-2">
-                        <Package className="size-4 text-primary" /> {dict.LABEL_COMPARTMENTS}
-                      </h3>
-                      
-                      <div className="space-y-3 max-h-[300px] overflow-auto pr-2">
-                        {formData.compartment_details.length === 0 ? (
-                          <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
-                            Select a vehicle to see compartments
-                          </div>
-                        ) : (
-                          formData.compartment_details.map((comp, idx) => (
-                            <Card key={idx} className="p-3 bg-muted/20">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-bold text-primary">Komp {comp.compartment_number}</span>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="grid gap-1">
-                                  <Label className="text-[10px] uppercase">{dict.LABEL_SEAL_NUMBER}</Label>
-                                  <Input
-                                    size={1}
-                                    className="h-8 text-xs"
-                                    value={comp.seal_number}
-                                    onChange={e => {
-                                      const newDetails = [...formData.compartment_details]
-                                      newDetails[idx].seal_number = e.target.value
-                                      setFormData({ ...formData, compartment_details: newDetails })
-                                    }}
-                                  />
-                                </div>
-                                <div className="grid gap-1">
-                                  <Label className="text-[10px] uppercase">{dict.LABEL_QUANTITY}</Label>
-                                  <Input
-                                    type="number"
-                                    className="h-8 text-xs font-bold"
-                                    value={comp.quantity}
-                                    onChange={e => {
-                                      const newDetails = [...formData.compartment_details]
-                                      newDetails[idx].quantity = Number(e.target.value)
-                                      setFormData({ ...formData, compartment_details: newDetails })
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </Card>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h3 className="font-semibold text-base border-b pb-2">Additional Notes</h3>
-                    <RichTextEditor
-                      label={dict.LABEL_NOTE}
-                      value={formData.note}
-                      onChange={val => setFormData({ ...formData, note: val || "" })}
-                      isEnabled={formData.is_note_enabled}
-                      onToggleEnabled={val => setFormData({ ...formData, is_note_enabled: val })}
-                      placeholder="..."
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row justify-end gap-3 border-t shrink-0 bg-muted/30 px-6 py-4">
-              <Button variant="outline" onClick={() => setIsOpen(false)} className="px-8">{dict.BUTTON_CANCEL}</Button>
-              <Button onClick={handleSave} className="px-10 font-bold">
-                <Save className="size-4 mr-2" />
-                {dict.BUTTON_SAVE_DO}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {previewDoc && (
         <Gallery

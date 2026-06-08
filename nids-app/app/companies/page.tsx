@@ -97,7 +97,7 @@ export default function CompaniesPage() {
     if (company) {
       setEditingCompany(company)
       const details = company.details || {}
-      
+
       // Handle legacy address or new addresses array
       let addresses = details.addresses || []
       if (addresses.length === 0 && details.address) {
@@ -230,14 +230,14 @@ export default function CompaniesPage() {
       }
 
       if (editingCompany) {
-          const { error } = await supabase.from("companies").update(payload).eq("id", editingCompany.id)
-          if (error) throw error
-          notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", ""), dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`))
-        } else {
-          const { error } = await supabase.from("companies").insert([payload])
-          if (error) throw error
-          setIsOpen(false)
-          notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", ""), dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`))
+        const { error } = await supabase.from("companies").update(payload).eq("id", editingCompany.id)
+        if (error) throw error
+        notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", ""), dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`))
+      } else {
+        const { error } = await supabase.from("companies").insert([payload])
+        if (error) throw error
+        setIsOpen(false)
+        notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", ""), dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`))
       }
       setIsOpen(false)
       fetchCompanies()
@@ -249,7 +249,7 @@ export default function CompaniesPage() {
     finally {
       setIsSubmitting(false);
     }
-}
+  }
 
   return (
     <div className="page-container">
@@ -311,9 +311,9 @@ export default function CompaniesPage() {
                           onCheckedChange={() => toggleType(type)}
                         />
                         <Label htmlFor={`type-${type}`} className="cursor-pointer font-normal">
-                          { type === "Customer" ? <>{dict.LABEL_TYPE_CUSTOMER} <User className="size-4 text-blue-600" /></> :
+                          {type === "Customer" ? <>{dict.LABEL_TYPE_CUSTOMER} <User className="size-4 text-blue-600" /></> :
                             type === "Supplier" ? <>{dict.LABEL_TYPE_SUPPLIER} <Warehouse className="size-4 text-amber-600" /></> :
-                              <>{dict.LABEL_TYPE_TRANSPORTER} <Truck className="size-4 text-emerald-600" /></> }
+                              <>{dict.LABEL_TYPE_TRANSPORTER} <Truck className="size-4 text-emerald-600" /></>}
                         </Label>
                       </div>
                     ))}
@@ -372,7 +372,7 @@ export default function CompaniesPage() {
                       <Plus className="size-4" />
                     </Button>
                   </div>
-                  
+
                   <div className="flex flex-col gap-4">
                     {formData.contact_persons.map((contact, index) => (
                       <div key={index} className="flex flex-col gap-3 p-3 border rounded-md bg-background/50 group/contact">
@@ -380,10 +380,10 @@ export default function CompaniesPage() {
                           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                             {dict.LABEL_CONTACT_PERSON} #{index + 1}
                           </span>
-                          <Button 
-                            type="button" 
-                            variant="ghost" 
-                            size="icon" 
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
                             className={cn(
                               "size-7 transition-colors",
                               formData.contact_persons.length > 1 ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground/20"
@@ -394,7 +394,7 @@ export default function CompaniesPage() {
                             <Trash2 className="size-4" />
                           </Button>
                         </div>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-xs font-bold text-muted-foreground">{dict.LABEL_NAME}</Label>
@@ -454,7 +454,7 @@ export default function CompaniesPage() {
                       <Plus className="size-4" />
                     </Button>
                   </div>
-                  
+
                   <div className="flex flex-col gap-3">
                     {formData.addresses.map((addr, index) => (
                       <div key={index} className="flex gap-2 items-end group/addr">
@@ -476,10 +476,10 @@ export default function CompaniesPage() {
                             className="h-9"
                           />
                         </div>
-                        <Button 
-                          type="button" 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
                           className={cn(
                             "size-9 shrink-0 transition-colors",
                             formData.addresses.length > 1 ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground/20"
@@ -515,10 +515,10 @@ export default function CompaniesPage() {
                 {dict.BUTTON_CANCEL}
               </Button>
               <Button type="submit" form="company-form" disabled={isSubmitting}>
-                {isSubmitting ? ( <ButtonLoader /> ) : ( <Save data-icon="inline-start" /> )}
+                {isSubmitting ? (<ButtonLoader />) : (<Save data-icon="inline-start" />)}
                 {dict.BUTTON_SAVE}
               </Button>
-            </DialogFooter>            
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
@@ -551,10 +551,10 @@ export default function CompaniesPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{dict.LABEL_NAME}</TableHead>
+              <TableHead className="px-7">{dict.LABEL_NAME}</TableHead>
               <TableHead>{dict.LABEL_TYPE}</TableHead>
               <TableHead>{dict.LABEL_CONTACT_PERSON}</TableHead>
-              <TableHead className="text-right">{dict.LABEL_ACTIONS}</TableHead>
+              <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -569,8 +569,8 @@ export default function CompaniesPage() {
                 const filtered = companies.filter(company => {
                   const details = company.details || {}
                   const contacts = details.contact_persons || []
-                  
-                  const contactMatches = contacts.some((c: any) => 
+
+                  const contactMatches = contacts.some((c: any) =>
                     (c.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
                     (c.email || "").toLowerCase().includes(searchQuery.toLowerCase())
                   )
@@ -597,7 +597,7 @@ export default function CompaniesPage() {
                   const details = company.details || {}
                   const contacts = details.contact_persons || []
                   const firstContact = contacts[0]
-                  
+
                   return (
                     <TableRow key={company.id} className="group">
                       <TableCell className="font-medium">
@@ -659,7 +659,7 @@ export default function CompaniesPage() {
                           onClick={() => handleOpenDialog(company)}
                         >
                           <Pencil className="size-4" />
-                          
+
                         </Button>
                       </TableCell>
                     </TableRow>

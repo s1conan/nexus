@@ -201,27 +201,27 @@
 
 /* Tiptap List Styles & Spacing Overrides */
 .prose ul {
-  list-style-type: disc !important;
-  padding-left: 1.5rem !important;
-  margin-top: 0.25em !important;
-  margin-bottom: 0.25em !important;
+    list-style-type: disc !important;
+    padding-left: 1.5rem !important;
+    margin-top: 0.25em !important;
+    margin-bottom: 0.25em !important;
 }
 
 .prose ol {
-  list-style-type: decimal !important;
-  padding-left: 1.5rem !important;
-  margin-top: 0.25em !important;
-  margin-bottom: 0.25em !important;
+    list-style-type: decimal !important;
+    padding-left: 1.5rem !important;
+    margin-top: 0.25em !important;
+    margin-bottom: 0.25em !important;
 }
 
 .prose p {
-  margin-top: 0.25em !important;
-  margin-bottom: 0.25em !important;
+    margin-top: 0.25em !important;
+    margin-bottom: 0.25em !important;
 }
 
 .prose li {
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
 }
 
 @layer base {
@@ -250,7 +250,7 @@
     }
 
     .data-card {
-        @apply p-4 border rounded-xl shadow-sm bg-card text-card-foreground;
+        @apply p-2 border rounded-xl shadow-sm bg-card text-card-foreground;
     }
 
     .action-bar {

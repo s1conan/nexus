@@ -19,21 +19,21 @@ import {
 } from "@/components/ui/dialog"
 import { SectionLoader } from "@/components/section-loader"
 import { ButtonLoader } from "@/components/button-loader"
-import { 
-  Building2, 
-  CreditCard, 
-  Sliders, 
-  Plus, 
-  Trash2, 
-  Pencil, 
-  Save, 
-  Percent, 
-  Settings, 
-  Mail, 
-  MapPin, 
-  FileText, 
+import {
+  Building2,
+  CreditCard,
+  Sliders,
+  Plus,
+  Trash2,
+  Pencil,
+  Save,
+  Percent,
+  Settings,
+  Mail,
+  MapPin,
+  FileText,
   X,
-  Image as ImageIcon 
+  Image as ImageIcon
 } from "lucide-react"
 
 const supabase = createClient()
@@ -50,7 +50,7 @@ interface CompanyProfile {
 interface BankAccount {
   id: string
   name: string
-  bank_name: string 
+  bank_name: string
   account_number: string
   account_name: string
   branch: string | null
@@ -67,7 +67,7 @@ interface SystemParameter {
 export default function SettingsPage() {
   const { dict } = useDictionary()
   const { profile, hasPermission } = useAuth()
-  
+
   const canEdit = hasPermission("settings", "edit")
 
   // Active sub-tab state inside settings
@@ -123,13 +123,13 @@ export default function SettingsPage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      
+
       // Fetch all rows from unified app_settings, ordered by name to guarantee stable layout order
       const { data, error } = await supabase
         .from("app_settings")
         .select("*")
         .order("name", { ascending: true })
-        
+
       if (error) throw error
 
       // Dynamic reactive seeder if table is empty
@@ -146,18 +146,20 @@ export default function SettingsPage() {
             { category: "tax", name: "PPN", value: 0.11 },
             { category: "tax", name: "PBBKB", value: 0.075 },
             { category: "tax", name: "PPH22", value: 0.003 },
-            { category: "company", name: "bank", value: [
-              { id: "bank-1", name: "Bank Mandiri", bank_name: "Bank Mandiri", account_number: "111231002319", branch: "Letkol Iskandar", account_name: "PT Anugerah Buana Sriwijaya" },
-              { id: "bank-2", name: "Bank Central Asia", bank_name: "Bank Central Asia", account_number: "31312315", branch: "Letkol Iskandar", account_name: "PT Anugerah Buana Sriwijaya" }
-            ]}
+            {
+              category: "company", name: "bank", value: [
+                { id: "bank-1", name: "Bank Mandiri", bank_name: "Bank Mandiri", account_number: "111231002319", branch: "Letkol Iskandar", account_name: "PT Anugerah Buana Sriwijaya" },
+                { id: "bank-2", name: "Bank Central Asia", bank_name: "Bank Central Asia", account_number: "31312315", branch: "Letkol Iskandar", account_name: "PT Anugerah Buana Sriwijaya" }
+              ]
+            }
           ]
-          
+
           const { error: seedError } = await supabase
             .from("app_settings")
             .insert(defaultSeeds)
-            
+
           if (seedError) throw seedError
-          
+
           // Retry load
           loadData()
           return
@@ -210,7 +212,7 @@ export default function SettingsPage() {
           description: p.name === "PPN" ? "Value Added Tax rate applied to standard transactions." : p.name === "PBBKB" ? "Fuel tax rate applied to logistics and shipping calculations." : p.name === "PPH22" ? "Art 22 Income Tax rate applied to imported or specific commodities." : null
         }))
         setParameters(systemParams)
-        
+
         const valMap: Record<string, string> = {}
         systemParams.forEach((p: SystemParameter) => {
           valMap[p.key] = typeof p.value === "object" ? JSON.stringify(p.value) : String(p.value)
@@ -240,7 +242,7 @@ export default function SettingsPage() {
 
     try {
       setSavingCompany(true)
-      
+
       const updates = [
         { category: "company", name: "name", value: companyInfo.name },
         { category: "company", name: "email", value: companyInfo.email },
@@ -255,7 +257,7 @@ export default function SettingsPage() {
         .upsert(updates)
 
       if (error) throw error
-      notify.success(dict.MSG_SAVE_SUCCESS || "Saved successfully", "Company profile has been updated.")
+      notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", "") || "Saved successfully", "Company profile has been updated.")
     } catch (error: unknown) {
       const err = error as Error
       notify.error(dict.MSG_SAVE_FAILED || "Save failed", err.message)
@@ -327,7 +329,7 @@ export default function SettingsPage() {
         })
 
       if (error) throw error
-      
+
       setBankAccounts(updatedBanks)
       notify.success(dict.MSG_SAVE_SUCCESS || "Saved successfully", "Bank account has been updated.")
       setIsBankDialogOpen(false)
@@ -381,10 +383,10 @@ export default function SettingsPage() {
 
     try {
       setSavingParams(true)
-      
+
       const updates = parameters.map((p: any) => {
         let parsedVal: string | number | boolean | object = paramValues[p.key]
-        
+
         // Try parsing numbers or booleans so that they are saved in correct JSONB format
         if (!isNaN(Number(parsedVal)) && parsedVal.trim() !== "") {
           parsedVal = Number(parsedVal)
@@ -414,7 +416,7 @@ export default function SettingsPage() {
       if (error) throw error
 
       notify.success(dict.MSG_SAVE_SUCCESS || "Saved successfully", "System parameters have been successfully updated.")
-      
+
       // Reload parameter settings, sorted stably to prevent cards from switching places
       const { data } = await supabase
         .from("app_settings")
@@ -468,7 +470,7 @@ export default function SettingsPage() {
     try {
       setSavingParamDialog(true)
       let parsedVal: string | number | boolean | object = newParam.value
-      
+
       // Try parsing value
       if (!isNaN(Number(parsedVal)) && parsedVal.trim() !== "") {
         parsedVal = Number(parsedVal)
@@ -506,7 +508,7 @@ export default function SettingsPage() {
           description: p.name === "PPN" ? "Value Added Tax rate applied to standard transactions." : p.name === "PBBKB" ? "Fuel tax rate applied to logistics and shipping calculations." : p.name === "PPH22" ? "Art 22 Income Tax rate applied to imported or specific commodities." : p.description || null
         }))
         setParameters(systemParams)
-        
+
         const valMap: Record<string, string> = {}
         systemParams.forEach((p: SystemParameter) => {
           valMap[p.key] = typeof p.value === "object" ? JSON.stringify(p.value) : String(p.value)
@@ -524,7 +526,7 @@ export default function SettingsPage() {
   // Delete Dynamic Parameter
   const handleDeleteParam = async (key: string) => {
     if (!canEdit) return
-    
+
     // Safety guard for core seeded parameters
     if (key === "PPN" || key === "PBBKB" || key === "PPH22") {
       notify.error("Protected Parameter", `Core operational parameters (PPN, PBBKB, PPH22) cannot be deleted.`)
@@ -553,7 +555,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden p-6 max-w-7xl mx-auto w-full gap-6">
-      
+
       {/* Dynamic Header */}
       <div className="flex items-center justify-between pb-4 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-3">
@@ -575,11 +577,10 @@ export default function SettingsPage() {
       <div className="flex border-b border-border/60 gap-4 shrink-0">
         <button
           onClick={() => setActiveTab("company")}
-          className={`flex items-center gap-2 pb-2.5 text-xs md:text-sm font-medium transition-all relative z-10 border-b-2 px-1 -mb-[2px] ${
-            activeTab === "company"
+          className={`flex items-center gap-2 pb-2.5 text-xs md:text-sm font-medium transition-all relative z-10 border-b-2 px-1 -mb-[2px] ${activeTab === "company"
               ? "border-primary text-primary font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
+            }`}
         >
           <Building2 className="size-4" />
           <span>{dict.SETTINGS_TAB_COMPANY || "Company Profile"}</span>
@@ -587,11 +588,10 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab("banks")}
-          className={`flex items-center gap-2 pb-2.5 text-xs md:text-sm font-medium transition-all relative z-10 border-b-2 px-1 -mb-[2px] ${
-            activeTab === "banks"
+          className={`flex items-center gap-2 pb-2.5 text-xs md:text-sm font-medium transition-all relative z-10 border-b-2 px-1 -mb-[2px] ${activeTab === "banks"
               ? "border-primary text-primary font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
+            }`}
         >
           <CreditCard className="size-4" />
           <span>{dict.SETTINGS_TAB_BANKS || "Bank Accounts"}</span>
@@ -599,11 +599,10 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab("parameters")}
-          className={`flex items-center gap-2 pb-2.5 text-xs md:text-sm font-medium transition-all relative z-10 border-b-2 px-1 -mb-[2px] ${
-            activeTab === "parameters"
+          className={`flex items-center gap-2 pb-2.5 text-xs md:text-sm font-medium transition-all relative z-10 border-b-2 px-1 -mb-[2px] ${activeTab === "parameters"
               ? "border-primary text-primary font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
+            }`}
         >
           <Sliders className="size-4" />
           <span>{dict.SETTINGS_TAB_PARAMETERS || "System Parameters"}</span>
@@ -612,7 +611,7 @@ export default function SettingsPage() {
 
       {/* Scrollable Content Container */}
       <div className="flex-1 overflow-y-auto no-scrollbar pb-6 scroll-smooth">
-        
+
         {/* Tab 1: Company Profile */}
         {activeTab === "company" && (
           <form onSubmit={handleSaveCompany} className="space-y-6">
@@ -731,14 +730,14 @@ export default function SettingsPage() {
         {/* Tab 2: Bank Accounts */}
         {activeTab === "banks" && (
           <div className="space-y-6">
-            
+
             {/* Header / Add Action */}
             <div className="flex justify-between items-center border-b border-border/60 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <CreditCard className="size-4 text-primary" />
                 <h3 className="text-sm font-semibold text-foreground">{dict.SETTINGS_SEC_BANKS || "Relational Settlement Bank Accounts"}</h3>
               </div>
-              
+
               {canEdit && (
                 <Button
                   onClick={handleAddBankClick}
@@ -768,7 +767,7 @@ export default function SettingsPage() {
                         <span className="text-xs font-bold bg-primary/10 text-primary px-2.5 py-0.5 rounded-full tracking-wider uppercase">
                           {bank.bank_name}
                         </span>
-                        
+
                         {canEdit && (
                           <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button
@@ -791,7 +790,7 @@ export default function SettingsPage() {
                           </div>
                         )}
                       </div>
-                      
+
                       <div className="pt-1.5">
                         <div className="text-lg font-mono font-bold text-foreground leading-none tracking-tight">
                           {bank.account_number}
@@ -818,7 +817,7 @@ export default function SettingsPage() {
                   <Sliders className="size-4 text-primary" />
                   <h3 className="text-sm font-semibold text-foreground">{dict.SETTINGS_SEC_PARAMS || "Dynamic Operational Parameters"}</h3>
                 </div>
-                
+
                 {canEdit && (
                   <Button
                     type="button"
@@ -842,10 +841,10 @@ export default function SettingsPage() {
                   {parameters.map(param => {
                     const isTax = param.category === "tax"
                     const isProtected = param.key === "PPN" || param.key === "PBBKB" || param.key === "PPH22"
-                    
+
                     return (
                       <div key={param.key} className="space-y-2 border border-border/40 p-4 rounded-lg bg-card/40 flex flex-col justify-between relative group">
-                        
+
                         {/* Delete parameter button for custom dynamic options */}
                         {canEdit && !isProtected && (
                           <Button
@@ -869,7 +868,7 @@ export default function SettingsPage() {
                               {param.key}
                             </span>
                           </div>
-                          
+
                           <div className="flex items-center gap-2">
                             <Input
                               id={`param_${param.key}`}
@@ -881,7 +880,7 @@ export default function SettingsPage() {
                             />
                           </div>
                         </div>
-                        
+
                         {param.description && (
                           <p className="text-[10px] text-muted-foreground/80 mt-2 leading-relaxed">
                             {param.description}
@@ -974,7 +973,7 @@ export default function SettingsPage() {
               {savingBank ? <ButtonLoader /> : <Save data-icon="inline-start" />}
               {dict.BUTTON_SAVE}
             </Button>
-          </DialogFooter>          
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1030,7 +1029,7 @@ export default function SettingsPage() {
               {savingParamDialog ? <ButtonLoader /> : <Save data-icon="inline-start" />}
               {dict.BUTTON_SAVE}
             </Button>
-          </DialogFooter>          
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

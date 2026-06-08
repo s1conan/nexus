@@ -21,7 +21,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -38,7 +37,7 @@ import { formatCurrency } from "@/lib/formatters"
 import { ButtonLoader } from "@/components/button-loader"
 
 export default function ProductsPage() {
-  const { dict, config, lang } = useDictionary()
+  const { dict, lang } = useDictionary()
   const supabase = createClient()
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -128,14 +127,16 @@ export default function ProductsPage() {
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1 className="page-title"><Package className="size-5 mr-2 inline-block text-primary" />{dict.TITLE_PRODUCTS}</h1>
+        <h1 className="page-title">
+          <Package className="size-5 mr-2 inline-block text-primary" />
+          {dict.TITLE_PRODUCTS}
+        </h1>
+
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => handleOpenDialog()}>
-              <Plus data-icon="inline-start" />
-              {dict.TITLE_ADD_PRODUCT}
-            </Button>
-          </DialogTrigger>
+          <Button size="sm" onClick={() => handleOpenDialog()}>
+            <Plus data-icon="inline-start" />
+            {dict.TITLE_ADD_PRODUCT}
+          </Button>
           <DialogContent className="w-[350px]">
             <DialogHeader>
               <DialogTitle>
@@ -180,17 +181,16 @@ export default function ProductsPage() {
                 <Label htmlFor="base_price">{dict.LABEL_BASE_PRICE}</Label>
                 <NumberInput
                   id="base_price"
-                  className="text-right font-mono"
                   value={formData.base_price}
                   onChange={(val) => setFormData({ ...formData, base_price: val })}
+                  badge="Rp"
+                  badgePosition="left"
                   required
                 />
               </div>
-
-
             </form>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="flex-1">
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
                 <X data-icon="inline-start" />
                 {dict.BUTTON_CANCEL}
               </Button>
@@ -207,7 +207,7 @@ export default function ProductsPage() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
-            placeholder={dict.SEARCH_PLACEHOLDER}
+            placeholder={dict.PLACEHOLDER_SEARCH}
             className="pl-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -219,10 +219,10 @@ export default function ProductsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{dict.LABEL_NAME}</TableHead>
+              <TableHead className="px-7">{dict.LABEL_NAME}</TableHead>
               <TableHead>{dict.LABEL_SKU}</TableHead>
               <TableHead className="text-right">{dict.LABEL_BASE_PRICE}</TableHead>
-              <TableHead className="text-right">{dict.LABEL_ACTIONS}</TableHead>
+              <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

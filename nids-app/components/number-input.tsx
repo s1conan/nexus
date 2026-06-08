@@ -3,22 +3,44 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Input } from "./ui/input";
 import { useDictionary } from "./dictionary-provider";
+import { cn } from "@/lib/utils"
 
 interface NumberInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   value: number;
   onChange: (value: number) => void;
+  badge?: React.ReactNode;
+  badgePosition?: "left" | "right";
+  leftBadge?: React.ReactNode;
+  rightBadge?: React.ReactNode;
+  badgeClassName?: string;
+  containerClassName?: string;
 }
 
-export function NumberInput({ value, onChange, ...props }: NumberInputProps) {
+export function NumberInput({
+  value,
+  onChange,
+  badge,
+  badgePosition = "right",
+  leftBadge,
+  rightBadge,
+  badgeClassName,
+  containerClassName,
+  className,
+  ...props
+}: NumberInputProps) {
   const { config } = useDictionary();
   const [displayValue, setDisplayValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  
+
   // Track cursor position
   const cursorRef = useRef<{ position: number | null; value: string }>({ position: null, value: "" });
 
+  // Backward compatibility for badge prop
+  const effectiveLeftBadge = leftBadge || (badge && badgePosition === "left" ? badge : null);
+  const effectiveRightBadge = rightBadge || (badge && badgePosition === "right" ? badge : null);
+
   const locale = config.numberLocale || 'en-US';
-  
+
   // Robust separator detection
   const separators = useMemo(() => {
     const parts = new Intl.NumberFormat(locale).formatToParts(1111.1);
@@ -41,7 +63,7 @@ export function NumberInput({ value, onChange, ...props }: NumberInputProps) {
     if (value !== undefined && value !== null) {
       const formatted = formatValue(value);
       const currentParsed = parseFloat(displayValue.replaceAll(separators.thousand, "").replace(separators.decimal, "."));
-      
+
       // Only update if the numeric value is actually different
       // This prevents stripping trailing zeros or decimal points while typing
       if (isNaN(currentParsed) || currentParsed !== value) {
@@ -57,11 +79,11 @@ export function NumberInput({ value, onChange, ...props }: NumberInputProps) {
     if (inputRef.current && cursorRef.current.position !== null) {
       const el = inputRef.current;
       const pos = cursorRef.current.position;
-      
+
       // Adjust position if length changed (e.g. thousand separator added)
       const diff = displayValue.length - cursorRef.current.value.length;
       const newPos = Math.max(0, pos + diff);
-      
+
       el.setSelectionRange(newPos, newPos);
       cursorRef.current.position = null;
     }
@@ -69,7 +91,7 @@ export function NumberInput({ value, onChange, ...props }: NumberInputProps) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let nextValue = e.target.value;
-    
+
     // Allow both . and , as decimal separators for better UX, but normalize to locale
     const otherDecimal = separators.decimal === "." ? "," : ".";
     if (nextValue.endsWith(otherDecimal)) {
@@ -82,7 +104,7 @@ export function NumberInput({ value, onChange, ...props }: NumberInputProps) {
 
     // Remove thousand separators for parsing
     const rawNumber = nextValue.replaceAll(separators.thousand, "").replace(separators.decimal, ".");
-    
+
     if (nextValue === "") {
       onChange(0);
       setDisplayValue("");
@@ -93,13 +115,13 @@ export function NumberInput({ value, onChange, ...props }: NumberInputProps) {
     // This regex allows digits, one decimal separator, and optional leading minus
     const partialRegex = new RegExp(`^-?\\d*(\\${separators.decimal}\\d*)?$`);
     const cleanValue = nextValue.replaceAll(separators.thousand, "");
-    
+
     if (partialRegex.test(cleanValue)) {
       const parsed = parseFloat(rawNumber);
       if (!isNaN(parsed)) {
         onChange(parsed);
       }
-      
+
       // Apply live formatting for thousand separators if there's no decimal separator currently
       if (!cleanValue.includes(separators.decimal) && !isNaN(parsed)) {
         setDisplayValue(formatValue(parsed));
@@ -115,14 +137,45 @@ export function NumberInput({ value, onChange, ...props }: NumberInputProps) {
   };
 
   return (
-    <Input
-      {...props}
-      ref={inputRef}
-      type="text"
-      inputMode="decimal"
-      value={displayValue}
-      onChange={handleChange}
-      onBlur={handleBlur}
-    />
+    <div 
+      className={cn(
+        "flex h-9 w-full items-center rounded-md border border-input bg-transparent shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 overflow-hidden",
+        containerClassName
+      )}
+    >
+      {effectiveLeftBadge && (
+        <div
+          className={cn(
+            "flex h-full shrink-0 font-bold items-center bg-muted/60 px-3 border-r border-input text-xs text-muted-foreground select-none pointer-events-none rounded-l-md whitespace-nowrap",
+            badgeClassName
+          )}
+        >
+          {effectiveLeftBadge}
+        </div>
+      )}
+      <input
+        {...props}
+        ref={inputRef}
+        type="text"
+        inputMode="decimal"
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className={cn(
+          "flex-1 min-w-0 bg-transparent px-3 py-1 text-sm outline-none text-right font-mono placeholder:text-muted-foreground/40",
+          className
+        )}
+      />
+      {effectiveRightBadge && (
+        <div
+          className={cn(
+            "flex h-full shrink-0 font-bold items-center bg-muted/60 px-3 border-l border-input text-xs text-muted-foreground select-none pointer-events-none rounded-r-md whitespace-nowrap",
+            badgeClassName
+          )}
+        >
+          {effectiveRightBadge}
+        </div>
+      )}
+    </div>
   );
 }

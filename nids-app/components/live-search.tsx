@@ -131,7 +131,7 @@ export function LiveSearch<T extends Record<string, any>>({
                     key={itemValue}
                     value={itemValue}
                     onSelect={() => {
-                      onSelect(isSelected ? "" : itemValue)
+                      onSelect(itemValue)
                       setOpen(false)
                       setSearchQuery("") // Reset search on select
                     }}

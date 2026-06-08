@@ -621,8 +621,8 @@ export function MdiLayout() {
             <div
               key={tab.id}
               className={cn(
-                "absolute inset-0 overflow-auto",
-                activeTabId === tab.id ? "block animate-in fade-in duration-300" : "hidden"
+                "absolute inset-0 flex flex-col overflow-hidden min-h-0",
+                activeTabId === tab.id ? "flex animate-in fade-in duration-300" : "hidden"
               )}
             >
               {displayContent}

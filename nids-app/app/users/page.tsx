@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { UserCog, ShieldCheck, ShieldAlert, ShieldX, Save, X, Trash2, Clock, Pencil } from "lucide-react"
+import { ShieldCheck, ShieldAlert, ShieldX, Save, X, Clock, Pencil, UserCog } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -37,6 +37,7 @@ import { ButtonLoader } from "@/components/button-loader"
 import { usePersistedState } from "@/hooks/use-persisted-state"
 
 import { formatDateTime } from "@/lib/formatters"
+import { cn } from "@/lib/utils"
 
 const supabase = createClient()
 
@@ -54,7 +55,6 @@ export default function UsersPage() {
   const actions = ['view', 'insert', 'edit', 'delete', 'print']
 
   const getStatusInfo = (user: any) => {
-    // ... (unchanged logic)
     if (!user.last_login && !user.is_active) {
       return {
         label: dict.LABEL_PENDING,
@@ -84,37 +84,24 @@ export default function UsersPage() {
   async function fetchData() {
     try {
       setLoading(true)
-      console.log("Users: Fetching data...")
-
       const [userRes, roleRes] = await Promise.all([
         supabase.from('profiles').select('*').order('created_at', { ascending: false }),
         supabase.from('role_permissions').select('role')
       ])
 
-      if (userRes.error) console.error("Users: Profile fetch error:", userRes.error)
-      if (roleRes.error) console.error("Users: Role fetch error:", roleRes.error)
-
       if (userRes.data) {
-        // Custom Sort: Status (Pending > Deactivated > Active) then Role
         const sortedUsers = [...userRes.data].sort((a, b) => {
           const getStatusScore = (u: any) => {
             if (!u.last_login && !u.is_active) return 0 // Pending
             if (u.last_login && !u.is_active) return 1  // Deactivated
             return 2 // Active
           }
-
           const scoreA = getStatusScore(a)
           const scoreB = getStatusScore(b)
-
           if (scoreA !== scoreB) return scoreA - scoreB
-
-          // Secondary sort by role
           return (a.role || "").localeCompare(b.role || "")
         })
-
         setUsers(sortedUsers)
-
-        // Update editingUser if it exists
         if (editingUser) {
           const updated = sortedUsers.find(u => u.id === editingUser.id)
           if (updated) setEditingUser(updated)
@@ -122,9 +109,7 @@ export default function UsersPage() {
       }
 
       if (roleRes.data) {
-        const rolesList = roleRes.data.map((r: any) => r.role)
-        console.log("Users: Roles from DB:", rolesList)
-        setRoles(rolesList)
+        setRoles(roleRes.data.map((r: any) => r.role))
       }
     } catch (err) {
       console.error("Users: Fetch data unexpected error:", err)
@@ -155,15 +140,11 @@ export default function UsersPage() {
 
   const handleRoleChange = async (role: string) => {
     try {
-      const { data: roleInfo, error } = await supabase
+      const { data: roleInfo } = await supabase
         .from('role_permissions')
         .select('permissions')
         .eq('role', role)
         .single()
-
-      if (error) {
-        console.error("Error fetching role permissions:", error)
-      }
 
       setEditingUser((prev: any) => ({
         ...prev,
@@ -177,10 +158,7 @@ export default function UsersPage() {
 
   const handleApproveToggle = async () => {
     if (!editingUser) return
-
     setIsApproving(true)
-    console.log(`Users: Attempting ${editingUser.is_active ? 'revoke' : 'approve'} for ${editingUser.email}`)
-
     try {
       const response = await fetch('/api/approve', {
         method: 'POST',
@@ -193,32 +171,23 @@ export default function UsersPage() {
           action: editingUser.is_active ? 'revoke' : 'approve'
         })
       })
-
       const result = await response.json()
-      
-      // IMPORTANT: Clear loading state AS SOON as the API returns
       setIsApproving(false)
-
       if (result.error) {
-        console.error("Approval Toggle Error Result:", result.error)
         alert(result.error)
       } else {
-        console.log("Approval Toggle Success, triggering table refresh...")
-        // Refresh the table in the background
         await fetchData()
       }
     } catch (err) {
       console.error("Approval Toggle Unexpected Error:", err)
-      alert("An unexpected error occurred. Please check the console.")
+      alert("An unexpected error occurred.")
       setIsApproving(false)
     }
   }
 
   const handleSave = async () => {
-    // 1. Intelligent Phone Formatting
     const trimmed = (editingUser.phone || "").trim()
     let formattedPhone = ""
-
     if (trimmed.startsWith('+')) {
       formattedPhone = '+' + trimmed.replace(/\D/g, '')
     } else {
@@ -250,7 +219,7 @@ export default function UsersPage() {
 
   if (authLoading) {
     return (
-      <div className="page-container flex items-center justify-center min-h-[400px]">
+      <div className="h-full w-full flex items-center justify-center">
         <SectionLoader />
       </div>
     )
@@ -262,35 +231,36 @@ export default function UsersPage() {
 
   return (
     <div className="page-container">
+      {/* Page Header */}
       <div className="page-header">
-        <h1 className="page-title">{dict.TITLE_USER_MGMT}</h1>
+        <h1 className="page-title">
+          <UserCog className="size-5 mr-2 inline-block text-primary" />
+          {dict.TITLE_USER_MGMT}
+        </h1>
       </div>
 
-      <Card className="data-card overflow-hidden">
-        <Table className="min-w-[1000px]">
-          <TableHeader className="sticky top-0 bg-background z-5 shadow-sm">
+      {/* Data Area */}
+      <Card className="data-card">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableHead className="w-[150px]">{dict.LABEL_USERNAME_FIELD || "Username"}</TableHead>
-              <TableHead className="w-[200px]">{dict.LABEL_EMAIL}</TableHead>
-              <TableHead className="w-[180px]">{dict.LABEL_FULL_NAME}</TableHead>
-              <TableHead className="hidden md:table-cell">{dict.LABEL_PHONE_SHORT}</TableHead>
+              <TableHead className="px-7">{dict.LABEL_USERNAME_FIELD || "Username"}</TableHead>
+              <TableHead>{dict.LABEL_EMAIL}</TableHead>
+              <TableHead>{dict.LABEL_FULL_NAME}</TableHead>
               <TableHead>{dict.LABEL_ROLE}</TableHead>
               <TableHead>{dict.LABEL_STATUS}</TableHead>
-              <TableHead className="w-[180px]">{dict.LABEL_LAST_LOGIN || "Last Login"}</TableHead>
-              <TableHead className="text-center w-0 sticky right-0 bg-background/95 backdrop-blur-sm z-20 px-2 border-l">
-                {dict.LABEL_ACTIONS}
-              </TableHead>
+              <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} className="p-0">
+                <TableCell colSpan={6} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
             ) : users.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8">{dict.NO_DATA}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8">{dict.NO_DATA}</TableCell></TableRow>
             ) : (
               users.map((u) => {
                 const status = getStatusInfo(u)
@@ -298,32 +268,31 @@ export default function UsersPage() {
 
                 return (
                   <TableRow key={u.id} className="group">
-                    <TableCell className="text-sm font-medium">{u.username}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "size-2 rounded-full",
+                          u.is_active ? "bg-green-500" : "bg-muted-foreground/30"
+                        )} />
+                        <span>{u.username}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{u.email}</TableCell>
                     <TableCell className="text-sm">{u.full_name}</TableCell>
-                    <TableCell className="text-sm hidden md:table-cell">{u.phone || '-'}</TableCell>
                     <TableCell>
                       <span className="capitalize text-xs font-semibold px-2 py-0.5 rounded-md bg-secondary/50">
                         {u.role}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className={`inline-flex w-[100px] items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.bg} ${status.color}`}>
-                        <StatusIcon className="size-4 mr-1.5" strokeWidth={2} />
+                      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${status.bg} ${status.color}`}>
+                        <StatusIcon className="size-3 mr-1.5" />
                         {status.label}
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {u.last_login ? formatDateTime(u.last_login) : (
-                        <span className="flex items-center opacity-50">
-                          <Clock className="size-3 mr-1" /> {dict.NO_DATA}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur-sm z-20 px-4 border-l group-hover:bg-muted/50 transition-colors">
-                      <Button variant="secondary" size="sm" onClick={() => handleEdit(u)}>
-                        <Pencil className="size-4 md:mr-2" />
-                        <span className="hidden md:inline">{dict.BUTTON_MANAGE}</span>
+                    <TableCell className="text-right">
+                      <Button variant="table_action" size="sm" onClick={() => handleEdit(u)}>
+                        <Pencil className="size-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -334,9 +303,10 @@ export default function UsersPage() {
         </Table>
       </Card>
 
+      {/* User Management Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="p-6 border-b shrink-0">
             <DialogTitle>{dict.TITLE_MANAGE_USER}</DialogTitle>
           </DialogHeader>
 
@@ -345,53 +315,33 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <Label>{dict.LABEL_USERNAME_FIELD || "Username"}</Label>
-                  <Input
-                    value={editingUser?.username || ""}
-                    disabled
-                    className="bg-muted"
-                  />
+                  <Input value={editingUser?.username || ""} disabled className="bg-muted" />
                 </div>
                 <div className="flex flex-col gap-2">
                   <Label>{dict.LABEL_EMAIL || "Email"}</Label>
-                  <Input
-                    value={editingUser?.email || ""}
-                    disabled
-                    className="bg-muted"
-                  />
+                  <Input value={editingUser?.email || ""} disabled className="bg-muted" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <Label>{dict.LABEL_FULL_NAME}</Label>
-                  <Input
-                    value={editingUser?.full_name || ""}
-                    onChange={(e) => setEditingUser({ ...editingUser, full_name: e.target.value })}
-                  />
+                  <Input value={editingUser?.full_name || ""} onChange={(e) => setEditingUser({ ...editingUser, full_name: e.target.value })} />
                 </div>
                 <div className="flex flex-col gap-2">
                   <Label>{dict.LABEL_PHONE}</Label>
-                  <Input
-                    value={editingUser?.phone || ""}
-                    onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
-                  />
+                  <Input value={editingUser?.phone || ""} onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })} />
                 </div>
               </div>
-              <div className="flex flex-col gap-2" key={`${editingUser?.id}-${editingUser?.role}`}>
+              <div className="flex flex-col gap-2">
                 <Label>{dict.LABEL_ROLE}</Label>
                 <Select value={editingUser?.role} onValueChange={handleRoleChange}>
                   <SelectTrigger className="w-full capitalize">
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {roles.length === 0 ? (
-                      <div className="p-2 text-xs text-muted-foreground">No roles loaded</div>
-                    ) : (
-                      roles.map(r => (
-                        <SelectItem key={r} value={r} className="capitalize">
-                          {r}
-                        </SelectItem>
-                      ))
-                    )}
+                    {roles.map(r => (
+                      <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -400,19 +350,11 @@ export default function UsersPage() {
                 <div className="flex-1">
                   <h3 className="font-semibold text-sm">{dict.LABEL_ACC_APPROVAL}</h3>
                   <p className="text-xs text-muted-foreground">
-                    {editingUser?.auth_id === profile?.auth_id
-                      ? "You cannot revoke your own account access."
-                      : dict.DESC_ACC_APPROVAL}
+                    {editingUser?.auth_id === profile?.auth_id ? "You cannot revoke your own account access." : dict.DESC_ACC_APPROVAL}
                   </p>
                 </div>
-                <Button
-                  variant={editingUser?.is_active ? "destructive" : "default"}
-                  onClick={handleApproveToggle}
-                  disabled={isApproving || editingUser?.auth_id === profile?.auth_id}
-                >
-                  {isApproving ? (
-                    <ButtonLoader />
-                  ) : null}
+                <Button variant={editingUser?.is_active ? "destructive" : "default"} onClick={handleApproveToggle} disabled={isApproving || editingUser?.auth_id === profile?.auth_id}>
+                  {isApproving && <ButtonLoader />}
                   {editingUser?.is_active ? dict.BUTTON_REVOKE : dict.BUTTON_APPROVE}
                 </Button>
               </div>
@@ -423,18 +365,12 @@ export default function UsersPage() {
                   <div className="text-left">{dict.LABEL_MODULE}</div>
                   {actions.map(a => <div key={a} className="capitalize">{a}</div>)}
                 </div>
-
                 {modules.map(m => (
                   <div key={m} className="grid grid-cols-[150px_repeat(5,1fr)] gap-2 items-center border-b border-muted py-2 hover:bg-muted/10">
                     <div className="text-sm font-medium capitalize">{m}</div>
                     {actions.map(a => (
                       <div key={a} className="flex justify-center">
-                        <input
-                          type="checkbox"
-                          className="size-4 cursor-pointer accent-primary"
-                          checked={editingUser?.permissions?.[m]?.[a] || false}
-                          onChange={(e) => handlePermissionChange(m, a, e.target.checked)}
-                        />
+                        <input type="checkbox" className="size-4 cursor-pointer accent-primary" checked={editingUser?.permissions?.[m]?.[a] || false} onChange={(e) => handlePermissionChange(m, a, e.target.checked)} />
                       </div>
                     ))}
                   </div>
@@ -443,7 +379,7 @@ export default function UsersPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="p-6 border-t shrink-0">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
               <X className="mr-2 size-4" /> {dict.BUTTON_CANCEL}
             </Button>

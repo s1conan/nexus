@@ -14,16 +14,15 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { 
-  Plus, 
-  Search, 
-  Pencil, 
-  Save, 
-  X, 
-  Printer, 
-  Trash2, 
-  ChevronDown, 
-  CheckCircle2, 
+import {
+  Plus,
+  Search,
+  Pencil,
+  Save,
+  X,
+  Trash2,
+  ChevronDown,
+  CheckCircle2,
   Banknote,
   Calendar,
   Wallet
@@ -45,7 +44,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -60,15 +58,15 @@ export default function DepositsPage() {
   const { dict, lang } = useDictionary()
   const { hasPermission, profile } = useAuth()
   const supabase = createClient()
-  
+
   const [deposits, setDeposits] = useState<any[]>([])
   const [companies, setCompanies] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  
+
   // Dialog State
   const [isOpen, setIsOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<any>(null)
-  
+
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -189,7 +187,7 @@ export default function DepositsPage() {
 
   // Search filter
   const filteredDeposits = useMemo(() => {
-    return deposits.filter(d => 
+    return deposits.filter(d =>
       d.deposit_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
       d.company?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (d.company?.contact_person || "").toLowerCase().includes(searchQuery.toLowerCase())
@@ -203,19 +201,18 @@ export default function DepositsPage() {
 
   return (
     <div className="page-container">
+      {/* Page Header */}
       <div className="page-header">
-        <h1 className="page-title flex items-center gap-2">
-          <Banknote className="size-5 text-primary" />
+        <h1 className="page-title">
+          <Banknote className="size-5 mr-2 inline-block text-primary" />
           {dict.MENU_DEPOSIT}
         </h1>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => handleOpenDialog()}>
-              <Plus data-icon="inline-start" />
-              {dict.BUTTON_NEW_DEPOSIT}
-            </Button>
-          </DialogTrigger>
+          <Button size="sm" onClick={() => handleOpenDialog()}>
+            <Plus data-icon="inline-start" />
+            {dict.BUTTON_NEW_DEPOSIT}
+          </Button>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-0 gap-0">
             <DialogHeader className="p-5 border-b sticky top-0 bg-background z-10">
               <DialogTitle>
@@ -227,19 +224,14 @@ export default function DepositsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="grid gap-2">
                   <Label htmlFor="dnum">{dict.LABEL_DEPOSIT_NUMBER}</Label>
-                  <Input 
-                    id="dnum" 
-                    value={formData.deposit_number} 
-                    onChange={e => setFormData({ ...formData, deposit_number: e.target.value })}
-                    disabled={!canEditNum}
-                  />
+                  <Input id="dnum" value={formData.deposit_number} onChange={e => setFormData({ ...formData, deposit_number: e.target.value })} disabled={!canEditNum} />
                 </div>
 
                 <div className="grid gap-2">
                   <Label>{dict.LABEL_COMPANY_NAME}</Label>
-                  <LiveSearch 
-                    data={companies} 
-                    value={formData.company_id} 
+                  <LiveSearch
+                    data={companies}
+                    value={formData.company_id}
                     onSelect={val => setFormData({ ...formData, company_id: val })}
                     keyField="id"
                     displayField="name"
@@ -255,37 +247,25 @@ export default function DepositsPage() {
 
                 <div className="grid gap-2">
                   <Label className="flex items-center gap-2"><Calendar className="size-4" /> {dict.LABEL_DEPOSIT_DATE}</Label>
-                  <Input 
-                    type="date" 
-                    value={formData.deposit_date} 
-                    onChange={e => setFormData({ ...formData, deposit_date: e.target.value })}
-                  />
+                  <Input type="date" value={formData.deposit_date} onChange={e => setFormData({ ...formData, deposit_date: e.target.value })} />
                 </div>
 
                 <div className="grid gap-2">
                   <Label className="flex items-center gap-2"><Wallet className="size-4" /> {dict.LABEL_AMOUNT}</Label>
-                  <Input 
-                    type="number" 
-                    value={formData.amount} 
-                    onChange={e => setFormData({ ...formData, amount: Number(e.target.value) })}
-                  />
+                  <Input type="number" value={formData.amount} onChange={e => setFormData({ ...formData, amount: Number(e.target.value) })} />
                 </div>
 
                 <div className="grid gap-2 md:col-span-2">
                   <Label>{dict.LABEL_PAYMENT_METHOD}</Label>
-                  <Input 
-                    value={formData.payment_method} 
-                    onChange={e => setFormData({ ...formData, payment_method: e.target.value })}
-                    placeholder="e.g. Bank Transfer, Cash"
-                  />
+                  <Input value={formData.payment_method} onChange={e => setFormData({ ...formData, payment_method: e.target.value })} placeholder="e.g. Bank Transfer, Cash" />
                 </div>
               </div>
 
               <div className="space-y-6">
-                <RichTextEditor 
+                <RichTextEditor
                   label={dict.LABEL_NOTE}
-                  value={formData.note} 
-                  onChange={val => setFormData({ ...formData, note: val || "" })} 
+                  value={formData.note}
+                  onChange={val => setFormData({ ...formData, note: val || "" })}
                   isEnabled={formData.is_note_enabled}
                   onToggleEnabled={val => setFormData({ ...formData, is_note_enabled: val })}
                   placeholder="..."
@@ -306,92 +286,80 @@ export default function DepositsPage() {
         </Dialog>
       </div>
 
-      <div className="action-bar flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+      <div className="action-bar">
         <div className="relative flex-1 w-full max-w-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-          <Input 
-            placeholder={dict.SEARCH_PLACEHOLDER} 
-            className="pl-9" 
+          <Input
+            placeholder={dict.SEARCH_PLACEHOLDER}
+            className="pl-8"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
 
       <Card className="data-card">
         <Table>
-          <TableHeader className="bg-muted/30 sticky top-0 z-10">
+          <TableHeader>
             <TableRow>
-              <TableHead>{dict.LABEL_DEPOSIT_NUMBER}</TableHead>
+              <TableHead className="px-7">{dict.LABEL_DEPOSIT_NUMBER}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
               <TableHead>{dict.LABEL_DEPOSIT_DATE}</TableHead>
               <TableHead>{dict.LABEL_AMOUNT}</TableHead>
-              <TableHead>{dict.LABEL_PAYMENT_METHOD}</TableHead>
               <TableHead>{dict.LABEL_STATUS}</TableHead>
-              <TableHead className="text-right">{dict.LABEL_ACTIONS}</TableHead>
+              <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="p-0"><SectionLoader /></TableCell>
+                <TableCell colSpan={6} className="p-0"><SectionLoader /></TableCell>
               </TableRow>
             ) : filteredDeposits.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell>
-              </TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell></TableRow>
             ) : filteredDeposits.map(d => (
-              <TableRow key={d.id}>
+              <TableRow key={d.id} className="group">
                 <TableCell className="font-medium">{d.deposit_number}</TableCell>
                 <TableCell>
                   <div className="flex flex-col">
-                    <span>{d.company?.name || "-"}</span>
+                    <span className="font-medium">{d.company?.name || "-"}</span>
                     {d.company?.contact_person && <span className="text-[10px] text-muted-foreground">{d.company.contact_person}</span>}
                   </div>
                 </TableCell>
-                <TableCell>{format(new Date(d.deposit_date), "dd MMM yyyy")}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{format(new Date(d.deposit_date), "dd MMM yyyy")}</TableCell>
                 <TableCell className="font-semibold text-primary">
                   {new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US', { style: 'currency', currency: 'IDR' }).format(d.amount)}
                 </TableCell>
-                <TableCell>{d.payment_method}</TableCell>
                 <TableCell>
                   <div className={cn(
                     "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase w-fit",
                     d.status === "Accepted" ? "bg-green-100 text-green-700" :
-                    d.status === "Rejected" ? "bg-red-100 text-red-700" :
-                    "bg-amber-100 text-amber-700"
+                      d.status === "Rejected" ? "bg-red-100 text-red-700" :
+                        "bg-amber-100 text-amber-700"
                   )}>
                     {d.status}
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="size-8" onClick={() => handleOpenDialog(d)}>
+                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(d)}>
                       <Pencil className="size-4" />
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="size-8">
+                        <Button variant="secondary" size="icon" className="size-8">
                           <ChevronDown className="size-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => window.print()}>
-                          <Printer className="size-4 mr-2" /> {lang === 'id' ? 'Cetak' : 'Print'}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <CheckCircle2 className="size-4 mr-2" /> {dict.MSG_STATUS_UPDATED}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuPortal>
                             <DropdownMenuSubContent>
-                              <DropdownMenuItem onClick={() => updateStatus(d.id, 'Accepted')} className="text-green-600">
-                                Accepted
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(d.id, 'Rejected')} className="text-red-600">
-                                Rejected
-                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(d.id, 'Accepted')} className="text-green-600">Accepted</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(d.id, 'Rejected')} className="text-red-600">Rejected</DropdownMenuItem>
                             </DropdownMenuSubContent>
                           </DropdownMenuPortal>
                         </DropdownMenuSub>
