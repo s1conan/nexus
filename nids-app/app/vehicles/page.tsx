@@ -321,7 +321,7 @@ export default function VehiclesPage() {
         <div className="relative flex-1 w-full max-w-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
-            placeholder={dict.SEARCH_PLACEHOLDER}
+            placeholder={dict.PLACEHOLDER_SEARCH}
             className="pl-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

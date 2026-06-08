@@ -158,14 +158,14 @@ export default function PurchaseOrdersPage() {
       if (qRes.error) throw qRes.error
 
       setOrders(oRes.data || [])
-      
+
       // Map contact_person to the top level for LiveSearch
       const mappedCompanies = (cRes.data || []).map((c: any) => ({
         ...c,
         contact_person: c.details?.contact_person || ""
       }))
       setCompanies(mappedCompanies)
-      
+
       setProducts(pRes.data || [])
       setQuotations(qRes.data || [])
     } catch (err: any) {
@@ -514,7 +514,7 @@ export default function PurchaseOrdersPage() {
         <div className="relative flex-1 w-full max-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
-            placeholder={dict.SEARCH_PLACEHOLDER}
+            placeholder={dict.PLACEHOLDER_SEARCH}
             className="pl-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

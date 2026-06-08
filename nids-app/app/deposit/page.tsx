@@ -240,7 +240,7 @@ export default function DepositsPage() {
                       { key: "name", header: dict.LABEL_COMPANY_NAME, className: "w-3/5 font-medium", primary: true },
                       { key: "contact_person", header: dict.LABEL_CONTACT_PERSON, className: "w-2/5" }
                     ]}
-                    placeholder={dict.SEARCH_PLACEHOLDER}
+                    placeholder={dict.PLACEHOLDER_SEARCH}
                     emptyMessage={dict.NO_DATA}
                   />
                 </div>
@@ -290,7 +290,7 @@ export default function DepositsPage() {
         <div className="relative flex-1 w-full max-w-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
-            placeholder={dict.SEARCH_PLACEHOLDER}
+            placeholder={dict.PLACEHOLDER_SEARCH}
             className="pl-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

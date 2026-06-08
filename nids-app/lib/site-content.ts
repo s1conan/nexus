@@ -408,6 +408,15 @@ export const SITE_CONTENT = {
     LABEL_DISCOUNT_VALUE: "Nilai (%)",
     LABEL_DISCOUNT_TERMS: "Ketentuan Diskon",
 
+    LABEL_TERM_OF_PAYMENT: "Termin Pembayaran",
+    LABEL_TAX_VAT: "Aktifkan Pajak (PPN)",
+    LABEL_SUBTOTAL: "Subtotal",
+    LABEL_DELIVERY_TOTAL: "Total Pengiriman",
+    LABEL_GRAND_TOTAL: "Total Keseluruhan",
+    LABEL_OPTIONAL: "Opsional",
+    PLACEHOLDER_SELECT_QUOTATION: "Pilih penawaran...",
+    PLACEHOLDER_TOP: "Contoh: COD, Net 30",
+
     BUTTON_NEW_QUOTATION: "Penawaran Baru",
     BUTTON_EDIT_QUOTATION: "Ubah Penawaran",
     BUTTON_ADD_DISCOUNT: "Tambah Diskon",

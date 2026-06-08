@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "react-pdf": "^10.4.1",
     "resend": "^6.12.3"
   }
 }
