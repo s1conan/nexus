@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { useDictionary } from "@/components/dictionary-provider"
 import { createClient } from "@/lib/supabase"
@@ -14,9 +14,11 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { ShieldCheck, ShieldAlert, ShieldX, Save, X, Clock, Pencil, UserCog } from "lucide-react"
+import { ShieldCheck, ShieldAlert, ShieldX, Save, X, Clock, Pencil, UserCog, AlertCircle, Users, UserPlus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SummaryCard } from "@/components/summary-card"
+import { ConfirmationDialog } from "@/components/confirmation-dialog"
 import {
   Dialog,
   DialogContent,
@@ -31,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 
 import { SectionLoader } from "@/components/section-loader"
 import { ButtonLoader } from "@/components/button-loader"
@@ -42,17 +45,119 @@ import { cn } from "@/lib/utils"
 const supabase = createClient()
 
 export default function UsersPage() {
-  const { dict } = useDictionary()
+  const { dict, lang } = useDictionary()
   const { profile, loading: authLoading, hasPermission } = useAuth()
 
   const [users, setUsers] = useState<any[]>([])
   const [roles, setRoles] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    activeUsers: 0,
+    pendingUsers: 0
+  })
+
   const [isDialogOpen, setIsDialogOpen] = usePersistedState("users_dialog_open", false)
   const [editingUser, setEditingUser] = usePersistedState<any>("users_editing_data", null)
+  const [isCustomizing, setIsCustomizing] = useState(false)
+  const [isApproving, setIsApproving] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string, name: string, type: 'approve' | 'revoke' } | null>(null)
 
-  const modules = ['companies', 'products', 'deposit', 'quotation', 'purchase-order', 'delivery-order', 'invoice', 'payments', 'shipments', 'users', 'settings', 'component-test']
+  const moduleCategories = [
+    {
+      label: dict.MENU_GROUP_MASTER || "Master Data",
+      modules: ['companies', 'products', 'vehicles', 'funders']
+    },
+    {
+      label: dict.MENU_TRANSACTION || "Transactions",
+      modules: ['quotation', 'purchase-order', 'delivery-order', 'deposit', 'invoice', 'payments']
+    },
+    {
+      label: dict.MENU_GROUP_REPORTS || "Reports",
+      modules: ['inventory', 'shipments']
+    },
+    {
+      label: dict.MENU_GROUP_SYSTEM || "System",
+      modules: ['users', 'settings', 'component-test']
+    }
+  ]
   const actions = ['view', 'insert', 'edit', 'delete', 'print']
+
+  // Permission Checks
+  const canView = hasPermission("users", "view")
+  const canEdit = hasPermission("users", "edit")
+  const canDelete = hasPermission("users", "delete")
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const [
+        { count: totalCount },
+        { count: activeCount },
+        { count: pendingCount }
+      ] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).is('last_login', null).eq('is_active', false)
+      ])
+
+      setStats({
+        totalUsers: totalCount || 0,
+        activeUsers: activeCount || 0,
+        pendingUsers: pendingCount || 0
+      })
+    } catch (err) {
+      console.error("Fetch Users Stats Error:", err)
+    }
+  }, [])
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true)
+      fetchStats()
+      const [userRes, roleRes] = await Promise.all([
+        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+        supabase.from('role_permissions').select('role')
+      ])
+
+      if (userRes.data) {
+        const sortedUsers = [...userRes.data].sort((a, b) => {
+          const getStatusScore = (u: any) => {
+            if (!u.last_login && !u.is_active) return 0 // Pending
+            if (u.last_login && !u.is_active) return 1  // Deactivated
+            return 2 // Active
+          }
+          const scoreA = getStatusScore(a)
+          const scoreB = getStatusScore(b)
+          if (scoreA !== scoreB) return scoreA - scoreB
+          return (a.role || "").localeCompare(b.role || "")
+        })
+        setUsers(sortedUsers)
+
+        // Use functional update to avoid dependency on editingUser
+        setEditingUser((prev: any) => {
+          if (!prev) return prev
+          const updated = sortedUsers.find(u => u.id === prev.id)
+          return updated ? { ...updated } : prev
+        })
+      }
+
+      if (roleRes.data) {
+        setRoles(roleRes.data.map((r: any) => r.role))
+      }
+    } catch (err) {
+      console.error("Users: Fetch data unexpected error:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [setEditingUser])
+
+  useEffect(() => {
+    if (profile && canView) {
+      fetchData()
+    }
+  }, [profile, canView, fetchData])
 
   const getStatusInfo = (user: any) => {
     if (!user.last_login && !user.is_active) {
@@ -79,62 +184,37 @@ export default function UsersPage() {
     }
   }
 
-  const [isApproving, setIsApproving] = useState(false)
-
-  async function fetchData() {
-    try {
-      setLoading(true)
-      const [userRes, roleRes] = await Promise.all([
-        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-        supabase.from('role_permissions').select('role')
-      ])
-
-      if (userRes.data) {
-        const sortedUsers = [...userRes.data].sort((a, b) => {
-          const getStatusScore = (u: any) => {
-            if (!u.last_login && !u.is_active) return 0 // Pending
-            if (u.last_login && !u.is_active) return 1  // Deactivated
-            return 2 // Active
-          }
-          const scoreA = getStatusScore(a)
-          const scoreB = getStatusScore(b)
-          if (scoreA !== scoreB) return scoreA - scoreB
-          return (a.role || "").localeCompare(b.role || "")
-        })
-        setUsers(sortedUsers)
-        if (editingUser) {
-          const updated = sortedUsers.find(u => u.id === editingUser.id)
-          if (updated) setEditingUser(updated)
-        }
-      }
-
-      if (roleRes.data) {
-        setRoles(roleRes.data.map((r: any) => r.role))
-      }
-    } catch (err) {
-      console.error("Users: Fetch data unexpected error:", err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (profile && hasPermission('users', 'view')) {
-      fetchData()
-    }
-  }, [profile])
-
   const handleEdit = (user: any) => {
     setEditingUser({ ...user, role: user.role || undefined })
+    setIsCustomizing(!!user.permissions) // If permissions field is not null, customization is ON
     setIsDialogOpen(true)
   }
 
   const handlePermissionChange = (module: string, action: string, value: boolean) => {
+    if (!isCustomizing) return
     const updatedPermissions = { ...editingUser.permissions }
     if (!updatedPermissions[module]) {
       updatedPermissions[module] = { view: false, insert: false, edit: false, delete: false, print: false }
     }
-    updatedPermissions[module][action] = value
+
+    const modulePerms = { ...updatedPermissions[module] }
+
+    if (action === 'view' && !value) {
+      // Logic: Unchecking "view" unchecks all permissions for this module
+      actions.forEach(a => {
+        modulePerms[a] = false
+      })
+    } else {
+      // Update the target action
+      modulePerms[action] = value
+      
+      // Logic: Checking any other permission automatically checks "view"
+      if (value && action !== 'view') {
+        modulePerms.view = true
+      }
+    }
+
+    updatedPermissions[module] = modulePerms
     setEditingUser({ ...editingUser, permissions: updatedPermissions })
   }
 
@@ -149,15 +229,32 @@ export default function UsersPage() {
       setEditingUser((prev: any) => ({
         ...prev,
         role: role,
-        permissions: roleInfo?.permissions || prev.permissions
+        // If customizing, we keep current permissions, if not, it will be null on save anyway
+        // But for UI preview, we might want to show role perms if not customizing
+        permissions: isCustomizing ? prev.permissions : roleInfo?.permissions || prev.permissions
       }))
     } catch (err) {
       console.error("Unexpected error in handleRoleChange:", err)
     }
   }
 
+  const handleCustomizationToggle = (checked: boolean) => {
+    setIsCustomizing(checked)
+    // If turning ON, we keep whatever was there or initialize with current role permissions if possible
+    // If turning OFF, UI will disable but we don't nullify until SAVE
+  }
+
   const handleApproveToggle = async () => {
     if (!editingUser) return
+    setDeleteConfirm({
+      id: editingUser.id,
+      name: editingUser.full_name || editingUser.username,
+      type: editingUser.is_active ? 'revoke' : 'approve'
+    })
+  }
+
+  const confirmApproveToggle = async () => {
+    if (!deleteConfirm || !editingUser) return
     setIsApproving(true)
     try {
       const response = await fetch('/api/approve', {
@@ -168,11 +265,10 @@ export default function UsersPage() {
           email: editingUser.email,
           fullName: editingUser.full_name,
           phone: editingUser.phone,
-          action: editingUser.is_active ? 'revoke' : 'approve'
+          action: deleteConfirm.type
         })
       })
       const result = await response.json()
-      setIsApproving(false)
       if (result.error) {
         alert(result.error)
       } else {
@@ -181,39 +277,67 @@ export default function UsersPage() {
     } catch (err) {
       console.error("Approval Toggle Unexpected Error:", err)
       alert("An unexpected error occurred.")
+    } finally {
       setIsApproving(false)
+      setDeleteConfirm(null)
     }
   }
 
   const handleSave = async () => {
-    const trimmed = (editingUser.phone || "").trim()
-    let formattedPhone = ""
-    if (trimmed.startsWith('+')) {
-      formattedPhone = '+' + trimmed.replace(/\D/g, '')
-    } else {
-      let digits = trimmed.replace(/\D/g, '')
-      if (digits.startsWith('0')) {
-        formattedPhone = '+62' + digits.substring(1)
-      } else if (digits.startsWith('62')) {
-        formattedPhone = '+' + digits
-      } else if (digits.length > 0) {
-        formattedPhone = '+62' + digits
+    try {
+      setIsSaving(true)
+      const trimmed = (editingUser.phone || "").trim()
+      let formattedPhone = ""
+      if (trimmed.startsWith('+')) {
+        formattedPhone = '+' + trimmed.replace(/\D/g, '')
+      } else {
+        let digits = trimmed.replace(/\D/g, '')
+        if (digits.startsWith('0')) {
+          formattedPhone = '+62' + digits.substring(1)
+        } else if (digits.startsWith('62')) {
+          formattedPhone = '+' + digits
+        } else if (digits.length > 0) {
+          formattedPhone = '+62' + digits
+        }
       }
-    }
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
+      const updateData = {
         role: editingUser.role,
-        permissions: editingUser.permissions,
+        // If customizing is OFF, save null to fallback to role permissions
+        permissions: isCustomizing ? editingUser.permissions : null,
         full_name: editingUser.full_name,
         phone: formattedPhone
-      })
-      .eq('id', editingUser.id)
+      }
 
-    if (!error) {
+      console.log("Users: [DEBUG] Attempting update for ID:", editingUser.id)
+      console.log("Users: [DEBUG] Update payload:", updateData)
+
+      const { data, error, status, statusText } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', editingUser.id)
+        .select()
+
+      console.log("Users: [DEBUG] Supabase response status:", status, statusText)
+      
+      if (error) {
+        console.error("Users: [DEBUG] Update error:", error)
+        throw error
+      }
+
+      if (!data || data.length === 0) {
+        console.warn("Users: [DEBUG] Update succeeded but no rows were affected. Check RLS policies.")
+      } else {
+        console.log("Users: [DEBUG] Update successful, row affected:", data[0])
+      }
+      
       setIsDialogOpen(false)
-      fetchData()
+      await fetchData()
+    } catch (err: any) {
+      console.error("Users: Save error:", err)
+      alert(err.message || "Failed to save user.")
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -225,8 +349,16 @@ export default function UsersPage() {
     )
   }
 
-  if (!hasPermission('users', 'view')) {
-    return <div className="p-8 text-center">{dict.MSG_ACCESS_DENIED}</div>
+  if (!canView) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <div className="text-center space-y-2">
+          <AlertCircle className="size-8 text-destructive mx-auto" />
+          <h2 className="text-lg font-semibold">{dict.MSG_ACCESS_DENIED || "Access Denied"}</h2>
+          <p className="text-sm text-muted-foreground">{dict.MSG_NO_PERMISSION || "You do not have permission to view this page."}</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -237,6 +369,27 @@ export default function UsersPage() {
           <UserCog className="size-5 mr-2 inline-block text-primary" />
           {dict.TITLE_USER_MGMT}
         </h1>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 shrink-0">
+        <SummaryCard
+          label={dict.LABEL_TOTAL_USERS || "Total Users"}
+          value={stats.totalUsers}
+          icon={Users}
+          color="primary"
+        />
+        <SummaryCard
+          label={dict.LABEL_ACTIVE || "Active Users"}
+          value={stats.activeUsers}
+          icon={ShieldCheck}
+          color="green"
+        />
+        <SummaryCard
+          label={dict.LABEL_PENDING || "Pending Approval"}
+          value={stats.pendingUsers}
+          icon={ShieldAlert}
+          color="amber"
+        />
       </div>
 
       {/* Data Area */}
@@ -291,7 +444,7 @@ export default function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="table_action" size="sm" onClick={() => handleEdit(u)}>
+                      <Button variant="table_action" size="sm" onClick={() => handleEdit(u)} disabled={!canEdit}>
                         <Pencil className="size-4" />
                       </Button>
                     </TableCell>
@@ -306,8 +459,8 @@ export default function UsersPage() {
       {/* User Management Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
-          <DialogHeader className="p-6 border-b shrink-0">
-            <DialogTitle>{dict.TITLE_MANAGE_USER}</DialogTitle>
+          <DialogHeader className="p-6 border-b">
+            <DialogTitle><UserCog className="size-5 mr-2 inline-block" />{dict.TITLE_MANAGE_USER}</DialogTitle>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-6">
@@ -353,24 +506,57 @@ export default function UsersPage() {
                     {editingUser?.auth_id === profile?.auth_id ? "You cannot revoke your own account access." : dict.DESC_ACC_APPROVAL}
                   </p>
                 </div>
-                <Button variant={editingUser?.is_active ? "destructive" : "default"} onClick={handleApproveToggle} disabled={isApproving || editingUser?.auth_id === profile?.auth_id}>
-                  {isApproving && <ButtonLoader />}
-                  {editingUser?.is_active ? dict.BUTTON_REVOKE : dict.BUTTON_APPROVE}
+                <Button variant={editingUser?.is_active ? "destructive" : "default"} onClick={handleApproveToggle} disabled={isApproving || editingUser?.auth_id === profile?.auth_id || !canEdit}>
+                  {isApproving ? <ButtonLoader /> : (editingUser?.is_active ? dict.BUTTON_REVOKE : dict.BUTTON_APPROVE)}
                 </Button>
               </div>
 
               <div className="flex flex-col gap-4">
-                <h3 className="font-bold border-b pb-2">{dict.LABEL_GRANULAR_PERMS}</h3>
-                <div className="grid grid-cols-[150px_repeat(5,1fr)] gap-2 text-center text-xs font-bold text-muted-foreground mb-2">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h3 className="font-bold">{dict.LABEL_GRANULAR_PERMS}</h3>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="customize-toggle" className="text-xs font-semibold cursor-pointer">
+                      {lang === "id" ? "Sesuaikan Izin" : "Customize Permission"}
+                    </Label>
+                    <Switch 
+                      id="customize-toggle" 
+                      checked={isCustomizing} 
+                      onCheckedChange={handleCustomizationToggle}
+                      disabled={!canEdit}
+                    />
+                  </div>
+                </div>
+                
+                <div className={cn(
+                  "grid grid-cols-[150px_repeat(5,1fr)] gap-2 text-center text-xs font-bold text-muted-foreground mb-2 px-2",
+                  !isCustomizing && "opacity-50"
+                )}>
                   <div className="text-left">{dict.LABEL_MODULE}</div>
                   {actions.map(a => <div key={a} className="capitalize">{a}</div>)}
                 </div>
-                {modules.map(m => (
-                  <div key={m} className="grid grid-cols-[150px_repeat(5,1fr)] gap-2 items-center border-b border-muted py-2 hover:bg-muted/10">
-                    <div className="text-sm font-medium capitalize">{m}</div>
-                    {actions.map(a => (
-                      <div key={a} className="flex justify-center">
-                        <input type="checkbox" className="size-4 cursor-pointer accent-primary" checked={editingUser?.permissions?.[m]?.[a] || false} onChange={(e) => handlePermissionChange(m, a, e.target.checked)} />
+
+                {moduleCategories.map((cat, catIdx) => (
+                  <div key={catIdx} className="space-y-1">
+                    <div className="bg-muted/50 px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      {cat.label}
+                    </div>
+                    {cat.modules.map(m => (
+                      <div key={m} className={cn(
+                        "grid grid-cols-[150px_repeat(5,1fr)] gap-2 items-center border-b border-muted/30 py-2 px-2 hover:bg-muted/10 transition-opacity",
+                        !isCustomizing && "opacity-50 grayscale-[0.5]"
+                      )}>
+                        <div className="text-sm font-medium capitalize">{m.replace('-', ' ')}</div>
+                        {actions.map(a => (
+                          <div key={a} className="flex justify-center">
+                            <input 
+                              type="checkbox" 
+                              className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed" 
+                              checked={editingUser?.permissions?.[m]?.[a] || false} 
+                              onChange={(e) => handlePermissionChange(m, a, e.target.checked)} 
+                              disabled={!canEdit || !isCustomizing} 
+                            />
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>
@@ -379,16 +565,31 @@ export default function UsersPage() {
             </div>
           </div>
 
-          <DialogFooter className="p-6 border-t shrink-0">
+          <DialogFooter className="p-6 border-t">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
               <X className="mr-2 size-4" /> {dict.BUTTON_CANCEL}
             </Button>
-            <Button onClick={handleSave} className="flex-1">
-              <Save className="mr-2 size-4" /> {dict.BUTTON_SAVE}
+            <Button onClick={handleSave} className="flex-1" disabled={isSaving || !canEdit}>
+              {isSaving ? <ButtonLoader /> : <Save className="mr-2 size-4" />}
+              {dict.BUTTON_SAVE}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmationDialog
+        isOpen={deleteConfirm !== null}
+        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+        onConfirm={confirmApproveToggle}
+        title={deleteConfirm?.type === 'revoke' ? (dict.BUTTON_REVOKE || "Revoke Access") : (dict.BUTTON_APPROVE || "Approve Access")}
+        description={deleteConfirm?.type === 'revoke' 
+          ? `Are you sure you want to revoke access for this user?`
+          : `Are you sure you want to approve access for this user?`}
+        dataName={deleteConfirm?.name}
+        confirmText={deleteConfirm?.type === 'revoke' ? (dict.BUTTON_REVOKE || "Revoke") : (dict.BUTTON_APPROVE || "Approve")}
+        cancelText={dict.BUTTON_CANCEL || "Cancel"}
+        variant={deleteConfirm?.type === 'revoke' ? "destructive" : "default"}
+      />
     </div>
   )
 }

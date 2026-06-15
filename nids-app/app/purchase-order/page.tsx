@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
@@ -26,7 +26,8 @@ import {
   CheckCircle2,
   ShoppingCart,
   Calendar,
-  Truck
+  Truck,
+  AlertCircle
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -45,10 +46,11 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter
+  DialogFooter,
+  DialogTrigger
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
+import { cn, constructMultiWordSearch } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { RichTextEditor } from "@/components/rich-text-editor"
@@ -62,16 +64,17 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select"
+import { ButtonLoader } from "@/components/button-loader"
 
 export default function PurchaseOrdersPage() {
   const { dict, lang } = useDictionary()
-  const { hasPermission, profile } = useAuth()
+  const { hasPermission, profile, loading: authLoading } = useAuth()
   const supabase = createClient()
 
   const [orders, setOrders] = useState<any[]>([])
-  const [companies, setCompanies] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
+  const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
   const [isOpen, setIsOpen] = useState(false)
@@ -94,16 +97,17 @@ export default function PurchaseOrdersPage() {
     delivery_address: "",
     discount: 0,
     delivery_price_per_litre: 0,
-    is_tax_enabled: false,
-    tax_rate: 11,
     status: "Draft",
     note: "",
     is_note_enabled: true,
     terms_conditions: "",
-    is_terms_enabled: true
+    is_terms_enabled: true,
+    tax_details: [] as any[]
   }))
 
-  const [quotations, setQuotations] = useState<any[]>([])
+  const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
+  const [selectedProductInfo, setSelectedProductInfo] = useState<any>(null)
+  const [selectedQuotationInfo, setSelectedQuotationInfo] = useState<any>(null)
 
   // Calculation logic
   const totals = useMemo(() => {
@@ -111,31 +115,48 @@ export default function PurchaseOrdersPage() {
     const deliveryTotal = formData.quantity * formData.delivery_price_per_litre
     const afterDiscount = subtotal - formData.discount
     const taxableAmount = Math.max(0, afterDiscount + deliveryTotal)
-    const tax = formData.is_tax_enabled ? (taxableAmount * formData.tax_rate) / 100 : 0
-    const grandTotal = taxableAmount + tax
-    return { subtotal, deliveryTotal, tax, grandTotal }
+    
+    let taxTotal = 0;
+    const appliedTaxes = formData.tax_details.map(t => {
+      if (!t.enabled) return { ...t, amount: 0 };
+      const amt = (taxableAmount * Number(t.rate)) / 100;
+      taxTotal += amt;
+      return { ...t, amount: amt };
+    });
+
+    const grandTotal = taxableAmount + taxTotal
+    return { subtotal, deliveryTotal, taxTotal, grandTotal, appliedTaxes }
   }, [formData])
 
-  const selectedCompany = useMemo(() => {
-    return companies.find(c => c.id === formData.company_id)
-  }, [formData.company_id, companies])
-
   const companyAddresses = useMemo(() => {
-    if (!selectedCompany?.details?.addresses) return []
-    return selectedCompany.details.addresses as { label: string, address: string }[]
-  }, [selectedCompany])
+    if (!selectedCompanyInfo?.details?.addresses) return []
+    return selectedCompanyInfo.details.addresses as { label: string, address: string }[]
+  }, [selectedCompanyInfo])
 
-  const handleQuotationSelect = (qId: string) => {
-    const q = quotations.find(item => item.id === qId)
-    if (q) {
+  const handleQuotationSelect = (qId: string, quote?: any) => {
+    if (quote) {
+      setSelectedQuotationInfo(quote)
+      
+      // Inherit taxes from quotation if available
+      const qTaxes = Array.isArray(quote.tax_details) ? quote.tax_details : []
+      const mergedTaxes = globalTaxes.map(gt => {
+        const existing = qTaxes.find((st: any) => st.name === gt.name)
+        if (existing) return { ...gt, rate: existing.rate, enabled: existing.enabled }
+        return { ...gt, rate: gt.value, enabled: false }
+      })
+
       setFormData(prev => ({
         ...prev,
         quotation_id: qId,
-        company_id: q.company_id,
-        product_id: q.product_id,
-        unit_price: q.base_price || 0,
-        delivery_price_per_litre: q.delivery_price || 0
+        company_id: quote.company_id,
+        product_id: quote.product_id,
+        unit_price: quote.base_price || 0,
+        delivery_price_per_litre: quote.delivery_price || 0,
+        tax_details: mergedTaxes
       }))
+      // Also update dependent info
+      setSelectedCompanyInfo(quote.company)
+      setSelectedProductInfo(quote.product)
     } else {
       setFormData(prev => ({ ...prev, quotation_id: qId }))
     }
@@ -145,29 +166,19 @@ export default function PurchaseOrdersPage() {
   async function fetchData() {
     setLoading(true)
     try {
-      const [oRes, cRes, pRes, qRes] = await Promise.all([
-        supabase.from("purchase_orders").select("*, company:companies(name, details), product:products(sku, name), quotation:quotations(quotation_number)").order("created_at", { ascending: false }),
-        supabase.from("companies").select("id, name, type, details").or('type.cs.{Supplier},type.cs.{Customer}'),
-        supabase.from("products").select("id, sku, name"),
-        supabase.from("quotations").select("*, company:companies(name), product:products(sku, name)")
+      const [oRes, qRes, tRes] = await Promise.all([
+        supabase.from("purchase_orders").select("*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details)").order("created_at", { ascending: false }),
+        supabase.from("quotations").select("id, quotation_number, company_id, product_id, base_price, delivery_price, tax_details, company:companies(id, name, details), product:products(id, sku, name)").eq("status", "Accepted"),
+        supabase.from("app_settings").select("*").eq("category", "tax")
       ])
 
       if (oRes.error) throw oRes.error
-      if (cRes.error) throw cRes.error
-      if (pRes.error) throw pRes.error
       if (qRes.error) throw qRes.error
+      if (tRes.error) throw tRes.error
 
       setOrders(oRes.data || [])
-
-      // Map contact_person to the top level for LiveSearch
-      const mappedCompanies = (cRes.data || []).map((c: any) => ({
-        ...c,
-        contact_person: c.details?.contact_person || ""
-      }))
-      setCompanies(mappedCompanies)
-
-      setProducts(pRes.data || [])
       setQuotations(qRes.data || [])
+      setGlobalTaxes(tRes.data || [])
     } catch (err: any) {
       notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
     } finally {
@@ -180,13 +191,51 @@ export default function PurchaseOrdersPage() {
   }, [])
 
   // Permission Checks
-  const canEditNum = hasPermission("purchase-order", "edit") || profile?.role === "admin" || profile?.role === "boss"
-  const canDelete = hasPermission("purchase-order", "delete") || profile?.role === "admin" || profile?.role === "boss"
+  const canView = hasPermission("purchase-order", "view")
+  const canInsert = hasPermission("purchase-order", "insert")
+  const canEdit = hasPermission("purchase-order", "edit")
+  const canDelete = hasPermission("purchase-order", "delete")
+  const canPrint = hasPermission("purchase-order", "print")
+
+  const handlePrint = (o: any) => {
+    notify.info("Print function is not implemented yet")
+  }
+
+  if (!canView && !loading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <div className="text-center space-y-2">
+          <AlertCircle className="size-8 text-destructive mx-auto" />
+          <h2 className="text-lg font-semibold">{dict.MSG_ACCESS_DENIED || "Access Denied"}</h2>
+          <p className="text-sm text-muted-foreground">{dict.MSG_NO_PERMISSION || "You do not have permission to view this page."}</p>
+        </div>
+      </div>
+    )
+  }
 
   // Open Dialog
   const handleOpenDialog = (item: any = null) => {
     if (item) {
       setEditingItem(item)
+      setSelectedCompanyInfo(item.company)
+      setSelectedProductInfo(item.product)
+      setSelectedQuotationInfo(item.quotation)
+
+      // Merge saved taxes with current global taxes
+      const savedTaxes = Array.isArray(item.tax_details) ? item.tax_details : []
+      const mergedTaxes = globalTaxes.map(gt => {
+        const existing = savedTaxes.find((st: any) => st.name === gt.name)
+        if (existing) return { ...gt, rate: existing.rate, enabled: existing.enabled }
+        return { ...gt, rate: gt.value, enabled: false }
+      })
+
+      // Preserve custom taxes no longer in global settings
+      savedTaxes.forEach((st: any) => {
+        if (!mergedTaxes.find((mt: any) => mt.name === st.name)) {
+          mergedTaxes.push({ ...st })
+        }
+      })
+
       setFormData({
         po_number: item.po_number,
         company_id: item.company_id || "",
@@ -200,19 +249,22 @@ export default function PurchaseOrdersPage() {
         delivery_address: item.delivery_address || "",
         discount: item.discount || 0,
         delivery_price_per_litre: item.delivery_price_per_litre || 0,
-        is_tax_enabled: item.is_tax_enabled ?? false,
-        tax_rate: item.tax_rate || 11,
         status: item.status,
         note: item.note || "",
         is_note_enabled: item.is_note_enabled ?? true,
         terms_conditions: item.terms_conditions || "",
-        is_terms_enabled: item.is_terms_enabled ?? true
+        is_terms_enabled: item.is_terms_enabled ?? true,
+        tax_details: mergedTaxes
       })
     } else {
+      if (!canInsert) return
       setEditingItem(null)
-      const nextNum = `PO/${new Date().getFullYear()}/${(orders.length + 1).toString().padStart(3, "0")}`
+      setSelectedCompanyInfo(null)
+      setSelectedProductInfo(null)
+      setSelectedQuotationInfo(null)
+
       setFormData({
-        po_number: nextNum,
+        po_number: "", // Will be auto-generated on save if empty
         company_id: "",
         quotation_id: "",
         product_id: "",
@@ -224,13 +276,12 @@ export default function PurchaseOrdersPage() {
         delivery_address: "",
         discount: 0,
         delivery_price_per_litre: 0,
-        is_tax_enabled: false,
-        tax_rate: 11,
         status: "Draft",
         note: "",
         is_note_enabled: true,
         terms_conditions: "",
-        is_terms_enabled: true
+        is_terms_enabled: true,
+        tax_details: globalTaxes.map(gt => ({ ...gt, rate: gt.value, enabled: false }))
       })
     }
     setIsOpen(true)
@@ -238,6 +289,7 @@ export default function PurchaseOrdersPage() {
 
   // Actions
   const handleSave = async () => {
+    setIsSaving(true)
     try {
       const payload = { ...formData }
       if (editingItem) {
@@ -245,6 +297,13 @@ export default function PurchaseOrdersPage() {
         if (error) throw error
         notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_PO_SAVED)
       } else {
+        // Generate document number if empty
+        if (!payload.po_number) {
+          const { data, error: rpcError } = await supabase.rpc('generate_document_number', { p_doc_type: 'purchase-order' })
+          if (rpcError) throw rpcError
+          payload.po_number = data
+        }
+
         const { error } = await supabase.from("purchase_orders").insert([payload])
         if (error) throw error
         notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_PO_SAVED)
@@ -253,6 +312,8 @@ export default function PurchaseOrdersPage() {
       fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -281,11 +342,20 @@ export default function PurchaseOrdersPage() {
 
   // Search filter
   const filteredOrders = useMemo(() => {
-    return orders.filter(o =>
-      o.po_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.company?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (o.product?.sku || "").toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
+    if (words.length === 0) return orders
+
+    return orders.filter(o => {
+      const searchFields = [
+        o.po_number,
+        o.company?.name || "",
+        o.product?.sku || ""
+      ]
+      return searchFields.some(field => {
+        const val = String(field).toLowerCase()
+        return words.every(word => val.includes(word))
+      })
+    })
   }, [orders, searchQuery])
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -303,10 +373,12 @@ export default function PurchaseOrdersPage() {
         </h1>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <Button size="sm" onClick={() => handleOpenDialog()}>
-            <Plus data-icon="inline-start" />
-            {dict.BUTTON_NEW_PO}
-          </Button>
+          <DialogTrigger asChild>
+            <Button size="sm" onClick={() => handleOpenDialog()} disabled={!canInsert}>
+              <Plus data-icon="inline-start" />
+              {dict.BUTTON_NEW_PO}
+            </Button>
+          </DialogTrigger>
           <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0">
             <DialogHeader className="p-5 border-b sticky top-0 bg-background z-10">
               <DialogTitle>
@@ -319,21 +391,30 @@ export default function PurchaseOrdersPage() {
                 <div className="space-y-4">
                   <div className="grid gap-2">
                     <Label htmlFor="ponum">{dict.LABEL_PO_NUMBER}</Label>
-                    <Input id="ponum" value={formData.po_number} onChange={e => setFormData({ ...formData, po_number: e.target.value })} disabled={!canEditNum} />
+                    <Input id="ponum" value={formData.po_number} onChange={e => setFormData({ ...formData, po_number: e.target.value })} disabled={editingItem && !hasPermission("purchase-order", "edit")} placeholder={dict.LABEL_AUTO_GENERATED} />
                   </div>
 
                   <div className="grid gap-2">
                     <Label>{dict.LABEL_QUOTATION_NUMBER} ({dict.LABEL_OPTIONAL})</Label>
                     <LiveSearch
-                      data={quotations}
+                      data={selectedQuotationInfo ? [selectedQuotationInfo] : []}
+                      fetchData={async (query) => {
+                        let q = supabase.from("quotations").select("*, company:companies(id, name, details), product:products(id, sku, name)").limit(8)
+                        if (query) {
+                          const searchStr = constructMultiWordSearch(query, ['quotation_number'])
+                          if (searchStr) q = q.or(searchStr)
+                        }
+                        const { data } = await q
+                        return data || []
+                      }}
                       value={formData.quotation_id}
                       onSelect={handleQuotationSelect}
                       keyField="id"
                       displayField="quotation_number"
-                      searchColumns={["quotation_number", "company.name"]}
+                      defaultDisplay={selectedQuotationInfo?.quotation_number || ""}
+                      searchColumns={["quotation_number"]}
                       visualColumns={[
-                        { key: "quotation_number", header: dict.LABEL_QUOTATION_NUMBER, className: "w-2/5 font-medium", primary: true },
-                        { key: "company.name", header: dict.LABEL_COMPANY_NAME, className: "w-3/5" }
+                        { key: "quotation_number", header: dict.LABEL_QUOTATION_NUMBER, className: "w-2/5 font-medium", primary: true }
                       ]}
                       placeholder={dict.PLACEHOLDER_SELECT_QUOTATION}
                       emptyMessage={dict.NO_DATA}
@@ -343,11 +424,27 @@ export default function PurchaseOrdersPage() {
                   <div className="grid gap-2">
                     <Label>{dict.LABEL_COMPANY_NAME}</Label>
                     <LiveSearch
-                      data={companies}
+                      data={selectedCompanyInfo ? [selectedCompanyInfo] : []}
+                      fetchData={async (query) => {
+                        let q = supabase.from("companies").select("id, name, type, details").or('type.cs.{Supplier},type.cs.{Customer}').limit(8)
+                        if (query) {
+                          const searchStr = constructMultiWordSearch(query, ['name', 'details->>contact_person'])
+                          if (searchStr) q = q.or(searchStr)
+                        }
+                        const { data } = await q
+                        return (data || []).map((c: any) => ({
+                          ...c,
+                          contact_person: c.details?.contact_person || ""
+                        }))
+                      }}
                       value={formData.company_id}
-                      onSelect={val => setFormData({ ...formData, company_id: val })}
+                      onSelect={(val, item) => {
+                        setFormData({ ...formData, company_id: val })
+                        setSelectedCompanyInfo(item)
+                      }}
                       keyField="id"
                       displayField="name"
+                      defaultDisplay={selectedCompanyInfo?.name || ""}
                       searchColumns={["name", "contact_person"]}
                       visualColumns={[
                         { key: "name", header: dict.LABEL_COMPANY_NAME, className: "w-3/5 font-medium", primary: true },
@@ -361,11 +458,24 @@ export default function PurchaseOrdersPage() {
                   <div className="grid gap-2">
                     <Label>{dict.LABEL_SKU}</Label>
                     <LiveSearch
-                      data={products}
+                      data={selectedProductInfo ? [selectedProductInfo] : []}
+                      fetchData={async (query) => {
+                        let q = supabase.from("products").select("id, sku, name").limit(8)
+                        if (query) {
+                          const searchStr = constructMultiWordSearch(query, ['sku', 'name'])
+                          if (searchStr) q = q.or(searchStr)
+                        }
+                        const { data } = await q
+                        return data || []
+                      }}
                       value={formData.product_id}
-                      onSelect={val => setFormData({ ...formData, product_id: val })}
+                      onSelect={(val, item) => {
+                        setFormData({ ...formData, product_id: val })
+                        setSelectedProductInfo(item)
+                      }}
                       keyField="id"
                       displayField={p => `${p.sku} - ${p.name}`}
+                      defaultDisplay={selectedProductInfo ? (selectedProductInfo.sku && selectedProductInfo.name ? `${selectedProductInfo.sku} - ${selectedProductInfo.name}` : selectedProductInfo.name || selectedProductInfo.sku || "") : ""}
                       searchColumns={["sku", "name"]}
                       visualColumns={[
                         { key: "sku", header: dict.LABEL_SKU, className: "w-1/3 font-mono" },
@@ -432,49 +542,80 @@ export default function PurchaseOrdersPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="grid gap-2">
                         <Label htmlFor="discount">{dict.LABEL_DISCOUNTS}</Label>
-                        <Input id="discount" type="number" value={formData.discount} onChange={e => setFormData({ ...formData, discount: Number(e.target.value) })} />
+                        <NumberInput id="discount" value={formData.discount} onChange={val => setFormData({ ...formData, discount: val })} leftBadge="Rp" />
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="deliv_price">{dict.LABEL_TRANSPORT_COST}</Label>
-                        <Input id="deliv_price" type="number" value={formData.delivery_price_per_litre} onChange={e => setFormData({ ...formData, delivery_price_per_litre: Number(e.target.value) })} />
+                        <NumberInput id="deliv_price" value={formData.delivery_price_per_litre} onChange={val => setFormData({ ...formData, delivery_price_per_litre: val })} leftBadge="Rp" rightBadge="/ L" />
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between p-2 border rounded bg-background">
-                      <div className="flex items-center gap-4">
-                        <Label htmlFor="tax-switch" className="cursor-pointer">{dict.LABEL_TAX_VAT}</Label>
-                        <Switch id="tax-switch" checked={formData.is_tax_enabled} onCheckedChange={val => setFormData({ ...formData, is_tax_enabled: val })} />
+                    <div className="space-y-3 pt-2 border-t">
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 block">{dict.LABEL_TAXES || "Taxes"}</Label>
+                      <div className="space-y-2">
+                        {formData.tax_details.map((tax, idx) => {
+                          const calculatedAmount = totals.appliedTaxes.find(t => t.name === tax.name)?.amount || 0;
+                          return (
+                            <div key={idx} className="flex items-center p-2 border rounded bg-background h-12 gap-4">
+                              <div className="w-20 shrink-0 font-medium">
+                                <Label htmlFor={`tax-${idx}`} className="cursor-pointer text-xs">{tax.name}</Label>
+                              </div>
+
+                              <div className="shrink-0 flex items-center justify-center w-10">
+                                <Switch id={`tax-${idx}`} checked={tax.enabled} onCheckedChange={(val) => {
+                                  const newTaxes = [...formData.tax_details];
+                                  newTaxes[idx].enabled = val;
+                                  setFormData({ ...formData, tax_details: newTaxes })
+                                }} />
+                              </div>
+
+                              <div className="w-24 shrink-0">
+                                <div style={{ opacity: tax.enabled ? 1 : 0.3 }} className="transition-opacity w-full">
+                                  <NumberInput
+                                    className="text-right font-mono text-xs"
+                                    containerClassName="h-8 bg-muted/50"
+                                    disabled
+                                    value={tax.rate}
+                                    onChange={() => { }}
+                                    rightBadge="%"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex-1 flex justify-end">
+                                <span className={cn(
+                                  "font-mono font-medium text-xs transition-opacity",
+                                  tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground"
+                                )}>
+                                  Rp {calculatedAmount.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
-                      {formData.is_tax_enabled && (
-                        <div className="flex items-center gap-2">
-                          <Input className="w-16 h-8 text-right" type="number" value={formData.tax_rate} onChange={e => setFormData({ ...formData, tax_rate: Number(e.target.value) })} />
-                          <span className="text-sm font-bold">%</span>
-                        </div>
-                      )}
                     </div>
 
                     <div className="space-y-2 border-t pt-4">
-                      <div className="flex justify-between text-xs text-muted-foreground">
+                      <div className="flex justify-between text-xs text-muted-foreground font-mono">
                         <span>{dict.LABEL_SUBTOTAL}:</span>
-                        <span>{new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US', { style: 'currency', currency: 'IDR' }).format(totals.subtotal)}</span>
+                        <span>Rp {totals.subtotal.toLocaleString()}</span>
                       </div>
-                      <div className="flex justify-between text-xs text-muted-foreground">
+                      <div className="flex justify-between text-xs text-muted-foreground font-mono">
                         <span>{dict.LABEL_DISCOUNTS}:</span>
-                        <span className="text-destructive">-{new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US', { style: 'currency', currency: 'IDR' }).format(formData.discount)}</span>
+                        <span className="text-destructive">-Rp {formData.discount.toLocaleString()}</span>
                       </div>
-                      <div className="flex justify-between text-xs text-muted-foreground">
+                      <div className="flex justify-between text-xs text-muted-foreground font-mono">
                         <span>{dict.LABEL_DELIVERY_TOTAL}:</span>
-                        <span>{new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US', { style: 'currency', currency: 'IDR' }).format(totals.deliveryTotal)}</span>
+                        <span>Rp {totals.deliveryTotal.toLocaleString()}</span>
                       </div>
-                      {formData.is_tax_enabled && (
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>{dict.LABEL_TAX_VAT.replace(/:$/, '')} ({formData.tax_rate}%):</span>
-                          <span>{new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US', { style: 'currency', currency: 'IDR' }).format(totals.tax)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-lg font-bold border-t pt-2">
+                      <div className="flex justify-between text-xs text-muted-foreground font-mono">
+                        <span>{dict.LABEL_TAXES || "Taxes"}:</span>
+                        <span>+Rp {totals.taxTotal.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-lg font-bold border-t pt-2 font-mono">
                         <span>{dict.LABEL_GRAND_TOTAL}:</span>
-                        <span className="text-primary">{new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US', { style: 'currency', currency: 'IDR' }).format(totals.grandTotal)}</span>
+                        <span className="text-primary">Rp {totals.grandTotal.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -500,8 +641,8 @@ export default function PurchaseOrdersPage() {
               </div>
               <DialogFooter className="mt-2 sticky bottom-0 bg-background z-10 border-t pt-4 gap-2 *:w-full *:flex-1 h-22 sm:h-auto">
                 <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>{dict.BUTTON_CANCEL}</Button>
-                <Button type="submit">
-                  <Save data-icon="inline-start" /> {dict.BUTTON_SAVE_PO}
+                <Button onClick={() => handleSave()} disabled={isSaving || (editingItem ? !canEdit : !canInsert)}>
+                  {isSaving ? <ButtonLoader /> : <Save data-icon="inline-start" />} {dict.BUTTON_SAVE_PO}
                 </Button>
               </DialogFooter>
             </form>
@@ -561,8 +702,11 @@ export default function PurchaseOrdersPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(o)}>
+                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(o)} disabled={!canEdit}>
                       <Pencil className="size-4" />
+                    </Button>
+                    <Button variant="table_action" size="sm" onClick={() => handlePrint(o)} disabled={!canPrint}>
+                      <Printer className="size-4" />
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -577,15 +721,15 @@ export default function PurchaseOrdersPage() {
                           </DropdownMenuSubTrigger>
                           <DropdownMenuPortal>
                             <DropdownMenuSubContent>
-                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Approved')} className="text-green-600">Approved</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Rejected')} className="text-red-700">Rejected</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Approved')} className="text-green-600" disabled={!canEdit}>Approved</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Rejected')} className="text-red-700" disabled={!canEdit}>Rejected</DropdownMenuItem>
                             </DropdownMenuSubContent>
                           </DropdownMenuPortal>
                         </DropdownMenuSub>
                         {canDelete && (
                           <>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(o.id)}>
+                            <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive" onClick={() => handleDelete(o.id)}>
                               <Trash2 className="size-4 mr-2" /> {dict.BUTTON_DELETE}
                             </DropdownMenuItem>
                           </>

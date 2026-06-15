@@ -3,13 +3,13 @@ import { sendEmail } from '@/lib/email'
 
 export async function POST(request: Request) {
   try {
-    const { to, subject, html, from } = await request.json()
+    const { to, cc, subject, html, from, attachments } = await request.json()
 
     if (!to || !subject || !html) {
       return NextResponse.json({ error: 'Missing required fields: to, subject, or html' }, { status: 400 })
     }
 
-    const result = await sendEmail({ to, subject, html, from })
+    const result = await sendEmail({ to, cc, subject, html, from, attachments })
     return NextResponse.json(result)
 
   } catch (err: any) {

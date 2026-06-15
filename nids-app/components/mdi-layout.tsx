@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useRef, useEffect, useState } from "react"
+import React, { useRef, useEffect, useState, useCallback } from "react"
 import { useMdi } from "./mdi-provider"
 import { useDictionary } from "./dictionary-provider"
 import { usePathname } from "next/navigation"
@@ -14,6 +14,8 @@ import {
   LogOut,
   X,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Menu as MenuIcon,
   Languages,
   Sun,
@@ -28,7 +30,8 @@ import {
   Receipt,
   Wallet,
   ArrowDownToLine,
-  ClipboardList
+  ClipboardList,
+  Warehouse
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -73,14 +76,23 @@ import DashboardPage from "@/app/dashboard/page"
 import CompaniesPage from "@/app/companies/page"
 import ProductsPage from "@/app/products/page"
 import UsersPage from "@/app/users/page"
-import ShipmentsPage from "@/app/shipments-placeholder"
+import ShipmentsPage from "@/app/reports/delivery/page"
 import ComponentTestPage from "@/app/component-test/page"
 import SettingsPage from "@/app/settings/page"
 import QuotationsPage from "@/app/quotations/page"
 import DepositsPage from "@/app/deposit/page"
 import PurchaseOrdersPage from "@/app/purchase-order/page"
 import DeliveryOrdersPage from "@/app/delivery-order/page"
+import InvoicePage from "@/app/invoice/page"
+import PaymentsPage from "@/app/payments/page"
 import VehiclesPage from "@/app/vehicles/page"
+import FundersPage from "@/app/funders/page"
+import InventoryReportPage from "@/app/reports/inventory/page"
+import DepositReportPage from "@/app/reports/deposit/page"
+import QuotationReportPage from "@/app/reports/quotation/page"
+import PurchaseOrderReportPage from "@/app/reports/purchase-order/page"
+import InvoiceReportPage from "@/app/reports/invoice/page"
+import PaymentsReportPage from "@/app/reports/payments/page"
 
 function TransactionPlaceholder({ title, icon: Icon }: { title: string; icon: any }) {
   const { dict } = useDictionary()
@@ -102,6 +114,43 @@ export function MdiLayout() {
   const tabStripRef = useRef<HTMLDivElement>(null)
   const lastToastedUserIdRef = useRef<string | null>(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+  const [isOverflowing, setIsOverflowing] = useState(false)
+
+  // Check if scrolling is possible
+  const checkScroll = useCallback(() => {
+    if (tabStripRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = tabStripRef.current
+      setCanScrollLeft(scrollLeft > 0)
+      setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 1)
+      setIsOverflowing(scrollWidth > clientWidth)
+    }
+  }, [])
+
+  useEffect(() => {
+    checkScroll()
+    window.addEventListener('resize', checkScroll)
+    return () => window.removeEventListener('resize', checkScroll)
+  }, [tabs, checkScroll])
+
+  const scrollTabs = (direction: 'left' | 'right') => {
+    if (tabStripRef.current) {
+      const scrollAmount = 200
+      tabStripRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      })
+      // Update states after short delay to allow for smooth scroll
+      setTimeout(checkScroll, 300)
+    }
+  }
+
+  // Dynamic font size based on overflow status
+  const getTabFontSize = () => {
+    if (isOverflowing) return "text-[10px] md:text-xs"
+    return "text-xs md:text-sm"
+  }
 
   // Change Password State
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
@@ -140,14 +189,21 @@ export function MdiLayout() {
     dashboard: { title: dict.MENU_DASHBOARD, content: <DashboardPage />, closable: false },
     companies: { title: dict.MENU_COMPANIES, content: <CompaniesPage /> },
     products: { title: dict.MENU_PRODUCTS, content: <ProductsPage /> },
+    funders: { title: dict.MENU_FUNDERS, content: <FundersPage /> },
     vehicles: { title: dict.MENU_VEHICLES, content: <VehiclesPage /> },
     deposit: { title: dict.MENU_DEPOSIT, content: <DepositsPage /> },
     quotation: { title: dict.MENU_QUOTATION, content: <QuotationsPage /> },
     "purchase-order": { title: dict.MENU_PURCHASE_ORDER, content: <PurchaseOrdersPage /> },
     "delivery-order": { title: dict.MENU_DELIVERY_ORDER, content: <DeliveryOrdersPage /> },
-    invoice: { title: dict.MENU_INVOICE, content: <TransactionPlaceholder title={dict.MENU_INVOICE} icon={Receipt} /> },
-    payments: { title: dict.MENU_PAYMENTS, content: <TransactionPlaceholder title={dict.MENU_PAYMENTS} icon={Wallet} /> },
+    invoice: { title: dict.MENU_INVOICE, content: <InvoicePage /> },
+    payments: { title: dict.MENU_PAYMENTS, content: <PaymentsPage /> },
+    inventory: { title: dict.MENU_REPORTS_INVENTORY || "Inventory Report", content: <InventoryReportPage /> },
     shipments: { title: dict.MENU_SHIPMENTS, content: <ShipmentsPage /> },
+    "report-deposit": { title: dict.MENU_REPORTS_DEPOSIT, content: <DepositReportPage /> },
+    "report-quotation": { title: dict.MENU_REPORTS_QUOTATION, content: <QuotationReportPage /> },
+    "report-po": { title: dict.MENU_REPORTS_PO, content: <PurchaseOrderReportPage /> },
+    "report-invoice": { title: dict.MENU_REPORTS_INVOICE, content: <InvoiceReportPage /> },
+    "report-payments": { title: dict.MENU_REPORTS_PAYMENTS, content: <PaymentsReportPage /> },
     users: { title: dict.MENU_USERS, content: <UsersPage /> },
     settings: { title: dict.MENU_SETTINGS, content: <SettingsPage /> },
     "component-test": { title: dict.MENU_SHOWCASE, content: <ComponentTestPage /> },
@@ -157,14 +213,21 @@ export function MdiLayout() {
   const handleOpenDashboard = () => openTab("dashboard", dict.MENU_DASHBOARD, <DashboardPage />, false)
   const handleOpenCompanies = () => openTab("companies", dict.MENU_COMPANIES, <CompaniesPage />)
   const handleOpenProducts = () => openTab("products", dict.MENU_PRODUCTS, <ProductsPage />)
+  const handleOpenFunders = () => openTab("funders", dict.MENU_FUNDERS, <FundersPage />)
   const handleOpenVehicles = () => openTab("vehicles", dict.MENU_VEHICLES, <VehiclesPage />)
   const handleOpenDeposit = () => openTab("deposit", dict.MENU_DEPOSIT, <DepositsPage />)
   const handleOpenQuotation = () => openTab("quotation", dict.MENU_QUOTATION, <QuotationsPage />)
   const handleOpenPurchaseOrder = () => openTab("purchase-order", dict.MENU_PURCHASE_ORDER, <PurchaseOrdersPage />)
   const handleOpenDeliveryOrder = () => openTab("delivery-order", dict.MENU_DELIVERY_ORDER, <DeliveryOrdersPage />)
-  const handleOpenInvoice = () => openTab("invoice", dict.MENU_INVOICE, <TransactionPlaceholder title={dict.MENU_INVOICE} icon={Receipt} />)
-  const handleOpenPayments = () => openTab("payments", dict.MENU_PAYMENTS, <TransactionPlaceholder title={dict.MENU_PAYMENTS} icon={Wallet} />)
+  const handleOpenInvoice = () => openTab("invoice", dict.MENU_INVOICE, <InvoicePage />)
+  const handleOpenPayments = () => openTab("payments", dict.MENU_PAYMENTS, <PaymentsPage />)
+  const handleOpenInventory = () => openTab("inventory", dict.MENU_REPORTS_INVENTORY || "Inventory Report", <InventoryReportPage />)
   const handleOpenShipments = () => openTab("shipments", dict.MENU_SHIPMENTS, <ShipmentsPage />)
+  const handleOpenReportDeposit = () => openTab("report-deposit", dict.MENU_REPORTS_DEPOSIT, <DepositReportPage />)
+  const handleOpenReportQuotation = () => openTab("report-quotation", dict.MENU_REPORTS_QUOTATION, <QuotationReportPage />)
+  const handleOpenReportPO = () => openTab("report-po", dict.MENU_REPORTS_PO, <PurchaseOrderReportPage />)
+  const handleOpenReportInvoice = () => openTab("report-invoice", dict.MENU_REPORTS_INVOICE, <InvoiceReportPage />)
+  const handleOpenReportPayments = () => openTab("report-payments", dict.MENU_REPORTS_PAYMENTS, <PaymentsReportPage />)
   const handleOpenUsers = () => openTab("users", dict.MENU_USERS, <UsersPage />)
   const handleOpenSettings = () => openTab("settings", dict.MENU_SETTINGS, <SettingsPage />)
   const handleOpenComponentTest = () => openTab("component-test", dict.MENU_SHOWCASE, <ComponentTestPage />)
@@ -238,6 +301,7 @@ export function MdiLayout() {
     if (tabs.length === 0) {
       if (pathname === "/companies") handleOpenCompanies()
       else if (pathname === "/products") handleOpenProducts()
+      else if (pathname === "/funders") handleOpenFunders()
       else if (pathname === "/deposit") handleOpenDeposit()
       else if (pathname === "/quotation") handleOpenQuotation()
       else if (pathname === "/purchase-order") handleOpenPurchaseOrder()
@@ -246,6 +310,7 @@ export function MdiLayout() {
       else if (pathname === "/payments") handleOpenPayments()
       else if (pathname === "/users") handleOpenUsers()
       else if (pathname === "/shipments") handleOpenShipments()
+      else if (pathname === "/reports/inventory") handleOpenInventory()
       else if (pathname === "/settings") handleOpenSettings()
       else if (pathname === "/component-test") handleOpenComponentTest()
       else handleOpenDashboard()
@@ -266,9 +331,9 @@ export function MdiLayout() {
   }, [activeTabId])
 
   const isDashboardActive = activeTabId === 'dashboard'
-  const isMasterActive = activeTabId === 'companies' || activeTabId === 'products'
+  const isMasterActive = activeTabId === 'companies' || activeTabId === 'products' || activeTabId === 'funders' || activeTabId === 'vehicles'
   const isTransactionActive = ['deposit', 'quotation', 'purchase-order', 'delivery-order', 'invoice', 'payments'].includes(activeTabId || '')
-  const isReportsActive = activeTabId === 'shipments'
+  const isReportsActive = activeTabId === 'shipments' || activeTabId === 'inventory'
   const isSystemActive = activeTabId === 'users' || activeTabId === 'component-test' || activeTabId === 'settings'
 
   const renderMenuItems = () => (
@@ -288,7 +353,7 @@ export function MdiLayout() {
         <span>{dict.MENU_DASHBOARD}</span>
       </Button>
 
-      {(hasPermission('companies', 'view') || hasPermission('products', 'view')) && (
+      {(hasPermission('companies', 'view') || hasPermission('products', 'view') || hasPermission('funders', 'view') || hasPermission('vehicles', 'view')) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -319,10 +384,18 @@ export function MdiLayout() {
                 <span>{dict.MENU_PRODUCTS}</span>
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={() => { handleOpenVehicles(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
-              <Truck className="size-4 text-muted-foreground" />
-              <span>{dict.MENU_VEHICLES}</span>
-            </DropdownMenuItem>
+            {hasPermission('funders', 'view') && (
+              <DropdownMenuItem onClick={() => { handleOpenFunders(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                <User className="size-4 text-muted-foreground" />
+                <span>{dict.MENU_FUNDERS}</span>
+              </DropdownMenuItem>
+            )}
+            {hasPermission('vehicles', 'view') && (
+              <DropdownMenuItem onClick={() => { handleOpenVehicles(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                <Truck className="size-4 text-muted-foreground" />
+                <span>{dict.MENU_VEHICLES}</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -391,7 +464,7 @@ export function MdiLayout() {
         </DropdownMenu>
       )}
 
-      {hasPermission('shipments', 'view') && (
+      {(hasPermission('shipments', 'view') || hasPermission('inventory', 'view')) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -410,10 +483,49 @@ export function MdiLayout() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="rounded-lg p-1 bg-popover border border-border/60 shadow-none">
-            <DropdownMenuItem onClick={() => { handleOpenShipments(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
-              <Truck className="size-4 text-muted-foreground" />
-              <span>{dict.MENU_SHIPMENTS}</span>
-            </DropdownMenuItem>
+            {hasPermission('inventory', 'view') && (
+              <DropdownMenuItem onClick={() => { handleOpenInventory(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                <Warehouse className="size-4 text-muted-foreground" />
+                <span>{dict.MENU_REPORTS_INVENTORY || "Inventory Report"}</span>
+              </DropdownMenuItem>
+            )}
+            {hasPermission('shipments', 'view') && (
+              <DropdownMenuItem onClick={() => { handleOpenShipments(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                <Truck className="size-4 text-muted-foreground" />
+                <span>{dict.MENU_SHIPMENTS}</span>
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator className="my-1 border-border/60" />
+            {hasPermission('deposit', 'view') && (
+              <DropdownMenuItem onClick={() => { handleOpenReportDeposit(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                <ArrowDownToLine className="size-4 text-muted-foreground" />
+                <span>{dict.MENU_REPORTS_DEPOSIT}</span>
+              </DropdownMenuItem>
+            )}
+            {hasPermission('quotation', 'view') && (
+              <DropdownMenuItem onClick={() => { handleOpenReportQuotation(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                <ClipboardList className="size-4 text-muted-foreground" />
+                <span>{dict.MENU_REPORTS_QUOTATION}</span>
+              </DropdownMenuItem>
+            )}
+            {hasPermission('purchase-order', 'view') && (
+              <DropdownMenuItem onClick={() => { handleOpenReportPO(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                <ShoppingBag className="size-4 text-muted-foreground" />
+                <span>{dict.MENU_REPORTS_PO}</span>
+              </DropdownMenuItem>
+            )}
+            {hasPermission('invoice', 'view') && (
+              <DropdownMenuItem onClick={() => { handleOpenReportInvoice(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                <Receipt className="size-4 text-muted-foreground" />
+                <span>{dict.MENU_REPORTS_INVOICE}</span>
+              </DropdownMenuItem>
+            )}
+            {hasPermission('payments', 'view') && (
+              <DropdownMenuItem onClick={() => { handleOpenReportPayments(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                <Wallet className="size-4 text-muted-foreground" />
+                <span>{dict.MENU_REPORTS_PAYMENTS}</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -569,46 +681,72 @@ export function MdiLayout() {
       </header>
 
       {/* Tab Strip */}
-      <div
-        ref={tabStripRef}
-        className="flex items-end h-10 border-b border-border/60 bg-muted/10 overflow-x-auto no-scrollbar scroll-smooth px-4 shrink-0 shadow-none gap-1"
-      >
-        {tabs.map((tab) => {
-          const registryItem = TAB_REGISTRY[tab.id]
-          const displayTitle = registryItem ? registryItem.title : tab.title
-          const isActive = activeTabId === tab.id
+      <div className="flex items-center h-10 border-b border-border/60 bg-muted/5 shrink-0 px-2 gap-1 relative overflow-hidden group/tabstrip">
+        {/* Scroll Left Button */}
+        {canScrollLeft && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 rounded-full z-20 bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-muted"
+            onClick={() => scrollTabs('left')}
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+        )}
 
-          return (
-            <div
-              key={tab.id}
-              data-tab-id={tab.id}
-              onClick={() => setActiveTabId(tab.id)}
-              className={cn(
-                "flex items-center justify-between h-9 text-xs md:text-sm font-medium cursor-pointer transition-all duration-150 ease-in-out whitespace-nowrap pl-4 pr-2 rounded-t-md border-t border-x gap-2 relative z-10 -mb-[1px] min-w-[130px] max-w-[200px]",
-                isActive
-                  ? "bg-primary/15 border-t-primary border-x-primary border-b-transparent text-primary font-semibold"
-                  : "bg-transparent border-t-border/80 border-x-border/80 border-b-border/60 text-muted-foreground hover:bg-muted/10 hover:text-foreground"
-              )}
-            >
-              <span className="truncate flex-1 text-left relative z-10">{displayTitle}</span>
-              {tab.closable !== false && (
-                <Button
-                  variant="close"
-                  size="icon"
-                  className={cn(
-                    "size-4 shrink-0 flex items-center justify-center transition-colors shadow-none relative z-10"
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    closeTab(tab.id)
-                  }}
-                >
-                  <X className="size-4"/>
-                </Button>
-              )}
-            </div>
-          )
-        })}
+        <div
+          ref={tabStripRef}
+          onScroll={checkScroll}
+          className="flex items-end h-full overflow-x-auto no-scrollbar scroll-smooth flex-1 gap-1"
+        >
+          {tabs.map((tab) => {
+            const registryItem = TAB_REGISTRY[tab.id]
+            const displayTitle = registryItem ? registryItem.title : tab.title
+            const isActive = activeTabId === tab.id
+
+            return (
+              <div
+                key={tab.id}
+                data-tab-id={tab.id}
+                onClick={() => setActiveTabId(tab.id)}
+                className={cn(
+                  "flex items-center justify-between h-9 font-medium cursor-pointer transition-all duration-150 ease-in-out whitespace-nowrap pl-3 pr-1.5 rounded-t-md border-t border-x gap-1.5 relative z-10 -mb-[1px] min-w-[100px] max-w-[180px]",
+                  getTabFontSize(),
+                  isActive
+                    ? "bg-primary/15 border-t-primary border-x-primary border-b-transparent text-primary font-semibold"
+                    : "bg-transparent border-t-border/80 border-x-border/80 border-b-border/60 text-muted-foreground hover:bg-muted/10 hover:text-foreground"
+                )}
+              >
+                <span className="truncate flex-1 text-left relative z-10">{displayTitle}</span>
+                {tab.closable !== false && (
+                  <button
+                    className={cn(
+                      "size-5 shrink-0 flex items-center justify-center transition-colors rounded-full hover:bg-primary/20 text-muted-foreground hover:text-primary relative z-20"
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      closeTab(tab.id)
+                    }}
+                  >
+                    <X className="size-3.5"/>
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Scroll Right Button */}
+        {canScrollRight && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 rounded-full z-20 bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-muted"
+            onClick={() => scrollTabs('right')}
+          >
+            <ChevronRight className="size-4" />
+          </Button>
+        )}
       </div>
 
       {/* Content Area */}

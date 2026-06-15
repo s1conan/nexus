@@ -149,7 +149,7 @@ export function AuthProvider({
 
         if (typeof window !== 'undefined') {
           const path = window.location.pathname
-          const isPublic = path === "/" || path === "/signup" || path === "/reset-password" || path.startsWith("/auth/")
+          const isPublic = path === "/" || path === "/signup" || path === "/reset-password" || path.startsWith("/auth/") || path.startsWith("/verify/")
           if (!isPublic) window.location.href = "/"
         }
       }
@@ -244,6 +244,7 @@ export function AuthProvider({
 
   const hasPermission = useCallback((module: string, action: 'view' | 'insert' | 'edit' | 'delete' | 'print'): boolean => {
     if (!resolvedPermissions) return false
+    
     const modulePerms = resolvedPermissions[module]
     return modulePerms ? modulePerms[action] === true : false
   }, [resolvedPermissions])

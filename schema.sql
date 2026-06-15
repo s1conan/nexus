@@ -5,30 +5,50 @@ CREATE TABLE role_permissions (
 );
 
 -- Seed Default Role Permissions
-INSERT INTO role_permissions (role, permissions) VALUES 
+INSERT INTO role_permissions (role, permissions) VALUES
 ('admin', '{
     "companies": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
     "products": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
-    "quotes": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
-    "orders": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "vehicles": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "funders": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "quotation": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "purchase-order": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "delivery-order": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "deposit": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "invoice": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "payments": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
     "shipments": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
-    "invoices": {"view": true, "insert": true, "edit": true, "delete": true, "print": true}
+    "users": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "settings": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "component-test": {"view": true, "insert": true, "edit": true, "delete": true, "print": true}
   }'),
 ('manager', '{
     "companies": {"view": true, "insert": true, "edit": true, "delete": false, "print": true},
     "products": {"view": true, "insert": true, "edit": true, "delete": false, "print": true},
-    "quotes": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
-    "orders": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "vehicles": {"view": true, "insert": true, "edit": true, "delete": false, "print": true},
+    "funders": {"view": true, "insert": true, "edit": true, "delete": false, "print": true},
+    "quotation": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "purchase-order": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "delivery-order": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "deposit": {"view": true, "insert": true, "edit": true, "delete": true, "print": true},
+    "invoice": {"view": true, "insert": false, "edit": false, "delete": false, "print": true},
+    "payments": {"view": true, "insert": false, "edit": false, "delete": false, "print": true},
     "shipments": {"view": true, "insert": true, "edit": true, "delete": false, "print": true},
-    "invoices": {"view": true, "insert": false, "edit": false, "delete": false, "print": true}
+    "users": {"view": true, "insert": false, "edit": false, "delete": false, "print": false},
+    "settings": {"view": true, "insert": false, "edit": false, "delete": false, "print": false}
   }'),
 ('staff', '{
     "companies": {"view": true, "insert": false, "edit": false, "delete": false, "print": false},
     "products": {"view": true, "insert": false, "edit": false, "delete": false, "print": false},
-    "quotes": {"view": true, "insert": true, "edit": false, "delete": false, "print": true},
-    "orders": {"view": true, "insert": true, "edit": false, "delete": false, "print": true},
-    "shipments": {"view": true, "insert": false, "edit": false, "delete": false, "print": true},
-    "invoices": {"view": false, "insert": false, "edit": false, "delete": false, "print": false}
+    "vehicles": {"view": true, "insert": false, "edit": false, "delete": false, "print": false},
+    "funders": {"view": true, "insert": false, "edit": false, "delete": false, "print": false},
+    "quotation": {"view": true, "insert": true, "edit": false, "delete": false, "print": true},
+    "purchase-order": {"view": true, "insert": true, "edit": false, "delete": false, "print": true},
+    "delivery-order": {"view": true, "insert": true, "edit": false, "delete": false, "print": true},
+    "deposit": {"view": true, "insert": true, "edit": false, "delete": false, "print": true},
+    "invoice": {"view": false, "insert": false, "edit": false, "delete": false, "print": false},
+    "payments": {"view": false, "insert": false, "edit": false, "delete": false, "print": false},
+    "shipments": {"view": true, "insert": false, "edit": false, "delete": false, "print": true}
   }');
 
 CREATE TABLE profiles (

@@ -4,22 +4,29 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 interface SendEmailOptions {
   to: string | string[]
+  cc?: string | string[]
   subject: string
   html: string
   from?: string
+  attachments?: {
+    filename: string;
+    content: string; // Base64 encoded string
+  }[];
 }
 
 /**
  * Shared utility for sending emails via Resend.
  * This can be used in server-side routes or background jobs.
  */
-export async function sendEmail({ to, subject, html, from }: SendEmailOptions) {
+export async function sendEmail({ to, cc, subject, html, from, attachments }: SendEmailOptions) {
   try {
     const { data, error } = await resend.emails.send({
       from: from || process.env.RESEND_FROM_EMAIL || 'Nexus <onboarding@resend.dev>',
       to,
+      cc,
       subject,
       html,
+      attachments,
     })
 
     if (error) {

@@ -1,11 +1,9 @@
 import React from "react"
 import { Document, Page, Text, View, StyleSheet, Image, Font, pdf } from "@react-pdf/renderer"
 import { format } from "date-fns"
-import { id } from "date-fns/locale"
+import { id as dateLocaleId } from "date-fns/locale"
 import { formatNumber } from "./formatters";
-import { Bold, Weight } from "lucide-react";
-// import ttd from './images/ttd-indah.png';
-
+import QRCode from 'qrcode';
 
 Font.register({
   family: 'Calibri',
@@ -25,6 +23,7 @@ interface CompanyInfo {
 }
 
 interface QuotationData {
+  id: string
   quotation_number: string
   quotation_date: string
   expiry_date: string
@@ -43,6 +42,7 @@ interface QuotationData {
   terms_conditions: string
   closing_remarks: string
   bank_accounts: { name: string; bank_name?: string; account_number: string; account_name: string; branch: string }[]
+  qr_code_url?: string
 }
 
 function createPDFElement(tag: string, children: React.ReactNode[], key: number, meta?: { marker?: string }) {
@@ -153,7 +153,7 @@ function parseHtmlToComponents(htmlString: string): React.ReactNode[] {
 const styles = StyleSheet.create({
   page: {
     paddingHorizontal: 30,
-    paddingVertical: 15,
+    paddingVertical: 20,
     fontSize: 10,
     fontFamily: "Calibri",
     lineHeight: 1,
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   blueLine: {
     height: 2,
     backgroundColor: "#1e3a8a",
-    marginBottom: 15,
+    marginBottom: 10,
   },
 
   row: {
@@ -308,6 +308,25 @@ const styles = StyleSheet.create({
     objectPosition: 'center',
   },
 
+  qrContainer: {
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 2,
+  },
+
+  qrImage: {
+    width: 60,
+    height: 60,
+  },
+
+  qrLabel: {
+    fontSize: 7,
+    color: "#666",
+  },
+
   ul: {
     marginLeft: 10,
     marginTop: 3,
@@ -326,8 +345,8 @@ const styles = StyleSheet.create({
 const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: QuotationData }) => {
   const replacements: Record<string, string> = {
     quotation_number: data.quotation_number,
-    quotation_date: data.quotation_date ? format(new Date(data.quotation_date), "dd MMMM yyyy", { locale: id }) : "",
-    expiry_date: data.expiry_date ? format(new Date(data.expiry_date), "dd MMMM yyyy", { locale: id }) : "",
+    quotation_date: data.quotation_date ? format(new Date(data.quotation_date), "dd MMMM yyyy", { locale: dateLocaleId }) : "",
+    expiry_date: data.expiry_date ? format(new Date(data.expiry_date), "dd MMMM yyyy", { locale: dateLocaleId }) : "",
     company_name: data.company_name,
     contact_person: data.contact_person || "",
     delivery_address: data.delivery_address || "",
@@ -386,7 +405,7 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
             <Text>{data.quotation_number}</Text>
           </View>
           <View style={styles.row}>
-            <Text>Palembang, {format(new Date(data.quotation_date), "dd MMMM yyyy", { locale: id })}</Text>
+            <Text>Palembang, {format(new Date(data.quotation_date), "dd MMMM yyyy", { locale: dateLocaleId })}</Text>
           </View>
         </View>
 
@@ -399,7 +418,7 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
         <View style={styles.row}>
           <Text style={styles.label}></Text>
           <Text style={styles.colon}></Text>
-          <Text>Berlaku s.d. {format(new Date(data.expiry_date), "dd MMMM yyyy", { locale: id })}</Text>
+          <Text>Berlaku s.d. {format(new Date(data.expiry_date), "dd MMMM yyyy", { locale: dateLocaleId })}</Text>
         </View>
 
         <View style={styles.section}>
@@ -588,7 +607,7 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
             <Text style={{ fontWeight: "bold" }}>Metode Pembayaran :</Text>
             <View style={{ display: "flex", flexDirection: "row", gap: 8, marginTop: 5 }}>
               {data.bank_accounts.map((d, i) => {
-                return (<View style={{ borderRadius: 8, border: "1px solid silver", gap: 4, padding: 8, backgroundColor: "#fafafa" }}>
+                return (<View key={i} style={{ borderRadius: 8, border: "1px solid silver", gap: 4, padding: 8, backgroundColor: "#fafafa" }}>
                   <Text style={{ fontWeight: "semibold" }}>{d.name}</Text>
                   <Text>{d.account_number}</Text>
                   <Text>{d.account_name}</Text>
@@ -606,19 +625,27 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
             {parseHtmlToComponents(processedClosing)}
           </View>
         )}
+        <View style={{ display: "flex", justifyContent: "space-between" }}>
+          <View style={styles.signature}>
+            <Text>Hormat Kami,</Text>
 
-        <View style={styles.signature}>
-          <Text>Hormat Kami,</Text>
+            {/* Replace with signature image */}
+            {/* <Image src="/signature.png" style={styles.signatureImage} /> */}
+            <Image src={company.logo_url} style={styles.stamp} />
+            <Image src="/images/ttd-indah.png" style={styles.ttd} />
+            <Text
+              style={[{ fontWeight: "bold", marginTop: 5 }]} >
+              Indah Permatasaris
+            </Text>
+            <Text style={[{ fontWeight: "bold", marginTop: 2 }]} >( DIREKTUR )</Text>
+          </View>
 
-          {/* Replace with signature image */}
-          {/* <Image src="/signature.png" style={styles.signatureImage} /> */}
-          <Image src={company.logo_url} style={styles.stamp} />
-          <Image src="/images/ttd-indah.png" style={styles.ttd} />
-          <Text
-            style={[{ fontWeight: "bold", marginTop: 5 }]} >
-            Indah Permatasari
-          </Text>
-          <Text style={[{ fontWeight: "bold", marginTop: 2 }]} >( DIREKTUR )</Text>
+          {data.qr_code_url && (
+            <View style={styles.qrContainer}>
+              <Image src={data.qr_code_url} style={styles.qrImage} />
+              <Text style={styles.qrLabel}> </Text>
+            </View>
+          )}
         </View>
         {/* Background Image */}
         <Image
@@ -634,39 +661,51 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
 
 export async function generateQuotationPDFReact(company: CompanyInfo, data: QuotationData, options: { save?: boolean, output?: "datauri" | "blob" } = { save: true }) {
   // React-PDF requires absolute URLs for images when running in the browser
-  let absoluteLogoUrl = company.logo_url;
-  if (absoluteLogoUrl && absoluteLogoUrl.startsWith('/')) {
-    if (typeof window !== 'undefined') {
-      absoluteLogoUrl = `${window.location.origin}${absoluteLogoUrl}`;
-    }
-  }
+  // let absoluteLogoUrl = company.logo_url;
+  // if (absoluteLogoUrl && absoluteLogoUrl.startsWith('/')) {
+  //   if (typeof window !== 'undefined') {
+  //     absoluteLogoUrl = `${window.location.origin}${absoluteLogoUrl}`;
+  //   }
+  // }
 
-  // Fetch the image and convert it to a base64 Data URI.
-  // @react-pdf/renderer often fails silently when trying to fetch external URLs in the browser.
-  // Passing it raw base64 data guarantees it will render.
-  let base64Logo: string | undefined = undefined;
-  if (absoluteLogoUrl) {
+  // // Fetch the image and convert it to a base64 Data URI.
+  // // @react-pdf/renderer often fails silently when trying to fetch external URLs in the browser.
+  // // Passing it raw base64 data guarantees it will render.
+  // let base64Logo: string | undefined = undefined;
+  // if (absoluteLogoUrl) {
+  //   try {
+  //     const response = await fetch(absoluteLogoUrl);
+  //     if (response.ok) {
+  //       const blob = await response.blob();
+  //       base64Logo = await new Promise<string>((resolve, reject) => {
+  //         const reader = new FileReader();
+  //         reader.onloadend = () => resolve(reader.result as string);
+  //         reader.onerror = reject;
+  //         reader.readAsDataURL(blob);
+  //       });
+  //     } else {
+  //       console.error("Failed to fetch logo:", response.status, response.statusText);
+  //     }
+  //   } catch (e) {
+  //     console.error("Error fetching logo for PDF:", e);
+  //   }
+  // }
+
+  const processedCompany = { ...company }//, logo_url: base64Logo || absoluteLogoUrl };
+
+  // Generate QR Code URL
+  let qrCodeDataUrl: string | undefined = undefined;
+  if (data.id) {
     try {
-      const response = await fetch(absoluteLogoUrl);
-      if (response.ok) {
-        const blob = await response.blob();
-        base64Logo = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      } else {
-        console.error("Failed to fetch logo:", response.status, response.statusText);
-      }
-    } catch (e) {
-      console.error("Error fetching logo for PDF:", e);
+      const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || '');
+      const verifyUrl = `${origin}/verify/quotation/${data.id}`;
+      qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 200 });
+    } catch (err) {
+      console.error("Failed to generate QR code:", err);
     }
   }
 
-  const processedCompany = { ...company, logo_url: base64Logo || absoluteLogoUrl };
-
-  const asPdf = pdf(<QuotationDocument company={processedCompany} data={data} />);
+  const asPdf = pdf(<QuotationDocument company={processedCompany} data={{ ...data, qr_code_url: qrCodeDataUrl }} />);
   const blob = await asPdf.toBlob();
 
   if (options.save) {
@@ -692,4 +731,45 @@ export async function generateQuotationPDFReact(company: CompanyInfo, data: Quot
   }
 
   return blob;
+}
+
+/**
+ * Standardized wrapper to generate a Quotation PDF from a raw database record.
+ * This is the SINGLE SOURCE OF TRUTH for mapping DB fields to the PDF layout.
+ */
+export async function generateStandardQuotationPDF(
+  companyInfo: any,
+  q: any,
+  options: { save?: boolean, output?: "datauri" | "blob" } = { save: true }
+) {
+  return await generateQuotationPDFReact(
+    {
+      name: companyInfo?.name || "PT Anugerah Buana Sriwijaya",
+      address: companyInfo?.address || "",
+      email: companyInfo?.email || "",
+      logo_url: companyInfo?.logo_url
+    },
+    {
+      id: q.id,
+      quotation_number: q.quotation_number,
+      quotation_date: q.quotation_date,
+      expiry_date: q.expiry_date,
+      company_name: q.company?.name || "-",
+      contact_person: q.company?.details?.contact_person || "-",
+      product_sku: q.product?.sku || "-",
+      product_name: q.product?.name || "-",
+      delivery_address: q.delivery_address || "-",
+      base_price: q.base_price || 0,
+      delivery_price: q.delivery_price || 0,
+      min_order: q.minimum_order || 0,
+      shrinkage: q.shrinkage_tolerance,
+      content: q.is_content_enabled ? q.content : "",
+      discounts: q.discounts || [],
+      note: q.is_note_enabled ? q.note : "",
+      terms_conditions: q.is_terms_enabled ? q.terms_conditions : "",
+      closing_remarks: q.is_closing_enabled ? q.closing_remarks : "",
+      bank_accounts: q.bank_accounts || []
+    },
+    options
+  );
 }

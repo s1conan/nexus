@@ -137,9 +137,9 @@ export function NumberInput({
   };
 
   return (
-    <div 
+    <div
       className={cn(
-        "flex h-9 w-full items-center rounded-md border border-input bg-transparent shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 overflow-hidden",
+        "h-9 flex w-full items-center rounded-md border border-input bg-transparent shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 overflow-hidden",
         containerClassName
       )}
     >

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
@@ -30,6 +30,7 @@ import {
   Car,
   Hash,
   Package,
+  AlertCircle
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -48,10 +49,11 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter
+  DialogFooter,
+  DialogTrigger
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
+import { cn, constructMultiWordSearch } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { RichTextEditor } from "@/components/rich-text-editor"
@@ -59,21 +61,20 @@ import { LiveSearch } from "@/components/live-search"
 import { format } from "date-fns"
 import { generateDeliveryOrderPDF } from "@/lib/pdf-generator"
 import dynamic from "next/dynamic"
+import { ButtonLoader } from "@/components/button-loader"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
 export default function DeliveryOrdersPage() {
   const { dict, lang } = useDictionary()
-  const { hasPermission, profile } = useAuth()
+  const { hasPermission, profile, loading: authLoading } = useAuth()
   const supabase = createClient()
 
   const [orders, setOrders] = useState<any[]>([])
-  const [companies, setCompanies] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
-  const [vehicles, setVehicles] = useState<any[]>([])
   const [companyInfo, setCompanyInfo] = useState<any>(null)
   const [previewDoc, setPreviewDoc] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
   const [isOpen, setIsOpen] = useState(false)
@@ -82,10 +83,20 @@ export default function DeliveryOrdersPage() {
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
 
+  // Tracking info for LiveSearch / Display
+  const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
+  const [selectedSupplierInfo, setSelectedSupplierInfo] = useState<any>(null)
+  const [selectedPOInfo, setSelectedPOInfo] = useState<any>(null)
+  const [selectedProductInfo, setSelectedProductInfo] = useState<any>(null)
+  const [selectedVehicleInfo, setSelectedVehicleInfo] = useState<any>(null)
+  const [availableStock, setAvailableStock] = useState<number | null>(null)
+
   // Form State
   const [formData, setFormData] = useState(() => ({
     do_number: "",
     company_id: "",
+    supplier_id: "",
+    po_id: "",
     product_id: "",
     do_date: format(new Date(), "yyyy-MM-dd"),
     shipment_date: format(new Date(), "yyyy-MM-dd"),
@@ -103,23 +114,14 @@ export default function DeliveryOrdersPage() {
   async function fetchData() {
     setLoading(true)
     try {
-      const [oRes, cRes, pRes, vRes, sRes] = await Promise.all([
-        supabase.from("delivery_orders").select("*, company:companies(name, details->contact_person, details->email), product:products(sku, name), vehicle:vehicles(license_number), compartments:delivery_order_compartments(*, vehicle_compartment:vehicle_compartments(compartment_number))").order("created_at", { ascending: false }),
-        supabase.from("companies").select("id, name, details->contact_person, details->email").contains('type', ['Customer']),
-        supabase.from("products").select("id, sku, name"),
-        supabase.from("vehicles").select("*, compartments:vehicle_compartments(*)"),
+      const [oRes, sRes] = await Promise.all([
+        supabase.from("delivery_orders").select("*, company:companies!delivery_orders_company_id_fkey(id, name, details->contact_person, details->email), supplier:companies!delivery_orders_supplier_id_fkey(id, name), po:purchase_orders(id, po_number, quantity), product:products(id, sku, name), vehicle:vehicles(id, license_number), compartments:delivery_order_compartments(*, vehicle_compartment:vehicle_compartments(id, compartment_number))").order("created_at", { ascending: false }),
         supabase.from("app_settings").select("*").eq("category", "company")
       ])
 
       if (oRes.error) throw oRes.error
-      if (cRes.error) throw cRes.error
-      if (pRes.error) throw pRes.error
-      if (vRes.error) throw vRes.error
 
       setOrders(oRes.data || [])
-      setCompanies(cRes.data || [])
-      setProducts(pRes.data || [])
-      setVehicles(vRes.data || [])
 
       if (sRes.data) {
         const info: any = {}
@@ -133,14 +135,30 @@ export default function DeliveryOrdersPage() {
     }
   }
 
+  // Fetch Stock for selected supplier and product
+  useEffect(() => {
+    async function fetchStock() {
+      if (formData.supplier_id && formData.product_id) {
+        const { data, error } = await supabase.from("supplier_stock_summary").select("current_stock").eq("supplier_id", formData.supplier_id).eq("product_id", formData.product_id).single()
+        if (error && error.code !== 'PGRST116') {
+          console.error("Error fetching stock:", error)
+        }
+        setAvailableStock(data?.current_stock || 0)
+      } else {
+        setAvailableStock(null)
+      }
+    }
+    fetchStock()
+  }, [formData.supplier_id, formData.product_id])
+
   useEffect(() => {
     fetchData()
   }, [])
 
   // When vehicle changes, auto-fill compartments
-  const handleVehicleSelect = (vId: string) => {
-    const vehicle = vehicles.find(v => v.id === vId)
+  const handleVehicleSelect = (vId: string, vehicle?: any) => {
     if (vehicle) {
+      setSelectedVehicleInfo(vehicle)
       const compartments = (vehicle.compartments || []).sort((a: any, b: any) => a.compartment_number - b.compartment_number)
       setFormData(prev => ({
         ...prev,
@@ -154,21 +172,45 @@ export default function DeliveryOrdersPage() {
         }))
       }))
     } else {
+      setSelectedVehicleInfo(null)
       setFormData(prev => ({ ...prev, vehicle_id: vId, vehicle_number: "", compartment_details: [] }))
     }
   }
 
   // Permission Checks
-  const canEditNum = hasPermission("delivery-order", "edit") || profile?.role === "admin" || profile?.role === "boss"
-  const canDelete = hasPermission("delivery-order", "delete") || profile?.role === "admin" || profile?.role === "boss"
+  const canView = hasPermission("delivery-order", "view")
+  const canInsert = hasPermission("delivery-order", "insert")
+  const canEdit = hasPermission("delivery-order", "edit")
+  const canDelete = hasPermission("delivery-order", "delete")
+  const canPrint = hasPermission("delivery-order", "print")
+
+  if (!canView && !loading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <div className="text-center space-y-2">
+          <AlertCircle className="size-8 text-destructive mx-auto" />
+          <h2 className="text-lg font-semibold">{dict.MSG_ACCESS_DENIED || "Access Denied"}</h2>
+          <p className="text-sm text-muted-foreground">{dict.MSG_NO_PERMISSION || "You do not have permission to view this page."}</p>
+        </div>
+      </div>
+    )
+  }
 
   // Open Dialog
   const handleOpenDialog = (item: any = null) => {
     if (item) {
       setEditingItem(item)
+      setSelectedCompanyInfo(item.company)
+      setSelectedSupplierInfo(item.supplier)
+      setSelectedPOInfo(item.po)
+      setSelectedProductInfo(item.product)
+      setSelectedVehicleInfo(item.vehicle)
+
       setFormData({
         do_number: item.do_number,
         company_id: item.company_id,
+        supplier_id: item.supplier_id || "",
+        po_id: item.po_id || "",
         product_id: item.product_id,
         do_date: item.do_date,
         shipment_date: item.shipment_date,
@@ -187,11 +229,19 @@ export default function DeliveryOrdersPage() {
         }))
       })
     } else {
+      if (!canInsert) return
       setEditingItem(null)
-      const nextNum = `DO/${new Date().getFullYear()}/${(orders.length + 1).toString().padStart(3, "0")}`
+      setSelectedCompanyInfo(null)
+      setSelectedSupplierInfo(null)
+      setSelectedPOInfo(null)
+      setSelectedProductInfo(null)
+      setSelectedVehicleInfo(null)
+
       setFormData({
-        do_number: nextNum,
+        do_number: "", // Will be auto-generated on save if empty
         company_id: "",
+        supplier_id: "",
+        po_id: "",
         product_id: "",
         do_date: format(new Date(), "yyyy-MM-dd"),
         shipment_date: format(new Date(), "yyyy-MM-dd"),
@@ -210,8 +260,22 @@ export default function DeliveryOrdersPage() {
 
   // Actions
   const handleSave = async () => {
+    if (availableStock !== null && formData.quantity > availableStock) {
+      notify.error(dict.MSG_SAVE_FAILED, "Insufficient stock from selected supplier.")
+      return
+    }
+
+    setIsSaving(true)
     try {
       const { compartment_details, ...payload } = formData
+      
+      // Generate document number if empty (for new orders)
+      if (!editingItem && !payload.do_number) {
+        const { data, error: rpcError } = await supabase.rpc('generate_document_number', { p_doc_type: 'delivery-order' })
+        if (rpcError) throw rpcError
+        payload.do_number = data
+      }
+
       let doId = editingItem?.id
 
       if (editingItem) {
@@ -242,6 +306,8 @@ export default function DeliveryOrdersPage() {
       fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -286,6 +352,7 @@ export default function DeliveryOrdersPage() {
         do_date: o.do_date,
         shipment_date: o.shipment_date,
         company_name: o.company?.name || "-",
+        supplier_name: o.supplier?.name || "-",
         product_name: o.product?.name || "-",
         quantity: o.quantity,
         driver_name: o.driver_name || "-",
@@ -313,11 +380,22 @@ export default function DeliveryOrdersPage() {
 
   // Search filter
   const filteredOrders = useMemo(() => {
-    return orders.filter(o =>
-      o.do_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (o.company?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (o.product?.sku || "").toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
+    if (words.length === 0) return orders
+
+    return orders.filter(o => {
+      const searchFields = [
+        o.do_number,
+        o.company?.name || "",
+        o.product?.sku || "",
+        o.driver_name || "",
+        o.vehicle?.license_number || o.vehicle_number || ""
+      ]
+      return searchFields.some(field => {
+        const val = String(field).toLowerCase()
+        return words.every(word => val.includes(word))
+      })
+    })
   }, [orders, searchQuery])
 
   // Recalculate total quantity from compartments
@@ -340,10 +418,12 @@ export default function DeliveryOrdersPage() {
         </h1>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <Button size="sm" onClick={() => handleOpenDialog()}>
-            <Plus data-icon="inline-start" />
-            {dict.BUTTON_NEW_DO}
-          </Button>
+          <DialogTrigger asChild>
+            <Button size="sm" onClick={() => handleOpenDialog()} disabled={!canInsert}>
+              <Plus data-icon="inline-start" />
+              {dict.BUTTON_NEW_DO}
+            </Button>
+          </DialogTrigger>
           <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto p-0 gap-0">
             <DialogHeader className="p-5 border-b sticky top-0 bg-background z-10">
               <DialogTitle>
@@ -358,16 +438,30 @@ export default function DeliveryOrdersPage() {
                     <h3 className="font-semibold text-base flex items-center gap-2 border-b pb-2"><Hash className="size-4 text-primary" /> Basic Information</h3>
                     <div className="grid gap-2">
                       <Label htmlFor="donum">{dict.LABEL_DO_NUMBER}</Label>
-                      <Input id="donum" value={formData.do_number} onChange={e => setFormData({ ...formData, do_number: e.target.value })} disabled={!canEditNum} className="font-mono font-bold" />
+                      <Input id="donum" value={formData.do_number} onChange={e => setFormData({ ...formData, do_number: e.target.value })} disabled={editingItem && !hasPermission("delivery-order", "edit")} className="font-mono font-bold" placeholder={dict.LABEL_AUTO_GENERATED} />
                     </div>
                     <div className="grid gap-2">
-                      <Label>{dict.LABEL_COMPANY_NAME}</Label>
+                      <Label>{dict.LABEL_COMPANY_NAME} (Customer)</Label>
                       <LiveSearch
-                        data={companies}
+                        data={selectedCompanyInfo ? [selectedCompanyInfo] : []}
+                        fetchData={async (query) => {
+                          let q = supabase.from("companies").select("id, name, details->contact_person, details->email").contains('type', ['Customer']).limit(8)
+                          if (query) {
+                            const searchStr = constructMultiWordSearch(query, ['name', 'details->>contact_person'])
+                            if (searchStr) q = q.or(searchStr)
+                          }
+                          const { data } = await q
+                          return data || []
+                        }}
                         value={formData.company_id}
-                        onSelect={val => setFormData({ ...formData, company_id: val })}
+                        onSelect={(val, item) => {
+                          setFormData({ ...formData, company_id: val, po_id: "" })
+                          setSelectedCompanyInfo(item)
+                          setSelectedPOInfo(null)
+                        }}
                         keyField="id"
                         displayField="name"
+                        defaultDisplay={selectedCompanyInfo?.name || ""}
                         searchColumns={["name", "contact_person"]}
                         visualColumns={[{ key: "name", header: dict.LABEL_COMPANY_NAME, className: "w-3/5 font-medium", primary: true }, { key: "contact_person", header: dict.LABEL_CONTACT_PERSON, className: "w-2/5" }]}
                         placeholder={dict.PLACEHOLDER_SEARCH}
@@ -375,13 +469,76 @@ export default function DeliveryOrdersPage() {
                       />
                     </div>
                     <div className="grid gap-2">
+                      <Label>Customer PO</Label>
+                      <LiveSearch
+                        data={selectedPOInfo ? [selectedPOInfo] : []}
+                        fetchData={async (query) => {
+                          if (!formData.company_id) return []
+                          let q = supabase.from("purchase_orders").select("id, po_number, quantity, product_id, product:products(id, sku, name)").eq("company_id", formData.company_id).limit(8)
+                          if (query) {
+                            const searchStr = constructMultiWordSearch(query, ['po_number'])
+                            if (searchStr) q = q.or(searchStr)
+                          }
+                          const { data } = await q
+                          return data || []
+                        }}
+                        value={formData.po_id}
+                        onSelect={(val, item) => {
+                          setFormData({ ...formData, po_id: val, product_id: item?.product_id || formData.product_id })
+                          setSelectedPOInfo(item)
+                          if (item?.product) setSelectedProductInfo(item.product)
+                        }}
+                        keyField="id"
+                        displayField="po_number"
+                        defaultDisplay={selectedPOInfo?.po_number || ""}
+                        searchColumns={["po_number"]}
+                        visualColumns={[{ key: "po_number", header: "PO Number", className: "w-3/5 font-medium", primary: true }, { key: "quantity", header: "Qty", className: "w-2/5" }]}
+                        placeholder="Search Customer PO..."
+                        emptyMessage="No PO found for this customer."
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Supplier (Origin)</Label>
+                      <LiveSearch
+                        data={selectedSupplierInfo ? [selectedSupplierInfo] : []}
+                        fetchData={async (query) => {
+                          let q = supabase.from("companies").select("id, name").contains('type', ['Supplier']).limit(8)
+                          if (query) q = q.or(`name.ilike.%${query}%`)
+                          const { data } = await q
+                          return data || []
+                        }}
+                        value={formData.supplier_id}
+                        onSelect={(val, item) => {
+                          setFormData({ ...formData, supplier_id: val })
+                          setSelectedSupplierInfo(item)
+                        }}
+                        keyField="id"
+                        displayField="name"
+                        defaultDisplay={selectedSupplierInfo?.name || ""}
+                        searchColumns={["name"]}
+                        visualColumns={[{ key: "name", header: "Supplier Name", className: "w-full font-medium", primary: true }]}
+                        placeholder="Select Supplier..."
+                        emptyMessage={dict.NO_DATA}
+                      />
+                    </div>
+                    <div className="grid gap-2">
                       <Label>{dict.LABEL_SKU}</Label>
                       <LiveSearch
-                        data={products}
+                        data={selectedProductInfo ? [selectedProductInfo] : []}
+                        fetchData={async (query) => {
+                          let q = supabase.from("products").select("id, sku, name").limit(8)
+                          if (query) q = q.or(`sku.ilike.%${query}%,name.ilike.%${query}%`)
+                          const { data } = await q
+                          return data || []
+                        }}
                         value={formData.product_id}
-                        onSelect={val => setFormData({ ...formData, product_id: val })}
+                        onSelect={(val, item) => {
+                          setFormData({ ...formData, product_id: val })
+                          setSelectedProductInfo(item)
+                        }}
                         keyField="id"
                         displayField={(p) => `${p.sku} - ${p.name}`}
+                        defaultDisplay={selectedProductInfo ? (selectedProductInfo.sku && selectedProductInfo.name ? `${selectedProductInfo.sku} - ${selectedProductInfo.name}` : selectedProductInfo.name || selectedProductInfo.sku || "") : ""}
                         searchColumns={["sku", "name"]}
                         visualColumns={[{ key: "sku", header: dict.LABEL_SKU, className: "w-1/3 font-mono" }, { key: "name", header: dict.LABEL_PRODUCT_NAME, className: "w-2/3", primary: true }]}
                         placeholder={dict.PLACEHOLDER_SEARCH}
@@ -389,7 +546,14 @@ export default function DeliveryOrdersPage() {
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="qty">{dict.LABEL_QUANTITY}</Label>
+                      <div className="flex justify-between items-center">
+                        <Label htmlFor="qty">{dict.LABEL_QUANTITY}</Label>
+                        {availableStock !== null && (
+                          <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded", availableStock > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                            Stock: {availableStock.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
                       <Input id="qty" type="number" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })} className="text-lg font-bold" />
                     </div>
                   </div>
@@ -415,11 +579,18 @@ export default function DeliveryOrdersPage() {
                       <div className="grid gap-2">
                         <Label className="flex items-center gap-2"><Car className="size-4" /> {dict.LABEL_VEHICLE}</Label>
                         <LiveSearch
-                          data={vehicles}
+                          data={selectedVehicleInfo ? [selectedVehicleInfo] : []}
+                          fetchData={async (query) => {
+                            let q = supabase.from("vehicles").select("*, compartments:vehicle_compartments(*)").limit(8)
+                            if (query) q = q.or(`license_number.ilike.%${query}%,vehicle_type.ilike.%${query}%`)
+                            const { data } = await q
+                            return data || []
+                          }}
                           value={formData.vehicle_id}
                           onSelect={handleVehicleSelect}
                           keyField="id"
                           displayField="license_number"
+                          defaultDisplay={selectedVehicleInfo?.license_number || ""}
                           searchColumns={["license_number", "vehicle_type"]}
                           visualColumns={[{ key: "license_number", header: "License", className: "w-1/2 font-bold", primary: true }, { key: "vehicle_type", header: "Type", className: "w-1/2" }]}
                           placeholder="Select a vehicle..."
@@ -477,7 +648,9 @@ export default function DeliveryOrdersPage() {
 
             <DialogFooter className="mt-2 sticky bottom-0 bg-background z-10 border-t pt-4 gap-2 *:w-full *:flex-1 h-22 sm:h-auto">
               <Button variant="outline" onClick={() => setIsOpen(false)} className="px-8">{dict.BUTTON_CANCEL}</Button>
-              <Button onClick={handleSave} className="px-10 font-bold"><Save className="size-4 mr-2" />{dict.BUTTON_SAVE_DO}</Button>
+              <Button onClick={() => handleSave()} disabled={isSaving || (editingItem ? !canEdit : !canInsert)} className="px-10 font-bold">
+                {isSaving ? <ButtonLoader /> : <Save data-icon="inline-start" />} {dict.BUTTON_SAVE_DO}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -542,10 +715,10 @@ export default function DeliveryOrdersPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(o)}>
+                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(o)} disabled={!canEdit}>
                       <Pencil className="size-4" />
                     </Button>
-                    <Button variant="table_action" size="sm" onClick={() => handlePrint(o)}>
+                    <Button variant="table_action" size="sm" onClick={() => handlePrint(o)} disabled={!canPrint}>
                       <Printer className="size-4" />
                     </Button>
                     <DropdownMenu>
@@ -559,16 +732,16 @@ export default function DeliveryOrdersPage() {
                           <DropdownMenuSubTrigger><CheckCircle2 className="size-4 mr-2" /> Status</DropdownMenuSubTrigger>
                           <DropdownMenuPortal>
                             <DropdownMenuSubContent>
-                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Shipped')} className="text-blue-600">Shipped</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Delivered')} className="text-green-600">Delivered</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Cancelled')} className="text-red-600">Cancelled</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Shipped')} className="text-blue-600" disabled={!canEdit}>Shipped</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Delivered')} className="text-green-600" disabled={!canEdit}>Delivered</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Cancelled')} className="text-red-600" disabled={!canEdit}>Cancelled</DropdownMenuItem>
                             </DropdownMenuSubContent>
                           </DropdownMenuPortal>
                         </DropdownMenuSub>
                         {canDelete && (
                           <>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(o.id)}>
+                            <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive" onClick={() => handleDelete(o.id)}>
                               <Trash2 className="size-4 mr-2" /> {dict.BUTTON_DELETE}
                             </DropdownMenuItem>
                           </>

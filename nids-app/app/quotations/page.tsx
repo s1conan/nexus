@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
@@ -34,7 +34,8 @@ import {
   ArrowDown,
   ArrowUpAZ,
   ArrowDownZA,
-  ArrowUpDown
+  ArrowUpDown,
+  RefreshCw
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -57,7 +58,7 @@ import {
   DialogFooter
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
+import { cn, constructMultiWordSearch } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { Checkbox } from "@/components/ui/checkbox"
 import { notify } from "@/lib/notifications"
@@ -71,12 +72,16 @@ import {
   SelectValue
 } from "@/components/ui/select"
 import { format } from "date-fns"
-import { generateQuotationPDFReact } from "@/lib/pdf-generator-react"
+import { generateStandardQuotationPDF } from "@/lib/pdf-generator-react"
 import { ButtonLoader } from "@/components/button-loader"
 import { NumberInput } from "@/components/number-input"
+import { useDebounce } from "@/hooks/use-debounce"
+import { Switch } from "@/components/ui/switch"
 import dynamic from "next/dynamic"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
+
+const PAGE_SIZE = 50
 
 interface SortLevel {
   id: string
@@ -86,16 +91,18 @@ interface SortLevel {
 
 export default function QuotationsPage() {
   const { dict, lang } = useDictionary()
-  const { hasPermission, profile } = useAuth()
+  const { hasPermission, profile, loading: authLoading } = useAuth()
   const supabase = createClient()
 
   const [quotations, setQuotations] = useState<any[]>([])
-  const [companies, setCompanies] = useState<any[]>([])
-  const [products, setProducts] = useState<any[]>([])
   const [availableBanks, setAvailableBanks] = useState<any[]>([])
+  const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
   const [companyInfo, setCompanyInfo] = useState<any>(null)
   const [previewDoc, setPreviewDoc] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
@@ -105,9 +112,13 @@ export default function QuotationsPage() {
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
   const [sortLevels, setSortLevels] = useState<SortLevel[]>([
-    { id: "1", column: "quotation_date", direction: "desc" }
+    { id: "1", column: "created_at", direction: "desc" }
   ])
+
+  const observerTarget = useRef(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -123,81 +134,147 @@ export default function QuotationsPage() {
     minimum_order: 0,
     shrinkage_tolerance: 0,
     status: "Draft",
-
     content: "",
     is_content_enabled: true,
-
     note: "",
     is_note_enabled: true,
-
     terms_conditions: "",
     is_terms_enabled: true,
-
     closing_remarks: "",
     is_closing_enabled: true,
-
     discounts: [] as { label: string; value: number }[],
-    bank_accounts: [] as any[]
+    bank_accounts: [] as any[],
+    tax_details: [] as any[]
   }))
 
-  const selectedCompany = useMemo(() => {
-    return companies.find(c => c.id === formData.company_id)
-  }, [formData.company_id, companies])
+  const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
+  const [selectedProductInfo, setSelectedProductInfo] = useState<any>(null)
 
   const companyAddresses = useMemo(() => {
-    if (!selectedCompany?.details?.addresses) return []
-    return selectedCompany.details.addresses as { label: string, address: string }[]
-  }, [selectedCompany])
+    if (!selectedCompanyInfo?.details?.addresses) return []
+    return selectedCompanyInfo.details.addresses as { label: string, address: string }[]
+  }, [selectedCompanyInfo])
+
+  // Permission Checks
+  const canView = hasPermission("quotation", "view")
+  const canInsert = hasPermission("quotation", "insert")
+  const canEdit = hasPermission("quotation", "edit")
+  const canDelete = hasPermission("quotation", "delete")
+  const canPrint = hasPermission("quotation", "print")
 
   // Fetch Data
-  async function fetchData() {
-    setLoading(true)
+  const fetchData = useCallback(async (isInitial = false) => {
+    if (isInitial) {
+      setLoading(true)
+      setOffset(0)
+    } else {
+      setLoadingMore(true)
+    }
+
     try {
-      const [qRes, cRes, pRes, bRes, sRes] = await Promise.all([
-        supabase.from("quotations").select("*, company:companies(name, details), product:products(sku, name, base_price)").order("created_at", { ascending: false }),
-        supabase.from("companies").select("id, name, type, details").contains('type', ['Customer']),
-        supabase.from("products").select("id, sku, name, base_price"),
-        supabase.from("app_settings").select("value").eq("category", "company").eq("name", "bank").maybeSingle(),
-        supabase.from("app_settings").select("*").eq("category", "company")
-      ])
+      const currentOffset = isInitial ? 0 : offset
 
-      if (qRes.error) throw qRes.error
-      if (cRes.error) throw cRes.error
-      if (pRes.error) throw pRes.error
+      // We still need banks and company settings (only once)
+      if (isInitial) {
+        const [bRes, sRes, tRes] = await Promise.all([
+          supabase.from("app_settings").select("value").eq("category", "company").eq("name", "bank").maybeSingle(),
+          supabase.from("app_settings").select("*").eq("category", "company"),
+          supabase.from("app_settings").select("*").eq("category", "tax")
+        ])
 
-      setQuotations(qRes.data || [])
+        if (bRes.data?.value) setAvailableBanks(bRes.data.value as any[])
+        else setAvailableBanks([])
 
-      // Map contact_person to the top level for LiveSearch and variables
-      const mappedCompanies = (cRes.data || []).map((c: any) => ({
-        ...c,
-        contact_person: c.details?.contact_person || ""
-      }))
-      setCompanies(mappedCompanies)
-      setProducts(pRes.data || [])
+        if (sRes.data) {
+          const info: any = {}
+          sRes.data.forEach((r: any) => { info[r.name] = r.value })
+          setCompanyInfo(info)
+        }
 
-      if (bRes.data?.value) {
-        setAvailableBanks(bRes.data.value as any[])
-      } else {
-        setAvailableBanks([])
+        if (tRes.data) {
+          setGlobalTaxes(tRes.data)
+        }
       }
 
-      if (sRes.data) {
-        const info: any = {}
-        sRes.data.forEach((r: any) => {
-          info[r.name] = r.value
-        })
-        setCompanyInfo(info)
+      let query = supabase
+        .from("quotations")
+        .select("*, company:companies(id, name, details), product:products(id, sku, name, base_price)")
+        .range(currentOffset, currentOffset + PAGE_SIZE - 1)
+
+      // Dynamic sorting
+      sortLevels.forEach(level => {
+        const [relation, col] = level.column.split('.')
+        if (col) {
+          // Relation sorting not supported natively via range easily for joined tables in simple .order
+          // For now we sort by top level cols primarily
+        } else {
+          query = query.order(level.column, { ascending: level.direction === 'asc' })
+        }
+      })
+
+      // Ensure stable secondary sort
+      query = query.order('created_at', { ascending: false })
+
+      if (debouncedSearchQuery) {
+        query = query.or(`quotation_number.ilike.%${debouncedSearchQuery}%`)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+
+      if (data) {
+        if (isInitial) {
+          setQuotations(data)
+        } else {
+          setQuotations(prev => {
+            const newItems = data.filter((item: any) => !prev.some(p => p.id === item.id))
+            return [...prev, ...newItems]
+          })
+        }
+        setHasMore(data.length === PAGE_SIZE)
+        setOffset(currentOffset + data.length)
       }
     } catch (err: any) {
       notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }
+  }, [supabase, offset, debouncedSearchQuery, sortLevels, dict.MSG_DATA_FETCH_FAILED])
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    fetchData(true)
+  }, [debouncedSearchQuery, sortLevels])
+
+  // Ordinary Infinite Scroll
+  useEffect(() => {
+    const rootElement = containerRef.current;
+    if (!rootElement) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        const entry = entries[0]
+        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
+          fetchData(false)
+        }
+      },
+      {
+        root: rootElement,
+        rootMargin: "400px",
+        threshold: 0,
+      }
+    )
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current)
+    }
+
+    return () => observer.disconnect()
+  }, [fetchData, hasMore, loading, loadingMore])
+
+  const handleRefresh = () => {
+    fetchData(true)
+  }
 
   // Linked Expiry Logic
   const handleDateChange = (dateStr: string) => {
@@ -214,14 +291,37 @@ export default function QuotationsPage() {
     setFormData(prev => ({ ...prev, expiry_days: days, expiry_date: format(eDate, "yyyy-MM-dd") }))
   }
 
-  // Permission Checks
-  const canEditNum = hasPermission("quotation", "edit") || profile?.role === "admin" || profile?.role === "boss"
-  const canDelete = hasPermission("quotation", "delete") || profile?.role === "admin" || profile?.role === "boss"
-
-  // Open Dialog
   const handleOpenDialog = (item: any = null) => {
     if (item) {
       setEditingItem(item)
+      const company = item.company ? {
+        ...item.company,
+        contact_person: item.company.details?.contact_person || ""
+      } : null
+
+      setSelectedCompanyInfo(company)
+      setSelectedProductInfo(item.product)
+
+      const itemBankAccounts = Array.isArray(item.bank_accounts) ? item.bank_accounts : []
+      const initialSelectedBanks = availableBanks.filter(availableBank =>
+        itemBankAccounts.some((itemBank: any) => itemBank.account_number === availableBank.account_number)
+      )
+
+      // Merge saved taxes with current global taxes
+      const savedTaxes = Array.isArray(item.tax_details) ? item.tax_details : []
+      const mergedTaxes = globalTaxes.map(gt => {
+        const existing = savedTaxes.find((st: any) => st.name === gt.name)
+        if (existing) return { ...gt, rate: existing.rate, enabled: existing.enabled }
+        return { ...gt, rate: gt.value, enabled: false }
+      })
+
+      // Preserve custom taxes no longer in global settings
+      savedTaxes.forEach((st: any) => {
+        if (!mergedTaxes.find((mt: any) => mt.name === st.name)) {
+          mergedTaxes.push({ ...st })
+        }
+      })
+
       setFormData({
         quotation_number: item.quotation_number,
         company_id: item.company_id,
@@ -244,13 +344,17 @@ export default function QuotationsPage() {
         closing_remarks: item.closing_remarks || "",
         is_closing_enabled: item.is_closing_enabled ?? true,
         discounts: item.discounts || [],
-        bank_accounts: item.bank_accounts || []
-      })
+        bank_accounts: initialSelectedBanks,
+        tax_details: mergedTaxes
+      });
     } else {
+      if (!canInsert) return
       setEditingItem(null)
-      const nextNum = `QTN/${new Date().getFullYear()}/${(quotations.length + 1).toString().padStart(3, "0")}`
+      setSelectedCompanyInfo(null)
+      setSelectedProductInfo(null)
+      
       setFormData({
-        quotation_number: nextNum,
+        quotation_number: "", // Will be auto-generated on save if empty
         company_id: "",
         delivery_address: "",
         product_id: "",
@@ -271,32 +375,36 @@ export default function QuotationsPage() {
         closing_remarks: "",
         is_closing_enabled: true,
         discounts: [],
-        bank_accounts: []
+        bank_accounts: [],
+        tax_details: globalTaxes.map(gt => ({ ...gt, rate: gt.value, enabled: false }))
       })
     }
     setIsOpen(true)
   }
 
-  // Actions
   const handleSave = async () => {
     setIsSaving(true)
     try {
       const payload = { ...formData }
       if (editingItem) {
-        // Workaround: PostgREST concatenates JSONB arrays on UPDATE.
-        // We set them to null first to force a clean replacement.
-        await supabase.from("quotations").update({ bank_accounts: null, discounts: null }).eq("id", editingItem.id)
-
+        await supabase.from("quotations").update({ bank_accounts: null, discounts: null }).eq("id", editingItem.id);
         const { error } = await supabase.from("quotations").update(payload).eq("id", editingItem.id)
-        if (error) throw error
+        if (error) throw error;
         notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), dict.MSG_QUOTATION_SAVED.replace("%data%", `[${formData.quotation_number}]`))
       } else {
+        // Generate document number if empty
+        if (!payload.quotation_number) {
+          const { data, error: rpcError } = await supabase.rpc('generate_document_number', { p_doc_type: 'quotation' })
+          if (rpcError) throw rpcError
+          payload.quotation_number = data
+        }
+
         const { error } = await supabase.from("quotations").insert([payload])
-        if (error) throw error
-        notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), dict.MSG_QUOTATION_SAVED.replace("%data%", `[${formData.quotation_number}]`))
+        if (error) throw error;
+        notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), dict.MSG_QUOTATION_SAVED.replace("%data%", `[${payload.quotation_number}]`))
       }
       setIsOpen(false)
-      fetchData()
+      fetchData(true)
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     } finally {
@@ -310,7 +418,7 @@ export default function QuotationsPage() {
       const { error } = await supabase.from("quotations").delete().eq("id", id)
       if (error) throw error
       notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_DELETED)
-      fetchData()
+      fetchData(true)
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     }
@@ -321,7 +429,7 @@ export default function QuotationsPage() {
       const { error } = await supabase.from("quotations").update({ status }).eq("id", id)
       if (error) throw error
       notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_STATUS_UPDATED)
-      fetchData()
+      fetchData(true)
     } catch (err: any) {
       notify.error(dict.MSG_UPDATE_FAILED, err.message)
     }
@@ -332,45 +440,19 @@ export default function QuotationsPage() {
       notify.error(dict.MSG_SAVE_FAILED, "Company information not loaded yet.")
       return
     }
-
     try {
-      const dataUri = await generateQuotationPDFReact(
-        {
-          name: companyInfo.name || "PT Anugerah Buana Sriwijaya",
-          address: companyInfo.address || "",
-          email: companyInfo.email || "",
-          logo_url: companyInfo.logo_url || "/images/company-logo.jpg"
-        },
-        {
-          quotation_number: q.quotation_number,
-          quotation_date: q.quotation_date,
-          expiry_date: q.expiry_date,
-          company_name: q.company?.name || "-",
-          contact_person: q.company?.details?.contact_person || "-",
-          product_sku: q.product?.sku || "-",
-          product_name: q.product?.name || "-",
-          delivery_address: q.delivery_address || "-",
-          base_price: q.base_price || 0,
-          delivery_price: q.delivery_price || 0,
-          min_order: q.minimum_order || 0,
-          shrinkage: q.shrinkage_tolerance,
-          content: q.is_content_enabled ? q.content : "",
-          discounts: q.discounts || [],
-          note: q.is_note_enabled ? q.note : "",
-          terms_conditions: q.is_terms_enabled ? q.terms_conditions : "",
-          closing_remarks: q.is_closing_enabled ? q.closing_remarks : "",
-          bank_accounts: q.bank_accounts || []
-        },
-        { save: false, output: "datauri" }
-      )
-
+      const dataUri = await generateStandardQuotationPDF(companyInfo, q, { save: false, output: "datauri" })
+      const contacts = q.company?.details?.contact_persons?.length
+        ? q.company.details.contact_persons
+        : [{ name: q.company?.details?.contact_person || "-", email: q.company?.details?.email || q.company?.email || "" }]
       setPreviewDoc({
         id: q.id,
         title: q.quotation_number,
         description: ` ${q.company?.name || "-"}`,
         images: [],
         pdf: dataUri,
-        customerEmail: q.company?.email,
+        customerEmail: contacts[0]?.email || "",
+        contacts: contacts,
         raw: q
       })
     } catch (err: any) {
@@ -387,97 +469,69 @@ export default function QuotationsPage() {
 
   const handleSendEmail = async (doc: any) => {
     try {
+      const q = doc.raw || doc;
+      const { data: ccData } = await supabase.from('app_settings').select('value').eq('category', 'email').eq('name', 'cc_quotation').single()
+      const ccList = ccData?.value ? ccData.value.split(',').map((email: string) => email.trim()).filter((e: string) => e !== "") : []
+      const pdfDataUri = await generateStandardQuotationPDF(companyInfo, q, { save: false, output: "datauri" })
+      if (!pdfDataUri) throw new Error("Failed to generate PDF for attachment.");
+      const attachments = [{ filename: `Quotation_${doc.title}.pdf`, content: (pdfDataUri as string).split(',')[1] }];
       const res = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: doc.customerEmail,
+          cc: ccList,
           subject: `Quotation ${doc.title} - PT Anugerah Buana Sriwijaya`,
-          html: `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-              <h1 style="color: #0f172a; font-size: 24px; margin-bottom: 16px;">Quotation ${doc.title}</h1>
-              <p style="color: #475569; font-size: 16px; line-height: 24px">Dear ${doc.raw.company?.name},</p>
-              <p style="color: #475569; font-size: 16px; line-height: 24px">Please find below the details of your quotation.</p>
-              <div style="background-color: #f8fafc; padding: 16px; border-radius: 6px; margin: 24px 0;">
-                ${doc.raw.content}
-              </div>
-              <p style="color: #475569; font-size: 16px; line-height: 24px">Best regards,<br>PT Anugerah Buana Sriwijaya</p>
-            </div>
-          `
+          html: `<div>Quotation ${doc.title} attached.</div>`,
+          attachments,
         })
       })
-
       const result = await res.json()
-      if (result.success) {
-        notify.success(dict.MSG_STATUS_UPDATED, "Email sent successfully.")
-      } else {
-        throw new Error(result.error)
-      }
+      if (result.success) notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), "Email sent successfully.")
+      else throw new Error(result.error)
     } catch (err: any) {
       notify.error("Failed to send email", err.message)
     }
   }
 
-  const getSortableValue = (item: any, column: string) => {
-    if (column === 'company.name') return item.company?.name || "";
-    if (column === 'product.sku') return item.product?.sku || "";
-    return item[column];
-  }
-
-  // Final Filtered and Sorted Data
   const sortedAndFilteredData = useMemo(() => {
-    // 1. Filter - Including Company Name and SKU
-    let result = quotations.filter(q =>
-      q.quotation_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (q.company?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (q.product?.sku || "").toLowerCase().includes(searchQuery.toLowerCase())
-    )
-
-    // 2. Multi-level Sort
+    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
+    let result = quotations
+    
+    if (words.length > 0) {
+      result = quotations.filter(q => {
+        const searchFields = [
+          q.quotation_number,
+          q.company?.name || "",
+          q.product?.sku || ""
+        ]
+        return searchFields.some(field => {
+          const val = String(field).toLowerCase()
+          return words.every(word => val.includes(word))
+        })
+      })
+    }
     return [...result].sort((a, b) => {
       for (const level of sortLevels) {
-        const aVal = getSortableValue(a, level.column)
-        const bVal = getSortableValue(b, level.column)
-
+        const aVal = level.column === 'company.name' ? a.company?.name || "" : level.column === 'product.sku' ? a.product?.sku || "" : a[level.column];
+        const bVal = level.column === 'company.name' ? b.company?.name || "" : level.column === 'product.sku' ? b.product?.sku || "" : b[level.column];
         if (aVal === bVal) continue
-
         const multiplier = level.direction === "asc" ? 1 : -1
-
-        // Handle numeric comparison
-        if (typeof aVal === 'number' && typeof bVal === 'number') {
-          return (aVal - bVal) * multiplier
-        }
-
-        // Handle string comparison (dates are strings in yyyy-MM-dd)
+        if (typeof aVal === 'number' && typeof bVal === 'number') return (aVal - bVal) * multiplier
         return String(aVal).localeCompare(String(bVal)) * multiplier
       }
       return 0
     })
   }, [quotations, searchQuery, sortLevels])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    handleSave()
-  }
-
-  // Sort UI Handlers
-  const addSortLevel = () => {
-    setSortLevels([...sortLevels, { id: Math.random().toString(), column: "quotation_number", direction: "asc" }])
-  }
-
-  const removeSortLevel = (id: string) => {
-    if (sortLevels.length <= 1) return
-    setSortLevels(sortLevels.filter(l => l.id !== id))
-  }
-
-  const updateSortLevel = (id: string, field: keyof SortLevel, value: any) => {
-    setSortLevels(sortLevels.map(l => l.id === id ? { ...l, [field]: value } : l))
-  }
+  const addSortLevel = () => setSortLevels([...sortLevels, { id: Math.random().toString(), column: "quotation_number", direction: "asc" }])
+  const removeSortLevel = (id: string) => { if (sortLevels.length > 1) setSortLevels(sortLevels.filter(l => l.id !== id)) }
+  const updateSortLevel = (id: string, field: keyof SortLevel, value: any) => setSortLevels(sortLevels.map(l => l.id === id ? { ...l, [field]: value } : l))
 
   const sortColumns = [
     { label: dict.LABEL_QUOTATION_NUMBER, value: "quotation_number" },
-    { label: dict.LABEL_COMPANY_NAME, value: "company.name" },
-    { label: dict.LABEL_SKU, value: "product.sku" },
+    { label: dict.LABEL_COMPANY_NAME, value: "company_id" },
+    { label: dict.LABEL_SKU, value: "product_id" },
     { label: dict.LABEL_QUOTATION_DATE, value: "quotation_date" },
     { label: dict.LABEL_EXPIRY_DATE, value: "expiry_date" },
     { label: dict.LABEL_MIN_ORDER, value: "minimum_order" },
@@ -501,31 +555,59 @@ export default function QuotationsPage() {
 
   const variableValues = {
     quotation_number: formData.quotation_number,
-    quotation_date: formData.quotation_date ? format(new Date(formData.quotation_date), "dd MMMM yyyy", { locale: lang === 'id' ? require('date-fns/locale').id : undefined }) : "",
-    expiry_date: formData.expiry_date ? format(new Date(formData.expiry_date), "dd MMMM yyyy", { locale: lang === 'id' ? require('date-fns/locale').id : undefined }) : "",
-    company_name: companies.find(c => c.id === formData.company_id)?.name || "",
-    contact_person: companies.find(c => c.id === formData.company_id)?.contact_person || "",
-    product_name: products.find(p => p.id === formData.product_id)?.name || "",
+    quotation_date: formData.quotation_date ? format(new Date(formData.quotation_date), "dd MMMM yyyy") : "",
+    expiry_date: formData.expiry_date ? format(new Date(formData.expiry_date), "dd MMMM yyyy") : "",
+    company_name: selectedCompanyInfo?.name || "",
+    contact_person: selectedCompanyInfo?.contact_person || selectedCompanyInfo?.details?.contact_person || "",
+    product_name: selectedProductInfo?.name || (selectedProductInfo?.sku ? `${selectedProductInfo.sku} - ${selectedProductInfo.name}` : ""),
     delivery_address: formData.delivery_address || "",
-    price: new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US').format(formData.base_price),
-    delivery_price: new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US').format(formData.delivery_price),
-    min_order: new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US').format(formData.minimum_order),
+    price: new Intl.NumberFormat().format(formData.base_price),
+    delivery_price: new Intl.NumberFormat().format(formData.delivery_price),
+    min_order: new Intl.NumberFormat().format(formData.minimum_order),
     shrinkage: formData.shrinkage_tolerance.toString(),
     bank_accounts: formData.bank_accounts.map(b => b.name).join(", ")
   }
 
+  // Calculation logic for Quotation Unit Price
+  const totals = useMemo(() => {
+    const subtotal = formData.base_price + formData.delivery_price;
+    let taxTotal = 0;
+    const appliedTaxes = formData.tax_details.map(t => {
+      if (!t.enabled) return { ...t, amount: 0 };
+      const amt = (subtotal * Number(t.rate)) / 100;
+      taxTotal += amt;
+      return { ...t, amount: amt };
+    });
+    const grandTotal = subtotal + taxTotal;
+    return { subtotal, taxTotal, grandTotal, appliedTaxes };
+  }, [formData.base_price, formData.delivery_price, formData.tax_details])
+
+  if (!canView && !loading && !authLoading) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <div className="text-center space-y-2">
+          <AlertCircle className="size-8 text-destructive mx-auto" />
+          <h2 className="text-lg font-semibold">{dict.MSG_ACCESS_DENIED || "Access Denied"}</h2>
+          <p className="text-sm text-muted-foreground">{dict.MSG_NO_PERMISSION || "You do not have permission to view this page."}</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="page-container">
-      <div className="page-header">
+    <div className="page-container overflow-hidden">
+      <div className="page-header shrink-0">
         <h1 className="page-title flex items-center gap-2">
           <ClipboardList className="size-5 text-primary" />
           {dict.MENU_QUOTATION}
         </h1>
-
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading || loadingMore} title="Refresh Data">
+            <RefreshCw className={cn("size-4", (loading || loadingMore) && "animate-spin")} />
+          </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" onClick={() => handleOpenDialog()} className="h-9">
+              <Button size="sm" onClick={() => handleOpenDialog()} className="h-9" disabled={!canInsert}>
                 <Plus data-icon="inline-start" />
                 {dict.BUTTON_NEW_QUOTATION}
               </Button>
@@ -533,32 +615,34 @@ export default function QuotationsPage() {
             <DialogContent className="sm:max-w-3xl">
               <DialogHeader>
                 <DialogTitle>
-                  {editingItem ? dict.BUTTON_EDIT_QUOTATION : dict.BUTTON_NEW_QUOTATION}
+                  <ClipboardList className="size-5 mr-2 inline-block" />{editingItem ? dict.BUTTON_EDIT_QUOTATION : dict.BUTTON_NEW_QUOTATION}
                 </DialogTitle>
               </DialogHeader>
-
-              <form onSubmit={handleSubmit} id="quotation-form" className="flex flex-col gap-4 p-5  overflow-y-auto">
+              <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} id="quotation-form" className="p-6 flex-1 overflow-y-auto custom-scrollbar space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Basic Fields */}
                   <div className="space-y-4 md:col-span-2">
                     <div className="grid gap-2">
                       <Label htmlFor="qnum">{dict.LABEL_QUOTATION_NUMBER}</Label>
-                      <Input
-                        id="qnum"
-                        value={formData.quotation_number}
-                        onChange={e => setFormData({ ...formData, quotation_number: e.target.value })}
-                        disabled={!canEditNum}
-                      />
+                      <Input id="qnum" value={formData.quotation_number} onChange={e => setFormData({ ...formData, quotation_number: e.target.value })} disabled={editingItem && !canEdit} placeholder={dict.LABEL_AUTO_GENERATED} />
                     </div>
-
                     <div className="grid gap-2">
                       <Label>{dict.LABEL_COMPANY_NAME}</Label>
                       <LiveSearch
-                        data={companies}
+                        data={selectedCompanyInfo ? [selectedCompanyInfo] : []}
+                        fetchData={async (query) => {
+                          let q = supabase.from("companies").select("id, name, type, details").contains('type', ['Customer']).limit(8)
+                          if (query) {
+                            const searchStr = constructMultiWordSearch(query, ['name', 'details->>contact_person'])
+                            if (searchStr) q = q.or(searchStr)
+                          }
+                          const { data } = await q
+                          return (data || []).map((c: any) => ({ ...c, contact_person: c.details?.contact_person || "" }))
+                        }}
                         value={formData.company_id}
-                        onSelect={val => setFormData({ ...formData, company_id: val })}
+                        onSelect={(val, item) => { setFormData({ ...formData, company_id: val }); setSelectedCompanyInfo(item); }}
                         keyField="id"
                         displayField="name"
+                        defaultDisplay={selectedCompanyInfo?.name || ""}
                         searchColumns={["name", "contact_person"]}
                         visualColumns={[
                           { key: "name", header: dict.LABEL_COMPANY_NAME, className: "w-50", primary: true },
@@ -568,15 +652,12 @@ export default function QuotationsPage() {
                         emptyMessage={dict.NO_DATA}
                       />
                     </div>
-
                     <div className="grid gap-2">
                       <Label>{dict.LABEL_DELIVERY_ADDRESS}</Label>
                       {companyAddresses.length > 0 ? (
                         <Select value={formData.delivery_address} onValueChange={val => setFormData({ ...formData, delivery_address: val })}>
-                          <SelectTrigger className="w-full h-13">
-                            <SelectValue placeholder={dict.PLACEHOLDER_SELECT_ADDRESS} className="!text-lg" />
-                          </SelectTrigger>
-                          <SelectContent className="text-xl">
+                          <SelectTrigger className="w-full h-13"><SelectValue placeholder={dict.PLACEHOLDER_SELECT_ADDRESS} /></SelectTrigger>
+                          <SelectContent>
                             {companyAddresses.map((addr, idx) => (
                               <SelectItem key={idx} value={addr.address}>
                                 <div className="flex flex-col items-start text-sm">
@@ -588,30 +669,25 @@ export default function QuotationsPage() {
                           </SelectContent>
                         </Select>
                       ) : (
-                        <Input
-                          value={formData.delivery_address}
-                          onChange={e => setFormData({ ...formData, delivery_address: e.target.value })}
-                          placeholder={dict.PLACEHOLDER_ENTER_ADDRESS}
-                        />
+                        <Input value={formData.delivery_address} onChange={e => setFormData({ ...formData, delivery_address: e.target.value })} placeholder={dict.PLACEHOLDER_ENTER_ADDRESS} />
                       )}
                     </div>
-
-                    <div className="flex flex-col md:grid md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_SKU}</Label>
                         <LiveSearch
-                          data={products}
-                          value={formData.product_id}
-                          onSelect={val => {
-                            const selectedProduct = products.find(p => p.id === val)
-                            setFormData({
-                              ...formData,
-                              product_id: val,
-                              base_price: selectedProduct?.base_price || 0
-                            })
+                          data={selectedProductInfo ? [selectedProductInfo] : []}
+                          fetchData={async (query) => {
+                            let q = supabase.from("products").select("id, sku, name, base_price").limit(8)
+                            if (query) q = q.or(`sku.ilike.%${query}%,name.ilike.%${query}%`)
+                            const { data } = await q
+                            return data || []
                           }}
+                          value={formData.product_id}
+                          onSelect={(val, item) => { setFormData({ ...formData, product_id: val, base_price: (item as any)?.base_price || 0 }); setSelectedProductInfo(item); }}
                           keyField="id"
                           displayField={(p) => `${p.sku} - ${p.name}`}
+                          defaultDisplay={selectedProductInfo ? (selectedProductInfo.sku && selectedProductInfo.name ? `${selectedProductInfo.sku} - ${selectedProductInfo.name}` : selectedProductInfo.name || selectedProductInfo.sku || "") : ""}
                           searchColumns={["sku", "name"]}
                           visualColumns={[
                             { key: "sku", header: dict.LABEL_SKU, className: "w-15 font-mono", primary: true },
@@ -623,136 +699,106 @@ export default function QuotationsPage() {
                       </div>
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_BASE_PRICE}</Label>
-                        <NumberInput
-                          value={formData.base_price}
-                          onChange={val => setFormData({ ...formData, base_price: val })}
-                          rightBadge="/ L"
-                          leftBadge="Rp"
-                        />
+                        <NumberInput value={formData.base_price} onChange={val => setFormData({ ...formData, base_price: val })} rightBadge="/ L" leftBadge="Rp" />
                       </div>
                     </div>
-
-
                   </div>
-
-                  {/* Date/Expiry Section */}
-                  <div className="space-y-6 py-8 border rounded-lg p-4 bg-muted/10 h-fit">
+                  <div className="space-y-6 border rounded-lg p-4 bg-muted/10 h-fit">
                     <div className="grid gap-2">
                       <Label className="flex items-center gap-2"><Calendar className="size-4" /> {dict.LABEL_QUOTATION_DATE}</Label>
-                      <Input
-                        type="date"
-                        value={formData.quotation_date}
-                        onChange={e => setFormData({ ...formData, quotation_date: e.target.value })}
-                      />
+                      <Input type="date" value={formData.quotation_date} onChange={e => setFormData({ ...formData, quotation_date: e.target.value })} />
                     </div>
-
-
                     <div className="grid gap-2">
                       <Label className="flex items-center gap-2"><Clock className="size-4" /> {dict.LABEL_EXPIRY_DATE}</Label>
-                      <Input
-                        type="date"
-                        value={formData.expiry_date}
-                        onChange={e => handleDateChange(e.target.value)}
-                      />
+                      <Input type="date" value={formData.expiry_date} onChange={e => handleDateChange(e.target.value)} />
                     </div>
                     <div className="grid gap-2">
                       <Label>{dict.LABEL_VALIDITY_DAYS}</Label>
-                      <NumberInput
-                        value={formData.expiry_days}
-                        onChange={val => handleDaysChange(val)}
-                        rightBadge="Hari"
-                      />
+                      <NumberInput value={formData.expiry_days} onChange={val => handleDaysChange(val)} rightBadge="Hari" />
                     </div>
                   </div>
-
-                  {/* Row 3: SKU and Prices */}
                   <div className="space-y-4 md:col-span-3">
-
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div className="grid gap-2">
                         <Label htmlFor="minorder">{dict.LABEL_MIN_ORDER}</Label>
-                        <NumberInput
-                          id="minorder"
-                          value={formData.minimum_order}
-                          onChange={val => setFormData({ ...formData, minimum_order: val })}
-                          rightBadge="L"
-                        />
+                        <NumberInput id="minorder" value={formData.minimum_order} onChange={val => setFormData({ ...formData, minimum_order: val })} rightBadge="L" />
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="deliv_price">{dict.LABEL_TRANSPORT_COST}</Label>
-                        <NumberInput
-                          id="deliv_price"
-                          value={formData.delivery_price}
-                          onChange={val => setFormData({ ...formData, delivery_price: val })}
-                          leftBadge="Rp"
-                          rightBadge="/ L"
-                        />
+                        <NumberInput id="deliv_price" value={formData.delivery_price} onChange={val => setFormData({ ...formData, delivery_price: val })} leftBadge="Rp" rightBadge="/ L" />
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="shrinkage">{dict.LABEL_SHRINKAGE_TOLERANCE}</Label>
-                        <NumberInput
-                          id="shrinkage"
-                          value={formData.shrinkage_tolerance}
-                          onChange={val => setFormData({ ...formData, shrinkage_tolerance: val })}
-                          rightBadge="%"
-                        />
+                        <NumberInput id="shrinkage" value={formData.shrinkage_tolerance} onChange={val => setFormData({ ...formData, shrinkage_tolerance: val })} rightBadge="%" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>{dict.LABEL_PRICE_PER_L} ({dict.LABEL_SUBTOTAL})</Label>
+                        <div className="h-10 flex items-center px-3 border rounded bg-muted/50 font-mono font-bold text-primary">
+                          Rp {totals.subtotal.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Aligned Tax Section */}
+                    <div className="space-y-4 border rounded-lg p-4 bg-muted/10">
+                      <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider block border-b pb-2">{dict.LABEL_TAXES || "Taxes"}</Label>
+                      <div className="space-y-2">
+                        {formData.tax_details.map((tax, idx) => {
+                          const calculatedAmount = totals.appliedTaxes.find(t => t.name === tax.name)?.amount || 0;
+                          return (
+                            <div key={idx} className="flex items-center p-2 border rounded bg-background h-12 gap-4">
+                              <div className="w-24 shrink-0 font-medium">
+                                <Label htmlFor={`tax-${idx}`} className="cursor-pointer">{tax.name}</Label>
+                              </div>
+
+                              <div className="shrink-0 flex items-center justify-center w-12">
+                                <Switch id={`tax-${idx}`} checked={tax.enabled} onCheckedChange={(val) => {
+                                  const newTaxes = [...formData.tax_details];
+                                  newTaxes[idx].enabled = val;
+                                  setFormData({ ...formData, tax_details: newTaxes })
+                                }} />
+                              </div>
+
+                              <div className="w-28 shrink-0">
+                                <div style={{ opacity: tax.enabled ? 1 : 0.3 }} className="transition-opacity w-full">
+                                  <NumberInput
+                                    className="text-right font-mono text-xs"
+                                    containerClassName="h-8 bg-muted/50"
+                                    disabled
+                                    value={tax.rate}
+                                    onChange={() => { }}
+                                    rightBadge="%"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex-1 flex justify-end">
+                                <span className={cn(
+                                  "font-mono font-medium text-sm transition-opacity",
+                                  tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground"
+                                )}>
+                                  + Rp {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div className="flex justify-between items-center text-lg font-bold border-t pt-4 font-mono">
+                        <span>{dict.LABEL_GRAND_TOTAL || "Grand Total"} ({dict.LABEL_PRICE_PER_L}):</span>
+                        <span className="text-primary text-xl">Rp {totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     </div>
                   </div>
-
-                  {/* Empty space filler for Row 3 Right if needed, but not required in grid */}
                 </div>
-
-                <DropdownMenuSeparator className="my-2" />
-
-                <div className="space-y-6">
-                  <RichTextEditor
-                    label={dict.LABEL_CONTENT}
-                    value={formData.content}
-                    onChange={val => setFormData({ ...formData, content: val || "" })}
-                    isEnabled={formData.is_content_enabled}
-                    onToggleEnabled={val => setFormData({ ...formData, is_content_enabled: val })}
-                    placeholder={dict.PLACEHOLDER_EDITOR}
-                    variables={editorVariables}
-                    variableValues={variableValues}
-                  />
-                  <RichTextEditor
-                    label={dict.LABEL_NOTE}
-                    value={formData.note}
-                    onChange={val => setFormData({ ...formData, note: val || "" })}
-                    isEnabled={formData.is_note_enabled}
-                    onToggleEnabled={val => setFormData({ ...formData, is_note_enabled: val })}
-                    placeholder={dict.PLACEHOLDER_EDITOR}
-                    variables={editorVariables}
-                    variableValues={variableValues}
-                  />
-                  <RichTextEditor
-                    label={dict.LABEL_TERMS}
-                    value={formData.terms_conditions}
-                    onChange={val => setFormData({ ...formData, terms_conditions: val || "" })}
-                    isEnabled={formData.is_terms_enabled}
-                    onToggleEnabled={val => setFormData({ ...formData, is_terms_enabled: val })}
-                    placeholder={dict.PLACEHOLDER_EDITOR}
-                    variables={editorVariables}
-                    variableValues={variableValues}
-                  />
-                  <RichTextEditor
-                    label={dict.LABEL_CLOSING}
-                    value={formData.closing_remarks}
-                    onChange={val => setFormData({ ...formData, closing_remarks: val || "" })}
-                    isEnabled={formData.is_closing_enabled}
-                    onToggleEnabled={val => setFormData({ ...formData, is_closing_enabled: val })}
-                    placeholder={dict.PLACEHOLDER_EDITOR}
-                    variables={editorVariables}
-                    variableValues={variableValues}
-                  />
+                <div className="space-y-6 pt-4 border-t">
+                  <RichTextEditor label={dict.LABEL_CONTENT} value={formData.content} onChange={val => setFormData({ ...formData, content: val || "" })} isEnabled={formData.is_content_enabled} onToggleEnabled={val => setFormData({ ...formData, is_content_enabled: val })} placeholder={dict.PLACEHOLDER_EDITOR} variables={editorVariables} variableValues={variableValues} />
+                  <RichTextEditor label={dict.LABEL_NOTE} value={formData.note} onChange={val => setFormData({ ...formData, note: val || "" })} isEnabled={formData.is_note_enabled} onToggleEnabled={val => setFormData({ ...formData, is_note_enabled: val })} placeholder={dict.PLACEHOLDER_EDITOR} variables={editorVariables} variableValues={variableValues} />
+                  <RichTextEditor label={dict.LABEL_TERMS} value={formData.terms_conditions} onChange={val => setFormData({ ...formData, terms_conditions: val || "" })} isEnabled={formData.is_terms_enabled} onToggleEnabled={val => setFormData({ ...formData, is_terms_enabled: val })} placeholder={dict.PLACEHOLDER_EDITOR} variables={editorVariables} variableValues={variableValues} />
+                  <RichTextEditor label={dict.LABEL_CLOSING} value={formData.closing_remarks} onChange={val => setFormData({ ...formData, closing_remarks: val || "" })} isEnabled={formData.is_closing_enabled} onToggleEnabled={val => setFormData({ ...formData, is_closing_enabled: val })} placeholder={dict.PLACEHOLDER_EDITOR} variables={editorVariables} variableValues={variableValues} />
                 </div>
-
-                <DropdownMenuSeparator className="my-2" />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Bank Accounts Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t">
                   <div className="space-y-4 border rounded-lg p-4 bg-muted/10 h-fit">
                     <Label className="text-base font-semibold">{dict.LABEL_BANK_ACCOUNTS}</Label>
                     <div className="flex flex-col gap-3">
@@ -760,205 +806,66 @@ export default function QuotationsPage() {
                         const isSelected = formData.bank_accounts.some((b: any) => b.account_number === bank.account_number)
                         return (
                           <div key={idx} className="flex items-start space-x-3 bg-background p-3 rounded border">
-                            <Checkbox
-                              id={`bank-${idx}`}
-                              checked={isSelected}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setFormData({ ...formData, bank_accounts: [...formData.bank_accounts, bank] })
-                                } else {
-                                  setFormData({ ...formData, bank_accounts: formData.bank_accounts.filter((b: any) => b.account_number !== bank.account_number) })
-                                }
-                              }}
-                              className="mt-0.5"
-                            />
-                            <Label htmlFor={`bank-${idx}`} className="text-sm font-normal cursor-pointer leading-tight flex flex-col gap-1 w-full">
-                              <span className="font-semibold text-foreground">{bank.name} - {bank.branch}</span>
-                              <span className="text-muted-foreground">{bank.account_number} a/n {bank.account_name}</span>
-                            </Label>
+                            <Checkbox id={`bank-${idx}`} checked={isSelected} onCheckedChange={(checked) => { setFormData(prev => ({ ...prev, bank_accounts: checked ? [...prev.bank_accounts, bank] : prev.bank_accounts.filter((b: any) => b.account_number !== bank.account_number) })); }} />
+                            <Label htmlFor={`bank-${idx}`} className="text-sm font-normal cursor-pointer leading-tight flex flex-col gap-1 w-full"><span className="font-semibold">{bank.name} - {bank.branch}</span><span className="text-muted-foreground">{bank.account_number} a/n {bank.account_name}</span></Label>
                           </div>
                         )
                       })}
                     </div>
                   </div>
-
-                  {/* Discounts Section */}
-                  <div className="space-y-4 border rounded-lg p-2 bg-muted/10 h-fit">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-base font-semibold">{dict.LABEL_DISCOUNT_TERMS}</Label>
-                      <Button type="button" variant="outline" size="sm" onClick={() => setFormData({ ...formData, discounts: [...formData.discounts, { label: "", value: 0 }] })}>
-                        <Plus className="size-4" />
-                      </Button>
-                    </div>
+                  <div className="space-y-4 border rounded-lg p-4 bg-muted/10 h-fit">
+                    <div className="flex items-center justify-between"><Label className="text-base font-semibold">{dict.LABEL_DISCOUNT_TERMS}</Label><Button type="button" variant="outline" size="sm" onClick={() => setFormData({ ...formData, discounts: [...formData.discounts, { label: "", value: 0 }] })}><Plus className="size-4" /></Button></div>
                     <div className="space-y-3">
                       {formData.discounts.map((d, i) => (
-                        <div key={i} className="flex gap-2 items-center border-b border-muted pb-3 last:border-0">
-                          <Input
-                            className="flex-1 h-9"
-                            placeholder={dict.LABEL_DISCOUNT_NAME}
-                            value={d.label}
-                            onChange={e => {
-                              const newD = [...formData.discounts]
-                              newD[i].label = e.target.value
-                              setFormData({ ...formData, discounts: newD })
-                            }}
-                          />
-                          <div className="relative w-24 shrink-0">
-                            <NumberInput
-                              value={d.value}
-                              onChange={val => {
-                                const newD = [...formData.discounts]
-                                newD[i].value = val
-                                setFormData({ ...formData, discounts: newD })
-                              }}
-                              rightBadge="%"
-                              className="h-9"
-                            />
-                          </div>
-                          <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => setFormData({ ...formData, discounts: formData.discounts.filter((_, idx) => idx !== i) })}>
-                            <MinusCircle className="size-4" />
-                          </Button>
+                        <div key={i} className="flex gap-2 items-center border-b pb-3 last:border-0">
+                          <Input className="flex-1 h-9" placeholder={dict.LABEL_DISCOUNT_NAME} value={d.label} onChange={e => { const newD = [...formData.discounts]; newD[i].label = e.target.value; setFormData({ ...formData, discounts: newD }) }} />
+                          <div className="w-24 shrink-0"><NumberInput value={d.value} onChange={val => { const newD = [...formData.discounts]; newD[i].value = val; setFormData({ ...formData, discounts: newD }) }} rightBadge="%" className="h-9" /></div>
+                          <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => setFormData({ ...formData, discounts: formData.discounts.filter((_, idx) => idx !== i) })}><MinusCircle className="size-4" /></Button>
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
               </form>
-              <DialogFooter className="p-5 border-t bg-muted/5">
-                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-                  {dict.BUTTON_CANCEL}
-                </Button>
-                <Button type="submit" form="quotation-form" disabled={isSaving}  >
-                  {isSaving ? <ButtonLoader /> : <Save data-icon="inline-start" />}
-                  {dict.BUTTON_SAVE}
-                </Button>
+              <DialogFooter className="p-5 border-t bg-muted/5 shrink-0">
+                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>{dict.BUTTON_CANCEL}</Button>
+                <Button onClick={() => handleSave()} disabled={isSaving || (editingItem ? !canEdit : !canInsert)}>{isSaving ? <ButtonLoader /> : <Save data-icon="inline-start" />} {dict.BUTTON_SAVE}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      <div className="action-bar flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <div className="relative flex-1 w-full max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-          <Input
-            placeholder={dict.PLACEHOLDER_SEARCH}
-            className="pl-9"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-        </div>
-
+      <div className="action-bar shrink-0 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+        <div className="relative flex-1 w-full max-w-sm"><Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" /><Input placeholder={dict.PLACEHOLDER_SEARCH} className="pl-9" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></div>
         <Dialog open={isSortOpen} onOpenChange={setIsSortOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9">
-              <ArrowUpDown className="size-4 mr-2" />
-              Sort
-            </Button>
-          </DialogTrigger>
+          <DialogTrigger asChild><Button variant="outline" size="sm" className="h-9"><ArrowUpDown className="size-4 mr-2" />Sort</Button></DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>{dict.TITLE_SORT_SETTINGS}</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>{dict.TITLE_SORT_SETTINGS}</DialogTitle></DialogHeader>
             <div className="flex flex-col gap-4 p-5">
               {sortLevels.map((level, index) => (
                 <div key={level.id} className="flex items-center gap-3">
-                  <div className="w-17 shrink-0 font-semibold text-sm text-muted-foreground">
-                    {index === 0 ? dict.LABEL_SORT_BY : dict.LABEL_THEN_BY}
-                  </div>
-                  <Select value={level.column} onValueChange={(val) => updateSortLevel(level.id, "column", val)}>
-                    <SelectTrigger className="flex-1 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortColumns.map(col => (
-                        <SelectItem key={col.value} value={col.value}>{col.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 justify-start pl-3 pr-1"
-                    onClick={() => updateSortLevel(level.id, "direction", level.direction === "asc" ? "desc" : "asc")}
-                  >
-                    {level.direction === "asc" ? (
-                      <>
-                        <ArrowUpAZ className="size-4 mr-2" />
-
-                      </>
-                    ) : (
-                      <>
-                        <ArrowDownZA className="size-4 mr-2" />
-
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-9 text-destructive hover:bg-destructive/10"
-                    disabled={sortLevels.length <= 1}
-                    onClick={() => removeSortLevel(level.id)}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                  <div className="w-17 shrink-0 font-semibold text-sm text-muted-foreground">{index === 0 ? dict.LABEL_SORT_BY : dict.LABEL_THEN_BY}</div>
+                  <Select value={level.column} onValueChange={(val) => updateSortLevel(level.id, "column", val)}><SelectTrigger className="flex-1 h-9"><SelectValue /></SelectTrigger><SelectContent>{sortColumns.map(col => (<SelectItem key={col.value} value={col.value}>{col.label}</SelectItem>))}</SelectContent></Select>
+                  <Button variant="outline" size="sm" className="h-9" onClick={() => updateSortLevel(level.id, "direction", level.direction === "asc" ? "desc" : "asc")}>{level.direction === "asc" ? <ArrowUpAZ className="size-4" /> : <ArrowDownZA className="size-4" />}</Button>
+                  <Button variant="ghost" size="icon" className="size-9 text-destructive" disabled={sortLevels.length <= 1} onClick={() => removeSortLevel(level.id)}><Trash2 className="size-4" /></Button>
                 </div>
               ))}
-              <Button variant="outline" size="sm" className="w-fit mt-2" onClick={addSortLevel}>
-                <Plus className="size-4 mr-2" />
-                {dict.BUTTON_ADD_LEVEL}
-              </Button>
+              <Button variant="outline" size="sm" className="w-fit mt-2" onClick={addSortLevel}><Plus className="size-4 mr-2" />{dict.BUTTON_ADD_LEVEL}</Button>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsSortOpen(false)} className="flex-1">
-                <X data-icon="inline-start" />
-                {dict.BUTTON_CANCEL}
-              </Button>
-              <Button onClick={() => setIsSortOpen(false)} className="w-full"><Check data-icon="inline-start" />Apply</Button>
-            </DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setIsSortOpen(false)}>{dict.BUTTON_CANCEL}</Button><Button onClick={() => setIsSortOpen(false)}>Apply</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      <Card className="data-card">
+      <Card ref={containerRef} className="data-card flex-1 overflow-auto custom-scrollbar">
         <Table>
           <TableHeader className="sticky top-0 z-10">
             <TableRow>
-              <TableHead>
-                <div className="flex items-center gap-1.5" title="Priority Level">
-                  {dict.LABEL_QUOTATION_NUMBER}
-                  {sortLevels.find(l => l.column === 'quotation_number') && (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold">
-                      {sortLevels.findIndex(l => l.column === 'quotation_number') + 1}
-                      {sortLevels.find(l => l.column === 'quotation_number')?.direction === 'asc' ? <ArrowUp className="size-2.5" /> : <ArrowDown className="size-2.5" />}
-                    </span>
-                  )}
-                </div>
-              </TableHead>
-              <TableHead>
-                <div className="flex items-center gap-1.5">
-                  {dict.LABEL_COMPANY_NAME}
-                  {sortLevels.find(l => l.column === 'company.name') && (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold">
-                      {sortLevels.findIndex(l => l.column === 'company.name') + 1}
-                      {sortLevels.find(l => l.column === 'company.name')?.direction === 'asc' ? <ArrowUp className="size-2.5" /> : <ArrowDown className="size-2.5" />}
-                    </span>
-                  )}
-                </div>
-              </TableHead>
+              <TableHead>{dict.LABEL_QUOTATION_NUMBER}</TableHead>
+              <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
               <TableHead>{dict.LABEL_SKU}</TableHead>
-              <TableHead>
-                <div className="flex items-center gap-1.5">
-                  {dict.LABEL_QUOTATION_DATE}
-                  {sortLevels.find(l => l.column === 'quotation_date') && (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold">
-                      {sortLevels.findIndex(l => l.column === 'quotation_date') + 1}
-                      {sortLevels.find(l => l.column === 'quotation_date')?.direction === 'asc' ? <ArrowUp className="size-2.5" /> : <ArrowDown className="size-2.5" />}
-                    </span>
-                  )}
-                </div>
-              </TableHead>
+              <TableHead>{dict.LABEL_QUOTATION_DATE}</TableHead>
               <TableHead>{dict.LABEL_EXPIRY_DATE}</TableHead>
               <TableHead>{dict.LABEL_MIN_ORDER}</TableHead>
               <TableHead>{dict.LABEL_STATUS}</TableHead>
@@ -967,101 +874,65 @@ export default function QuotationsPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow>
-                <TableCell colSpan={8} className="p-0"><SectionLoader /></TableCell>
-              </TableRow>
+              <TableRow><TableCell colSpan={8} className="p-0"><SectionLoader /></TableCell></TableRow>
             ) : sortedAndFilteredData.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell>
-              </TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell></TableRow>
             ) : sortedAndFilteredData.map(q => (
               <TableRow key={q.id} className="group">
                 <TableCell className="font-medium">{q.quotation_number}</TableCell>
                 <TableCell>{q.company?.name || "-"}</TableCell>
                 <TableCell className="text-xs font-mono">{q.product?.sku || "-"}</TableCell>
                 <TableCell>{format(new Date(q.quotation_date), "dd MMM yyyy")}</TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-0.5">
-                    <span>{format(new Date(q.expiry_date), "dd MMM yyyy")}</span>
-                    <span className="text-[10px] text-muted-foreground">{q.expiry_days} {lang === 'id' ? 'hari lagi' : 'days left'}</span>
-                  </div>
-                </TableCell>
+                <TableCell><div>{format(new Date(q.expiry_date), "dd MMM yyyy")}</div><div className="text-[10px] text-muted-foreground">{q.expiry_days} days left</div></TableCell>
                 <TableCell>{q.minimum_order}</TableCell>
-                <TableCell>
-                  <div className={cn(
-                    "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase w-fit",
-                    q.status === "Accepted" ? "bg-green-100 text-green-700" :
-                      q.status === "Rejected" ? "bg-red-100 text-red-700" :
-                        q.status === "Sent" ? "bg-blue-100 text-blue-700" :
-                          "bg-amber-100 text-amber-700"
-                  )}>
-                    {q.status}
-                  </div>
-                </TableCell>
+                <TableCell><div className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase", q.status === "Accepted" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>{q.status}</div></TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(q)}>
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button variant="table_action" size="sm" onClick={() => handlePrint(q)}>
-                      <Printer className="size-4" />
-                    </Button>
+                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(q)} disabled={!canEdit}><Pencil className="size-4" /></Button>
+                    <Button variant="table_action" size="sm" onClick={() => handlePrint(q)} disabled={!canPrint}><Printer className="size-4" /></Button>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="secondary" size="icon" className="size-8">
-                          <ChevronDown className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
+                      <DropdownMenuTrigger asChild><Button variant="secondary" size="icon" className="size-8"><ChevronDown className="size-4" /></Button></DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>
-                            <CheckCircle2 className="size-4 mr-2" /> Status
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuPortal>
-                            <DropdownMenuSubContent>
-                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Sent')} className="text-blue-600">
-                                Sent
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Accepted')} className="text-green-600">
-                                Accepted
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Rejected')} className="text-red-700">
-                                Rejected
-                              </DropdownMenuItem>
-                            </DropdownMenuSubContent>
-                          </DropdownMenuPortal>
-                        </DropdownMenuSub>
-                        {canDelete && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(q.id)}>
-                              <Trash2 className="size-4 mr-2" /> {dict.BUTTON_DELETE}
-                            </DropdownMenuItem>
-                          </>
-                        )}
+                        <DropdownMenuSub><DropdownMenuSubTrigger><CheckCircle2 className="size-4 mr-2" /> Status</DropdownMenuSubTrigger><DropdownMenuPortal><DropdownMenuSubContent><DropdownMenuItem onClick={() => updateStatus(q.id, 'Sent')} className="text-blue-600">Sent</DropdownMenuItem><DropdownMenuItem onClick={() => updateStatus(q.id, 'Accepted')} className="text-green-600">Accepted</DropdownMenuItem></DropdownMenuSubContent></DropdownMenuPortal></DropdownMenuSub>
+                        {canDelete && <><DropdownMenuSeparator /><DropdownMenuItem className="text-destructive" onClick={() => handleDelete(q.id)}><Trash2 className="size-4 mr-2" /> {dict.BUTTON_DELETE}</DropdownMenuItem></>}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
                 </TableCell>
               </TableRow>
             ))}
+
+            {/* Infinite Scroll Sentinel & Loader */}
+            <TableRow ref={observerTarget} className="border-0">
+              <TableCell colSpan={8} className="p-0 border-0 overflow-hidden">
+                {loadingMore && (
+                  <div className="relative h-24 w-full">
+                    <SectionLoader />
+                  </div>
+                )}
+                {!hasMore && quotations.length > 0 && !loading && (
+                  <div className="text-center py-3 text-xs text-danger/70 select-none">
+                    — End of data —
+                  </div>
+                )}
+              </TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </Card>
-
       {previewDoc && (
         <Gallery
           docs={[previewDoc]}
           initialIndex={0}
           labels={{
-            previewDocument: "Preview Document",
+            previewDocument: "Preview Quotation",
             clickToPreview: "Click to preview",
             previousPage: "Previous",
             nextPage: "Next",
             pageLabel: "Page",
             closePreview: "Close",
-            download: "Download",
-            sendEmail: "Send Email",
+            download: "Download PDF",
+            sendEmail: "Send to Customer",
             confirmEmail: "Are you sure you want to send this quotation to"
           }}
           onDownload={handleDownload}

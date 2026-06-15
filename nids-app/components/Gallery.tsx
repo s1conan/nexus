@@ -34,7 +34,6 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-
 type Doc = {
     title: string;
     description: string;
@@ -42,6 +41,8 @@ type Doc = {
     pdf?: string;
     id?: string;
     customerEmail?: string;
+    contacts?: { name: string, email?: string }[];
+    raw?: any;
 };
 
 type GalleryProps = {
@@ -71,6 +72,10 @@ export default function Gallery({ docs, initialIndex, labels, onDownload, onSend
     const [activeDocIndex, setActiveDocIndex] = useState<number | null>(initialIndex);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [isSending, setIsSending] = useState(false);
+
+    // Email Selection Dialog State
+    const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+    const [selectedEmail, setSelectedEmail] = useState("");
 
     // PDF State
     const [numPages, setNumPages] = useState<number | null>(null);
@@ -189,19 +194,37 @@ export default function Gallery({ docs, initialIndex, labels, onDownload, onSend
         );
     }
 
-    async function handleSendEmail() {
+    function handleSendEmailClick() {
         if (!activeDoc || !onSendEmail) return;
-        if (!activeDoc.customerEmail) {
-            alert("Customer email not found.");
-            return;
-        }
-        if (confirm(`${labels.confirmEmail} ${activeDoc.customerEmail}?`)) {
-            setIsSending(true);
-            try {
-                await onSendEmail(activeDoc);
-            } finally {
-                setIsSending(false);
+
+        const availableContacts = activeDoc.contacts?.filter(c => c.email) || [];
+
+        if (availableContacts.length > 0) {
+            // Pre-select the first available email
+            setSelectedEmail(availableContacts[0].email || "");
+            setIsEmailDialogOpen(true);
+        } else {
+            // Fallback to original behavior if no contacts array is provided
+            if (!activeDoc.customerEmail) {
+                alert("Customer email not found.");
+                return;
             }
+            if (confirm(`${labels.confirmEmail} ${activeDoc.customerEmail}?`)) {
+                sendEmailDirectly(activeDoc.customerEmail);
+            }
+        }
+    }
+
+    async function sendEmailDirectly(emailToUse: string) {
+        if (!activeDoc || !onSendEmail) return;
+        try {
+            setIsSending(true);
+            await onSendEmail({ ...activeDoc, customerEmail: emailToUse });
+        } catch (error) {
+            console.error('Failed to send email:', error);
+        } finally {
+            setIsSending(false);
+            setIsEmailDialogOpen(false);
         }
     }
 
@@ -364,64 +387,116 @@ export default function Gallery({ docs, initialIndex, labels, onDownload, onSend
     }
 
     return (
-        <Dialog open={activeDocIndex !== null} onOpenChange={handleClose} modal={false}>
-            {/* Fixed height to ensure footer never clips */}
-            <DialogContent className="sm:max-w-4xl max-w-[95vw] h-[88vh] sm:max-h-[88vh] flex flex-col p-0 overflow-hidden shadow-2xl border-none">
-                <DialogHeader className="shrink-0">
-                    <DialogTitle className="text-sm font-bold tracking-tight"><FileText className="size-5 mr-2 inline-block" />{labels.previewDocument}</DialogTitle>
-                    {activeDoc && (
-                        <DialogDescription className="flex items-center gap-1.5 ">
-                            {activeDoc.title} <span className="">•</span> {activeDoc.description}
+        <>
+            <Dialog open={activeDocIndex !== null} onOpenChange={handleClose} modal={false}>
+                {/* Fixed height to ensure footer never clips */}
+                <DialogContent className="sm:max-w-4xl max-w-[95vw] h-[88vh] sm:max-h-[88vh] flex flex-col p-0 overflow-hidden shadow-2xl border-none">
+                    <DialogHeader className="shrink-0">
+                        <DialogTitle className="text-sm font-bold tracking-tight"><FileText className="size-5 mr-2 inline-block" />{labels.previewDocument}</DialogTitle>
+                        {activeDoc && (
+                            <DialogDescription className="flex items-center gap-1.5 ">
+                                {activeDoc.title} <span className="">•</span> {activeDoc.description}
+                            </DialogDescription>
+                        )}
+                    </DialogHeader>
+
+                    {/* Main Content Area - flex-1 with min-h-0 ensures it shrinks to fit available space */}
+                    <div className="flex-1 min-h-0 w-full relative group bg-neutral-50/10 overflow-hidden">
+                        {renderContent()}
+
+                        {hasMultipleImages && !activeDoc?.pdf && (
+                            <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                    variant="secondary"
+                                    size="icon"
+                                    onClick={goToPrevious}
+                                    className="pointer-events-auto rounded-full shadow-lg h-10 w-10"
+                                >
+                                    <ChevronLeft size={24} />
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    size="icon"
+                                    onClick={goToNext}
+                                    className="pointer-events-auto rounded-full shadow-lg h-10 w-10"
+                                >
+                                    <ChevronRight size={24} />
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => onDownload?.(activeDoc!)}
+                            className="gap-2"
+                        >
+                            <Download className="size-4" />
+                            {labels.download}
+                        </Button>
+                        <Button
+                            variant="default"
+                            onClick={handleSendEmailClick}
+                            disabled={isSending || !onSendEmail}
+                            className="gap-2 px-6"
+                        >
+                            {isSending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+                            {labels.sendEmail}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Email Selection Dialog */}
+            <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle><Mail className="size-5 mr-2 inline-block" />Select Email Recipient</DialogTitle>
+                        <DialogDescription>
+                            Choose the contact person to receive this document.
                         </DialogDescription>
-                    )}
-                </DialogHeader>
-
-                {/* Main Content Area - flex-1 with min-h-0 ensures it shrinks to fit available space */}
-                <div className="flex-1 min-h-0 w-full relative group bg-neutral-50/10 overflow-hidden">
-                    {renderContent()}
-
-                    {hasMultipleImages && !activeDoc?.pdf && (
-                        <div className="absolute inset-0 flex items-center justify-between px-4 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                                variant="secondary"
-                                size="icon"
-                                onClick={goToPrevious}
-                                className="pointer-events-auto rounded-full shadow-lg h-10 w-10"
+                    </DialogHeader>
+                    <div className="flex flex-col gap-3 p-4">
+                        {activeDoc?.contacts?.filter(c => c.email).map((contact, idx) => (
+                            <div
+                                key={idx}
+                                className={cn(
+                                    "flex items-center gap-3 p-2 rounded-lg cursor-pointer border transition-colors",
+                                    selectedEmail === contact.email ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                                )}
+                                onClick={() => setSelectedEmail(contact.email || "")}
                             >
-                                <ChevronLeft size={24} />
-                            </Button>
-                            <Button
-                                variant="secondary"
-                                size="icon"
-                                onClick={goToNext}
-                                className="pointer-events-auto rounded-full shadow-lg h-10 w-10"
-                            >
-                                <ChevronRight size={24} />
-                            </Button>
-                        </div>
-                    )}
-                </div>
-
-                <DialogFooter>
-                    <Button
-                        variant="outline"
-                        onClick={() => onDownload?.(activeDoc!)}
-                        className="gap-2"
-                    >
-                        <Download className="size-4" />
-                        {labels.download}
-                    </Button>
-                    <Button
-                        variant="default"
-                        onClick={handleSendEmail}
-                        disabled={isSending || !onSendEmail}
-                        className="gap-2 px-6"
-                    >
-                        {isSending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
-                        {labels.sendEmail}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                                <div className="flex flex-col flex-1">
+                                    <span className="font-semibold text-sm flex items-center gap-4">
+                                        {contact.name}
+                                        {(contact as any).description && <span className="text-muted-foreground text-xs font-normal">({(contact as any).description})</span>}
+                                    </span>
+                                    <span className="text-muted-foreground text-xs">{contact.email}</span>
+                                </div>
+                                <div className={cn(
+                                    "size-4 rounded-full border flex items-center justify-center",
+                                    selectedEmail === contact.email ? "border-primary" : "border-muted-foreground"
+                                )}>
+                                    {selectedEmail === contact.email && <div className="size-2.5 bg-primary rounded-full" />}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsEmailDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => sendEmailDirectly(selectedEmail)}
+                            disabled={!selectedEmail || isSending}
+                        >
+                            {isSending ? <Loader2 className="size-4 animate-spin mr-2" /> : <Mail className="size-4 mr-2" />}
+                            Send Email
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }

@@ -1,7 +1,6 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import DashboardLayout from "@/components/dashboard-layout"
 import { useAuth } from "@/components/auth-provider"
 import { MdiProvider } from "@/components/mdi-provider"
 import { MdiLayout } from "@/components/mdi-layout"
@@ -13,7 +12,8 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const isPublicPage = pathname === "/" || 
                        pathname === "/signup" || 
                        pathname === "/reset-password" || 
-                       pathname?.startsWith("/auth/")
+                       pathname?.startsWith("/auth/") ||
+                       pathname?.startsWith("/verify/")
 
   if (loading) {
     return <FullPageLoader />

@@ -5,13 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from "@/components/ui/table"
 import {
   Dialog,
@@ -36,11 +36,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { 
-  Tooltip, 
-  TooltipContent, 
-  TooltipProvider, 
-  TooltipTrigger 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
 } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
@@ -58,13 +58,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { 
-  User, 
-  Mail, 
-  Settings, 
-  Save, 
-  Trash2, 
-  Plus, 
+import {
+  User,
+  Mail,
+  Settings,
+  Save,
+  Trash2,
+  Plus,
   ArrowRight,
   ShieldCheck,
   Package,
@@ -93,27 +93,27 @@ export default function ComponentTestPage() {
   const triggerToast = (type: 'success' | 'error' | 'info' | 'security' | 'warning') => {
     if (type === 'success') {
       notify.success(
-        dict.SIGNUP_SUCCESS_TITLE || "Action Successful", 
+        dict.SIGNUP_SUCCESS_TITLE || "Action Successful",
         dict.SIGNUP_SUCCESS_MSG || "Your changes have been saved."
       )
     } else if (type === 'error') {
       notify.error(
-        dict.ERROR_UNEXPECTED || "Operation Failed", 
+        dict.ERROR_UNEXPECTED || "Operation Failed",
         dict.ERROR_SUBMIT_FAILED || "Issue processing request."
       )
     } else if (type === 'warning') {
       notify.warning(
-        "System Alert", 
+        "System Alert",
         "Your session is about to expire."
       )
     } else if (type === 'security') {
       notify.security(
-        dict.MSG_RESET_LINK_SENT || "Security Link Dispatched", 
+        dict.MSG_RESET_LINK_SENT || "Security Link Dispatched",
         dict.MSG_RESET_SENT || "Check your email shortly."
       )
     } else {
       notify.info(
-        "System Notification", 
+        "System Notification",
         "New updates are available."
       )
     }
@@ -125,7 +125,7 @@ export default function ComponentTestPage() {
   }
 
   return (
-    <div className="container mx-auto py-10 px-4 space-y-16 pb-40">
+    <div className="page-container">
       {showFullLoader && <FullPageLoader message="Testing Full Page Loader..." />}
 
       <section className="space-y-4">
@@ -144,7 +144,7 @@ export default function ComponentTestPage() {
           </div>
           <h2 className="text-3xl font-bold">Loaders & Animations</h2>
         </div>
-        
+
         <div className="grid gap-8 md:grid-cols-2">
           <Card className="shadow-lg border-primary/5">
             <CardHeader>
@@ -206,9 +206,9 @@ export default function ComponentTestPage() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-destructive">Error State (Aria-Invalid)</Label>
-                  <Input 
-                    defaultValue="Invalid input" 
-                    aria-invalid="true" 
+                  <Input
+                    defaultValue="Invalid input"
+                    aria-invalid="true"
                   />
                 </div>
               </div>
@@ -435,20 +435,20 @@ export default function ComponentTestPage() {
                     </SheetDescription>
                   </SheetHeader>
                   <div className="py-10 space-y-6">
-                     <div className="space-y-4">
-                        <Label>Notification Channel</Label>
-                        <Select defaultValue="email">
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="email">Email</SelectItem>
-                            <SelectItem value="sms">SMS</SelectItem>
-                          </SelectContent>
-                        </Select>
-                     </div>
-                     <div className="flex items-center justify-between">
-                        <Label>Silent Mode</Label>
-                        <Switch />
-                     </div>
+                    <div className="space-y-4">
+                      <Label>Notification Channel</Label>
+                      <Select defaultValue="email">
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="email">Email</SelectItem>
+                          <SelectItem value="sms">SMS</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label>Silent Mode</Label>
+                      <Switch />
+                    </div>
                   </div>
                 </SheetContent>
               </Sheet>
@@ -478,27 +478,27 @@ export default function ComponentTestPage() {
                 <CardDescription>Visual summary of system health.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-3">
-                 <div className="p-4 border rounded-xl bg-primary/5 space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase font-bold">Revenue</p>
-                    <p className="text-2xl font-bold">$124,000</p>
-                 </div>
-                 <div className="p-4 border rounded-xl bg-emerald-500/5 space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase font-bold">Orders</p>
-                    <p className="text-2xl font-bold">1,420</p>
-                 </div>
-                 <div className="p-4 border rounded-xl bg-amber-500/5 space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase font-bold">Pending</p>
-                    <p className="text-2xl font-bold">12</p>
-                 </div>
+                <div className="p-4 border rounded-xl bg-primary/5 space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase font-bold">Revenue</p>
+                  <p className="text-2xl font-bold">$124,000</p>
+                </div>
+                <div className="p-4 border rounded-xl bg-emerald-500/5 space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase font-bold">Orders</p>
+                  <p className="text-2xl font-bold">1,420</p>
+                </div>
+                <div className="p-4 border rounded-xl bg-amber-500/5 space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase font-bold">Pending</p>
+                  <p className="text-2xl font-bold">12</p>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
           <TabsContent value="details" className="mt-6">
-             <Card>
-                <CardContent className="p-12 text-center text-muted-foreground">
-                   Detailed specifications and technical properties would appear here.
-                </CardContent>
-             </Card>
+            <Card>
+              <CardContent className="p-12 text-center text-muted-foreground">
+                Detailed specifications and technical properties would appear here.
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </section>
@@ -560,9 +560,9 @@ export default function ComponentTestPage() {
         <div className="flex flex-col items-center gap-2">
           <p className="text-sm text-muted-foreground">Nexus Integrated Distribution System - UI Component Library v1.1</p>
           <div className="flex gap-4">
-             <Badge variant="outline" className="text-[10px]">React 19</Badge>
-             <Badge variant="outline" className="text-[10px]">Tailwind 4</Badge>
-             <Badge variant="outline" className="text-[10px]">shadcn/ui</Badge>
+            <Badge variant="outline" className="text-[10px]">React 19</Badge>
+            <Badge variant="outline" className="text-[10px]">Tailwind 4</Badge>
+            <Badge variant="outline" className="text-[10px]">shadcn/ui</Badge>
           </div>
         </div>
       </footer>

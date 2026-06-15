@@ -203,6 +203,7 @@ interface DeliveryOrderData {
   do_date: string
   shipment_date: string
   company_name: string
+  supplier_name?: string
   product_name: string
   quantity: number
   driver_name: string
@@ -299,6 +300,9 @@ export async function generateDeliveryOrderPDF(company: CompanyInfo, data: Deliv
   currentY += 5
   
   doc.text(`Kepada: ${data.company_name}`, col1, currentY)
+  doc.text(`Origin: ${data.supplier_name || "-"}`, col2, currentY)
+  currentY += 5
+
   doc.text(`Shipment: ${format(new Date(data.shipment_date), "dd/MM/yyyy")}`, col2, currentY)
   currentY += 10
 
