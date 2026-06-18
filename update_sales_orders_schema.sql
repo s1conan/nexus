@@ -1,5 +1,5 @@
--- Update Purchase Orders table to support new fields
-ALTER TABLE public.purchase_orders 
+-- Update Sales Orders table to support new fields
+ALTER TABLE public.sales_orders 
 ADD COLUMN IF NOT EXISTS quotation_id UUID REFERENCES public.quotations(id) ON DELETE SET NULL,
 ADD COLUMN IF NOT EXISTS term_of_payment TEXT,
 ADD COLUMN IF NOT EXISTS delivery_address TEXT,

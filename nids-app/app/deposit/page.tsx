@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
+import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
+import { useDebounce } from "@/hooks/use-debounce"
 import {
   Table,
   TableBody,
@@ -61,6 +63,8 @@ import { LiveSearch } from "@/components/live-search"
 import { format } from "date-fns"
 import { ButtonLoader } from "@/components/button-loader"
 
+const PAGE_SIZE = 50
+
 export default function DepositsPage() {
   const { dict, lang } = useDictionary()
   const { hasPermission, profile, loading: authLoading } = useAuth()
@@ -70,6 +74,9 @@ export default function DepositsPage() {
   const [appBanks, setAppBanks] = useState<any[]>([])
   const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
@@ -78,8 +85,12 @@ export default function DepositsPage() {
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
   const [selectedProductInfo, setSelectedProductInfo] = useState<any>(null)
+
+  const observerTarget = useRef(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -106,32 +117,92 @@ export default function DepositsPage() {
   const canPrint = hasPermission("deposit", "print")
 
   // Fetch Data
-  const fetchData = useCallback(async () => {
-    setLoading(true)
+  const fetchData = useCallback(async (isInitial = false) => {
+    if (isInitial) {
+      setLoading(true)
+      setOffset(0)
+    } else {
+      setLoadingMore(true)
+    }
+
     try {
-      const [dRes, bRes, tRes] = await Promise.all([
-        supabase.from("deposits").select("*, company:companies(id, name, details->contact_person)").order("created_at", { ascending: false }),
-        supabase.from("app_settings").select("value").eq("category", "company").eq("name", "bank").maybeSingle(),
-        supabase.from("app_settings").select("*").eq("category", "tax")
-      ])
+      const currentOffset = isInitial ? 0 : offset
 
-      if (dRes.error) throw dRes.error
-      if (bRes.error) throw bRes.error
-      if (tRes.error) throw tRes.error
+      // Fetch settings in parallel only on initial load
+      if (isInitial) {
+        const [bRes, tRes] = await Promise.all([
+          supabase.from("app_settings").select("value").eq("category", "company").eq("name", "bank").maybeSingle(),
+          supabase.from("app_settings").select("*").eq("category", "tax")
+        ])
+        if (bRes.error) throw bRes.error
+        if (tRes.error) throw tRes.error
+        setAppBanks(bRes.data?.value || [])
+        setGlobalTaxes(tRes.data || [])
+      }
 
-      setDeposits(dRes.data || [])
-      setAppBanks(bRes.data?.value || [])
-      setGlobalTaxes(tRes.data || [])
+      let query = supabase
+        .from("deposits")
+        .select("*, company:companies(id, name, details->contact_person), product:products(id, name, sku)")
+        .order("created_at", { ascending: false })
+        .range(currentOffset, currentOffset + PAGE_SIZE - 1)
+
+      if (debouncedSearchQuery) {
+        const searchStr = constructMultiWordSearch(debouncedSearchQuery, ['deposit_number', 'company.name'])
+        if (searchStr) query = query.or(searchStr)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+
+      if (data) {
+        if (isInitial) {
+          setDeposits(data)
+        } else {
+          setDeposits(prev => {
+            const newItems = data.filter((item: any) => !prev.some(p => p.id === item.id))
+            return [...prev, ...newItems]
+          })
+        }
+        setHasMore(data.length === PAGE_SIZE)
+        setOffset(currentOffset + data.length)
+      }
     } catch (err: any) {
       notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }, [supabase, dict.MSG_DATA_FETCH_FAILED])
+  }, [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED])
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    fetchData(true)
+  }, [debouncedSearchQuery])
+
+  // Ordinary Infinite Scroll
+  useEffect(() => {
+    const rootElement = containerRef.current;
+    if (!rootElement) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        const entry = entries[0]
+        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
+          fetchData(false)
+        }
+      },
+      {
+        root: rootElement,
+        rootMargin: "400px",
+        threshold: 0,
+      }
+    )
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current)
+    }
+
+    return () => observer.disconnect()
+  }, [fetchData, hasMore, loading, loadingMore])
 
   // Calculation logic
   const totals = useMemo(() => {
@@ -184,6 +255,7 @@ export default function DepositsPage() {
       setFormData({
         deposit_number: item.deposit_number,
         company_id: item.company_id,
+        product_id: item.product_id || "",
         deposit_date: item.deposit_date,
         qty_liter: item.qty_liter || 0,
         price_per_liter: item.price_per_liter || 0,
@@ -199,10 +271,12 @@ export default function DepositsPage() {
       if (!canInsert) return
       setEditingItem(null)
       setSelectedCompanyInfo(null)
+      setSelectedProductInfo(null)
 
       setFormData({
         deposit_number: "", // Will be auto-generated on save if empty
         company_id: "",
+        product_id: "",
         deposit_date: format(new Date(), "yyyy-MM-dd"),
         qty_liter: 0,
         price_per_liter: 0,
@@ -222,13 +296,27 @@ export default function DepositsPage() {
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      const payload = { 
+      const payload = {
         ...formData,
         total_amount: totals.grandTotal // Ensure we use the latest calculation
       }
       if (editingItem) {
         const { error } = await supabase.from("deposits").update(payload).eq("id", editingItem.id)
         if (error) throw error
+
+        // Fetch updated row to keep local state in sync with relations
+        const { data: updatedRow, error: fetchError } = await supabase
+          .from("deposits")
+          .select("*, company:companies(id, name, details->contact_person), product:products(id, name, sku)")
+          .eq("id", editingItem.id)
+          .single();
+        
+        if (!fetchError && updatedRow) {
+          setDeposits(prev => prev.map(d => d.id === editingItem.id ? updatedRow : d));
+        } else {
+          fetchData(true);
+        }
+
         notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_DEPOSIT_SAVED)
       } else {
         // Generate document number if empty
@@ -241,9 +329,9 @@ export default function DepositsPage() {
         const { error } = await supabase.from("deposits").insert([payload])
         if (error) throw error
         notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_DEPOSIT_SAVED)
+        fetchData(true)
       }
       setIsOpen(false)
-      fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     } finally {
@@ -252,12 +340,15 @@ export default function DepositsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(dict.MSG_DELETE_CONFIRM)) return
+    const item = deposits.find(d => d.id === id)
+    const label = item ? `[${item.deposit_number}]` : ""
+    if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
       const { error } = await supabase.from("deposits").delete().eq("id", id)
       if (error) throw error
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_DEPOSIT_DELETED)
-      fetchData()
+      
+      setDeposits(prev => prev.filter(d => d.id !== id))
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     }
@@ -267,30 +358,13 @@ export default function DepositsPage() {
     try {
       const { error } = await supabase.from("deposits").update({ status }).eq("id", id)
       if (error) throw error
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_DEPOSIT_STATUS_UPDATED)
-      fetchData()
+      
+      setDeposits(prev => prev.map(d => d.id === id ? { ...d, status } : d))
+      notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), dict.MSG_DEPOSIT_STATUS_UPDATED.replace("%data%", ""))
     } catch (err: any) {
       notify.error(dict.MSG_UPDATE_FAILED, err.message)
     }
   }
-
-  // Search filter
-  const filteredDeposits = useMemo(() => {
-    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
-    if (words.length === 0) return deposits
-
-    return deposits.filter(d => {
-      const searchFields = [
-        d.deposit_number,
-        d.company?.name || "",
-        d.company?.contact_person || ""
-      ]
-      return searchFields.some(field => {
-        const val = String(field).toLowerCase()
-        return words.every(word => val.includes(word))
-      })
-    })
-  }, [deposits, searchQuery])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -310,9 +384,9 @@ export default function DepositsPage() {
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container h-full flex flex-col overflow-hidden">
       {/* Page Header */}
-      <div className="page-header">
+      <div className="page-header shrink-0">
         <h1 className="page-title">
           <CirclePile className="size-5 mr-2 inline-block text-primary" />
           {dict.MENU_DEPOSIT}
@@ -408,13 +482,13 @@ export default function DepositsPage() {
 
                 <div className="grid gap-2">
                   <Label className="flex items-center gap-2 text-muted-foreground">{dict.LABEL_UNIT_PRICE}</Label>
-                  <NumberInput value={formData.price_per_liter} onChange={val => setFormData({ ...formData, price_per_liter: val })} leftBadge="Rp" rightBadge="/ L" />
+                  <NumberInput value={formData.price_per_liter} onChange={val => setFormData({ ...formData, price_per_liter: val })} leftBadge={SITE_CONFIG.currencySymbol} rightBadge="/ L" />
                 </div>
 
                 <div className="col-span-1 md:col-span-2 space-y-4 border rounded-lg p-4 bg-muted/10 h-fit">
                   <div className="flex justify-between text-sm font-mono text-foreground font-semibold mb-2 mr-2">
                     <span>{dict.LABEL_SUBTOTAL || "Subtotal"}:</span>
-                    <span>Rp {totals.subtotal.toLocaleString()}</span>
+                    <span>{SITE_CONFIG.currencySymbol} {totals.subtotal.toLocaleString()}</span>
                   </div>
 
                   <div className="space-y-2 pt-2 border-t">
@@ -454,7 +528,7 @@ export default function DepositsPage() {
                                 "font-mono text-sm transition-opacity",
                                 tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground"
                               )}>
-                                Rp {calculatedAmount.toLocaleString()}
+                                {SITE_CONFIG.currencySymbol} {calculatedAmount.toLocaleString()}
                               </span>
                             </div>
                           </div>
@@ -465,7 +539,7 @@ export default function DepositsPage() {
 
                   <div className="flex justify-between text-sm font-bold border-t pt-4 font-mono mr-2">
                     <span>{dict.LABEL_GRAND_TOTAL || "Grand Total"}:</span>
-                    <span className="text-primary">Rp {totals.grandTotal.toLocaleString()}</span>
+                    <span className="text-primary">{SITE_CONFIG.currencySymbol} {totals.grandTotal.toLocaleString()}</span>
                   </div>
                 </div>
 
@@ -510,7 +584,7 @@ export default function DepositsPage() {
                 />
               </div>
             </form>
-            <DialogFooter className="px-5 pb-5">
+            <DialogFooter className="px-5 pb-5 shrink-0">
               <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
                 {dict.BUTTON_CANCEL}
               </Button>
@@ -523,7 +597,7 @@ export default function DepositsPage() {
         </Dialog>
       </div>
 
-      <div className="action-bar">
+      <div className="action-bar shrink-0">
         <div className="relative flex-1 w-full max-w-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
@@ -535,9 +609,9 @@ export default function DepositsPage() {
         </div>
       </div>
 
-      <Card className="data-card">
+      <Card ref={containerRef} className="data-card flex-1 overflow-auto custom-scrollbar">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_DEPOSIT_NUMBER}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
@@ -553,9 +627,9 @@ export default function DepositsPage() {
               <TableRow>
                 <TableCell colSpan={7} className="p-0"><SectionLoader /></TableCell>
               </TableRow>
-            ) : filteredDeposits.length === 0 ? (
+            ) : deposits.length === 0 ? (
               <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell></TableRow>
-            ) : filteredDeposits.map(d => (
+            ) : deposits.map(d => (
               <TableRow key={d.id} className="group">
                 <TableCell className="font-medium">{d.deposit_number}</TableCell>
                 <TableCell>
@@ -568,7 +642,7 @@ export default function DepositsPage() {
                 <TableCell>
                   <div className="flex flex-col">
                     <span className="font-bold">{new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US').format(d.qty_liter)} L</span>
-                    <span className="text-[10px] text-muted-foreground">Rem: {new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US').format(d.remaining_qty_liter)} L</span>
+                    <span className="text-[10px] text-muted-foreground">{dict.LABEL_REMAINING}: {new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US').format(d.remaining_qty_liter)} L</span>
                   </div>
                 </TableCell>
                 <TableCell className="font-semibold text-primary">
@@ -601,7 +675,7 @@ export default function DepositsPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
-                            <CheckCircle2 className="size-4 mr-2" /> {dict.MSG_STATUS_UPDATED}
+                            <CheckCircle2 className="size-4 mr-2" /> Status
                           </DropdownMenuSubTrigger>
                           <DropdownMenuPortal>
                             <DropdownMenuSubContent>
@@ -625,6 +699,22 @@ export default function DepositsPage() {
                 </TableCell>
               </TableRow>
             ))}
+
+            {/* Infinite Scroll Sentinel & Loader */}
+            <TableRow ref={observerTarget} className="border-0">
+              <TableCell colSpan={7} className="p-0 border-0 overflow-hidden">
+                {loadingMore && (
+                  <div className="relative h-24 w-full">
+                    <SectionLoader />
+                  </div>
+                )}
+                {!hasMore && deposits.length > 0 && !loading && (
+                  <div className="text-center py-3 text-xs text-danger/70 select-none">
+                    — End of data —
+                  </div>
+                )}
+              </TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </Card>

@@ -44,9 +44,9 @@ The system replaces hardcoded tax rates with a flexible, parameter-driven engine
 ### Propagation Chain
 To ensure accuracy across the supply chain, tax settings "flow" through documents:
 1. **Quotation:** Defines the initial tax profile.
-2. **Purchase Order:** Inherits tax settings from the linked Quotation.
+2. **Sales Order:** Inherits tax settings from the linked Quotation.
 3. **Delivery Order:** (No tax/price - logistics only).
-4. **Invoice:** Inherits tax settings from the original Purchase Order via the Delivery Order link.
+4. **Invoice:** Inherits tax settings from the original Sales Order via the Delivery Order link.
 
 ---
 
@@ -62,7 +62,7 @@ ALTER TABLE public.inventory_ledger ADD COLUMN is_active BOOLEAN DEFAULT true;
 ```sql
 ALTER TABLE public.deposits ADD COLUMN tax_details JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.quotations ADD COLUMN tax_details JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE public.purchase_orders ADD COLUMN tax_details JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.sales_orders ADD COLUMN tax_details JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.invoices ADD COLUMN tax_details JSONB DEFAULT '[]'::jsonb;
 ```
 
@@ -71,5 +71,5 @@ ALTER TABLE public.invoices ADD COLUMN tax_details JSONB DEFAULT '[]'::jsonb;
 - [x] Phase 2: Implement Dynamic Multi-Tax UI in **Deposits** (Reference Implementation).
 - [x] Phase 3: Verify workflow stability with user.
 - [x] Phase 4: Propagate Multi-Tax UI to Quotations.
-- [x] Phase 5: Propagate Multi-Tax UI to Purchase Orders.
+- [x] Phase 5: Propagate Multi-Tax UI to Sales Orders.
 - [x] Phase 6: Propagate Multi-Tax UI to Invoices.

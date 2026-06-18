@@ -1,10 +1,10 @@
--- 1. Create Purchase Orders Table
-CREATE TABLE IF NOT EXISTS public.purchase_orders (
+-- 1. Create Sales Orders Table
+CREATE TABLE IF NOT EXISTS public.sales_orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  po_number TEXT UNIQUE NOT NULL,
+  so_number TEXT UNIQUE NOT NULL,
   company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
   product_id UUID REFERENCES public.products(id) ON DELETE SET NULL,
-  po_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  so_date DATE NOT NULL DEFAULT CURRENT_DATE,
   delivery_date DATE NOT NULL,
   quantity NUMERIC(12,2) NOT NULL DEFAULT 0,
   unit_price NUMERIC(15,2) NOT NULL DEFAULT 0,
@@ -17,10 +17,10 @@ CREATE TABLE IF NOT EXISTS public.purchase_orders (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   created_by UUID REFERENCES auth.users(id)
 );
-ALTER TABLE public.purchase_orders ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all for authenticated users" ON public.purchase_orders FOR ALL TO authenticated USING (true);
-DROP TRIGGER IF EXISTS audit_purchase_orders_trigger ON public.purchase_orders;
-CREATE TRIGGER audit_purchase_orders_trigger AFTER INSERT OR UPDATE OR DELETE ON public.purchase_orders FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
+ALTER TABLE public.sales_orders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all for authenticated users" ON public.sales_orders FOR ALL TO authenticated USING (true);
+DROP TRIGGER IF EXISTS audit_sales_orders_trigger ON public.sales_orders;
+CREATE TRIGGER audit_sales_orders_trigger AFTER INSERT OR UPDATE OR DELETE ON public.sales_orders FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
 
 -- 2. Create Delivery Orders Table
 CREATE TABLE IF NOT EXISTS public.delivery_orders (
@@ -82,7 +82,7 @@ DROP TRIGGER IF EXISTS audit_vehicles_trigger ON vehicles;
 CREATE TRIGGER audit_vehicles_trigger AFTER INSERT OR UPDATE OR DELETE ON vehicles FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
 
 -- 4. Inventory Management & HPP Calculation Setup
-ALTER TABLE public.delivery_orders ADD COLUMN IF NOT EXISTS po_id UUID REFERENCES public.purchase_orders(id) ON DELETE SET NULL;
+ALTER TABLE public.delivery_orders ADD COLUMN IF NOT EXISTS so_id UUID REFERENCES public.sales_orders(id) ON DELETE SET NULL;
 ALTER TABLE public.delivery_orders ADD COLUMN IF NOT EXISTS supplier_id UUID REFERENCES public.companies(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS public.inventory_ledger (

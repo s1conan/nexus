@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
+import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
 import {
@@ -35,9 +36,14 @@ import {
   ArrowUpAZ,
   ArrowDownZA,
   ArrowUpDown,
-  RefreshCw
+  RefreshCw,
+  Send,
+  FileText,
+  FileEdit,
+  AlertTriangle
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { SummaryCard } from "@/components/summary-card"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,6 +88,7 @@ import dynamic from "next/dynamic"
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
 const PAGE_SIZE = 50
+const ALMOST_EXPIRED_DAYS_THRESHOLD = 7 // Configurable variable for X days
 
 interface SortLevel {
   id: string
@@ -105,6 +112,13 @@ export default function QuotationsPage() {
   const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
+  const [stats, setStats] = useState({
+    totalQuotations: 0,
+    draftQuotations: 0,
+    sentQuotations: 0,
+    almostExpired: 0
+  })
+
   // Dialog State
   const [isOpen, setIsOpen] = useState(false)
   const [isSortOpen, setIsSortOpen] = useState(false)
@@ -119,6 +133,13 @@ export default function QuotationsPage() {
 
   const observerTarget = useRef(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const statusStyles: Record<string, string> = {
+    Draft: "bg-blue-100 text-blue-700",
+    Sent: "bg-amber-100 text-amber-700",
+    Accepted: "bg-green-100 text-green-700",
+    Rejected: "bg-red-100 text-red-700",
+  };
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -162,11 +183,44 @@ export default function QuotationsPage() {
   const canDelete = hasPermission("quotation", "delete")
   const canPrint = hasPermission("quotation", "print")
 
+  const fetchStats = useCallback(async () => {
+    try {
+      const now = new Date();
+      const futureDate = new Date(now.getTime() + ALMOST_EXPIRED_DAYS_THRESHOLD * 24 * 60 * 60 * 1000);
+
+      const [
+        { count: totalCount },
+        { count: draftCount },
+        { count: sentCount },
+        { count: almostExpiredCount }
+      ] = await Promise.all([
+        supabase.from('quotations').select('*', { count: 'exact', head: true }),
+        supabase.from('quotations').select('*', { count: 'exact', head: true }).eq('status', 'Draft'),
+        supabase.from('quotations').select('*', { count: 'exact', head: true }).eq('status', 'Sent'),
+        supabase.from('quotations').select('*', { count: 'exact', head: true })
+          .gte('expiry_date', format(now, 'yyyy-MM-dd'))
+          .lte('expiry_date', format(futureDate, 'yyyy-MM-dd'))
+          .neq('status', 'Accepted')
+          .neq('status', 'Rejected')
+      ])
+
+      setStats({
+        totalQuotations: totalCount || 0,
+        draftQuotations: draftCount || 0,
+        sentQuotations: sentCount || 0,
+        almostExpired: almostExpiredCount || 0
+      })
+    } catch (err) {
+      console.error("Fetch Stats Error:", err)
+    }
+  }, [supabase])
+
   // Fetch Data
   const fetchData = useCallback(async (isInitial = false) => {
     if (isInitial) {
       setLoading(true)
       setOffset(0)
+      fetchStats()
     } else {
       setLoadingMore(true)
     }
@@ -352,7 +406,7 @@ export default function QuotationsPage() {
       setEditingItem(null)
       setSelectedCompanyInfo(null)
       setSelectedProductInfo(null)
-      
+
       setFormData({
         quotation_number: "", // Will be auto-generated on save if empty
         company_id: "",
@@ -387,10 +441,29 @@ export default function QuotationsPage() {
     try {
       const payload = { ...formData }
       if (editingItem) {
+        // If edited, revert status to Draft
+        payload.status = "Draft";
+
         await supabase.from("quotations").update({ bank_accounts: null, discounts: null }).eq("id", editingItem.id);
         const { error } = await supabase.from("quotations").update(payload).eq("id", editingItem.id)
         if (error) throw error;
+
+        // Fetch updated row to keep local state in sync with relations
+        const { data: updatedRow, error: fetchError } = await supabase
+          .from("quotations")
+          .select("*, company:companies(id, name, details), product:products(id, sku, name, base_price)")
+          .eq("id", editingItem.id)
+          .single();
+
+        if (!fetchError && updatedRow) {
+          setQuotations(prev => prev.map(q => q.id === editingItem.id ? updatedRow : q));
+        } else {
+          // Fallback if fetch fails
+          fetchData(true);
+        }
+
         notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), dict.MSG_QUOTATION_SAVED.replace("%data%", `[${formData.quotation_number}]`))
+        fetchStats()
       } else {
         // Generate document number if empty
         if (!payload.quotation_number) {
@@ -402,9 +475,9 @@ export default function QuotationsPage() {
         const { error } = await supabase.from("quotations").insert([payload])
         if (error) throw error;
         notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), dict.MSG_QUOTATION_SAVED.replace("%data%", `[${payload.quotation_number}]`))
+        fetchData(true)
       }
       setIsOpen(false)
-      fetchData(true)
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     } finally {
@@ -413,12 +486,16 @@ export default function QuotationsPage() {
   }
 
   const handleDelete = async (id: string) => {
+    const item = quotations.find(q => q.id === id)
+    const label = item ? `[${item.quotation_number}]` : ""
     if (!confirm(dict.MSG_DELETE_CONFIRM)) return
     try {
       const { error } = await supabase.from("quotations").delete().eq("id", id)
       if (error) throw error
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_DELETED)
-      fetchData(true)
+
+      setQuotations(prev => prev.filter(q => q.id !== id))
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
+      fetchStats()
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     }
@@ -428,8 +505,10 @@ export default function QuotationsPage() {
     try {
       const { error } = await supabase.from("quotations").update({ status }).eq("id", id)
       if (error) throw error
+
+      setQuotations(prev => prev.map(q => q.id === id ? { ...q, status } : q))
       notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_STATUS_UPDATED)
-      fetchData(true)
+      fetchStats()
     } catch (err: any) {
       notify.error(dict.MSG_UPDATE_FAILED, err.message)
     }
@@ -487,8 +566,11 @@ export default function QuotationsPage() {
         })
       })
       const result = await res.json()
-      if (result.success) notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), "Email sent successfully.")
-      else throw new Error(result.error)
+      if (result.success) {
+        notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), "Email sent successfully.")
+        // Automatically set status to Sent
+        updateStatus(q.id, 'Sent')
+      } else throw new Error(result.error)
     } catch (err: any) {
       notify.error("Failed to send email", err.message)
     }
@@ -497,7 +579,7 @@ export default function QuotationsPage() {
   const sortedAndFilteredData = useMemo(() => {
     const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
     let result = quotations
-    
+
     if (words.length > 0) {
       result = quotations.filter(q => {
         const searchFields = [
@@ -699,7 +781,7 @@ export default function QuotationsPage() {
                       </div>
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_BASE_PRICE}</Label>
-                        <NumberInput value={formData.base_price} onChange={val => setFormData({ ...formData, base_price: val })} rightBadge="/ L" leftBadge="Rp" />
+                        <NumberInput value={formData.base_price} onChange={val => setFormData({ ...formData, base_price: val })} rightBadge="/ L" leftBadge={SITE_CONFIG.currencySymbol} />
                       </div>
                     </div>
                   </div>
@@ -725,7 +807,7 @@ export default function QuotationsPage() {
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="deliv_price">{dict.LABEL_TRANSPORT_COST}</Label>
-                        <NumberInput id="deliv_price" value={formData.delivery_price} onChange={val => setFormData({ ...formData, delivery_price: val })} leftBadge="Rp" rightBadge="/ L" />
+                        <NumberInput id="deliv_price" value={formData.delivery_price} onChange={val => setFormData({ ...formData, delivery_price: val })} leftBadge={SITE_CONFIG.currencySymbol} rightBadge="/ L" />
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="shrinkage">{dict.LABEL_SHRINKAGE_TOLERANCE}</Label>
@@ -734,7 +816,7 @@ export default function QuotationsPage() {
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_PRICE_PER_L} ({dict.LABEL_SUBTOTAL})</Label>
                         <div className="h-10 flex items-center px-3 border rounded bg-muted/50 font-mono font-bold text-primary">
-                          Rp {totals.subtotal.toLocaleString()}
+                          {SITE_CONFIG.currencySymbol} {totals.subtotal.toLocaleString()}
                         </div>
                       </div>
                     </div>
@@ -777,7 +859,7 @@ export default function QuotationsPage() {
                                   "font-mono font-medium text-sm transition-opacity",
                                   tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground"
                                 )}>
-                                  + Rp {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {SITE_CONFIG.currencySymbol} {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                               </div>
                             </div>
@@ -787,7 +869,7 @@ export default function QuotationsPage() {
 
                       <div className="flex justify-between items-center text-lg font-bold border-t pt-4 font-mono">
                         <span>{dict.LABEL_GRAND_TOTAL || "Grand Total"} ({dict.LABEL_PRICE_PER_L}):</span>
-                        <span className="text-primary text-xl">Rp {totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span className="text-primary text-xl">{SITE_CONFIG.currencySymbol} {totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     </div>
                   </div>
@@ -865,10 +947,10 @@ export default function QuotationsPage() {
               <TableHead>{dict.LABEL_QUOTATION_NUMBER}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
               <TableHead>{dict.LABEL_SKU}</TableHead>
-              <TableHead>{dict.LABEL_QUOTATION_DATE}</TableHead>
-              <TableHead>{dict.LABEL_EXPIRY_DATE}</TableHead>
-              <TableHead>{dict.LABEL_MIN_ORDER}</TableHead>
-              <TableHead>{dict.LABEL_STATUS}</TableHead>
+              <TableHead className="text-center">{dict.LABEL_QUOTATION_DATE}</TableHead>
+              <TableHead className="text-center">{dict.LABEL_EXPIRY_DATE}</TableHead>
+              <TableHead className="text-right">{dict.LABEL_MIN_ORDER}</TableHead>
+              <TableHead className="text-center">{dict.LABEL_STATUS}</TableHead>
               <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
@@ -882,10 +964,12 @@ export default function QuotationsPage() {
                 <TableCell className="font-medium">{q.quotation_number}</TableCell>
                 <TableCell>{q.company?.name || "-"}</TableCell>
                 <TableCell className="text-xs font-mono">{q.product?.sku || "-"}</TableCell>
-                <TableCell>{format(new Date(q.quotation_date), "dd MMM yyyy")}</TableCell>
-                <TableCell><div>{format(new Date(q.expiry_date), "dd MMM yyyy")}</div><div className="text-[10px] text-muted-foreground">{q.expiry_days} days left</div></TableCell>
-                <TableCell>{q.minimum_order}</TableCell>
-                <TableCell><div className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase", q.status === "Accepted" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>{q.status}</div></TableCell>
+                <TableCell className="text-center">{format(new Date(q.quotation_date), "dd MMM yyyy")}</TableCell>
+                <TableCell className="text-center"><div>{format(new Date(q.expiry_date), "dd MMM yyyy")}</div><div className="text-[10px] text-muted-foreground">{q.expiry_days} days left</div></TableCell>
+                <TableCell className="text-right font-mono">{new Intl.NumberFormat(lang === 'id' ? 'id-ID' : 'en-US').format(q.minimum_order)}</TableCell>
+                <TableCell>
+                  <div className={cn("px-2 py-1 rounded-full text-[10px] text-center font-bold uppercase", statusStyles[q.status])}>{q.status}</div>
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
                     <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(q)} disabled={!canEdit}><Pencil className="size-4" /></Button>
@@ -893,7 +977,17 @@ export default function QuotationsPage() {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild><Button variant="secondary" size="icon" className="size-8"><ChevronDown className="size-4" /></Button></DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuSub><DropdownMenuSubTrigger><CheckCircle2 className="size-4 mr-2" /> Status</DropdownMenuSubTrigger><DropdownMenuPortal><DropdownMenuSubContent><DropdownMenuItem onClick={() => updateStatus(q.id, 'Sent')} className="text-blue-600">Sent</DropdownMenuItem><DropdownMenuItem onClick={() => updateStatus(q.id, 'Accepted')} className="text-green-600">Accepted</DropdownMenuItem></DropdownMenuSubContent></DropdownMenuPortal></DropdownMenuSub>
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger><CheckCircle2 className="size-4 mr-2" /> Status</DropdownMenuSubTrigger>
+                          <DropdownMenuPortal>
+                            <DropdownMenuSubContent>
+                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Draft')} className="text-blue-600 font-medium">Draft</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Sent')} className="text-amber-600 font-medium">Sent</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Accepted')} className="text-green-600 font-medium">Accepted</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Rejected')} className="text-red-600 font-medium">Rejected</DropdownMenuItem>
+                            </DropdownMenuSubContent>
+                          </DropdownMenuPortal>
+                        </DropdownMenuSub>
                         {canDelete && <><DropdownMenuSeparator /><DropdownMenuItem className="text-destructive" onClick={() => handleDelete(q.id)}><Trash2 className="size-4 mr-2" /> {dict.BUTTON_DELETE}</DropdownMenuItem></>}
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -920,6 +1014,34 @@ export default function QuotationsPage() {
           </TableBody>
         </Table>
       </Card>
+
+      <div className="grid grid-cols-4 gap-2 md:gap-4 shrink-0">
+        <SummaryCard
+          label={dict.LABEL_TOTAL_QUOTATIONS || "Total Quotation"}
+          value={stats.totalQuotations}
+          icon={FileText}
+          color="slate"
+        />
+        <SummaryCard
+          label={dict.LABEL_DRAFT_QUOTATIONS || "Draft"}
+          value={stats.draftQuotations}
+          icon={FileEdit}
+          color="blue"
+        />
+        <SummaryCard
+          label={dict.LABEL_SENT_QUOTATIONS || "Sent"}
+          value={stats.sentQuotations}
+          icon={Send}
+          color="amber"
+        />
+        <SummaryCard
+          label={dict.LABEL_ALMOST_EXPIRED || `Exp. < ${ALMOST_EXPIRED_DAYS_THRESHOLD} days`}
+          value={stats.almostExpired}
+          icon={AlertTriangle}
+          color="red"
+        />
+      </div>
+
       {previewDoc && (
         <Gallery
           docs={[previewDoc]}

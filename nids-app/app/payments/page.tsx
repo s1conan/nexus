@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
+import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
+import { useDebounce } from "@/hooks/use-debounce"
 import {
   Table,
   TableBody,
@@ -56,6 +58,8 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 
+const PAGE_SIZE = 50
+
 export default function PaymentsPage() {
   const { dict, lang } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
@@ -63,6 +67,9 @@ export default function PaymentsPage() {
 
   const [payments, setPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
@@ -71,6 +78,10 @@ export default function PaymentsPage() {
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
+
+  const observerTarget = useRef(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -86,33 +97,87 @@ export default function PaymentsPage() {
 
   const [selectedInvoiceInfo, setSelectedInvoiceInfo] = useState<any>(null)
 
-  async function fetchData() {
-    setLoading(true)
+  const fetchData = useCallback(async (isInitial = false) => {
+    if (isInitial) {
+      setLoading(true)
+      setOffset(0)
+    } else {
+      setLoadingMore(true)
+    }
+
     try {
-      const { data, error } = await supabase
+      const currentOffset = isInitial ? 0 : offset
+
+      let query = supabase
         .from("payments")
         .select("*, invoice:invoices(id, invoice_number, total_amount, paid_amount, company:companies(name))")
         .order("created_at", { ascending: false })
+        .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
+      if (debouncedSearchQuery) {
+        const searchStr = constructMultiWordSearch(debouncedSearchQuery, ['payment_number', 'reference_number'])
+        if (searchStr) query = query.or(searchStr)
+      }
+
+      const { data, error } = await query
       if (error) throw error
-      setPayments(data || [])
+
+      if (data) {
+        if (isInitial) {
+          setPayments(data)
+        } else {
+          setPayments(prev => {
+            const newItems = data.filter((item: any) => !prev.some(p => p.id === item.id))
+            return [...prev, ...newItems]
+          })
+        }
+        setHasMore(data.length === PAGE_SIZE)
+        setOffset(currentOffset + data.length)
+      }
     } catch (err: any) {
       notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }
+  }, [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED])
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    fetchData(true)
+  }, [debouncedSearchQuery])
+
+  // Ordinary Infinite Scroll
+  useEffect(() => {
+    const rootElement = containerRef.current;
+    if (!rootElement) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        const entry = entries[0]
+        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
+          fetchData(false)
+        }
+      },
+      {
+        root: rootElement,
+        rootMargin: "400px",
+        threshold: 0,
+      }
+    )
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current)
+    }
+
+    return () => observer.disconnect()
+  }, [fetchData, hasMore, loading, loadingMore])
 
   const canView = hasPermission("payments", "view")
   const canInsert = hasPermission("payments", "insert")
   const canEdit = hasPermission("payments", "edit")
   const canDelete = hasPermission("payments", "delete")
 
-  if (!canView && !loading) {
+  if (!canView && !loading && !authLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
         <div className="text-center space-y-2">
@@ -172,14 +237,27 @@ export default function PaymentsPage() {
       if (editingItem) {
         const { error } = await supabase.from("payments").update(payload).eq("id", editingItem.id)
         if (error) throw error
+
+        // Fetch updated row to keep local state in sync with relations
+        const { data: updatedRow, error: fetchError } = await supabase
+          .from("payments")
+          .select("*, invoice:invoices(id, invoice_number, total_amount, paid_amount, company:companies(name))")
+          .eq("id", editingItem.id)
+          .single();
+        
+        if (!fetchError && updatedRow) {
+          setPayments(prev => prev.map(p => p.id === editingItem.id ? updatedRow : p));
+        } else {
+          fetchData(true);
+        }
       } else {
         const { error } = await supabase.from("payments").insert([payload])
         if (error) throw error
+        fetchData(true)
       }
 
       notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SAVE_SUCCESS?.replace("%data%", dict.MENU_PAYMENTS) || "Payment saved successfully.")
       setIsOpen(false)
-      fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     } finally {
@@ -188,12 +266,15 @@ export default function PaymentsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(dict.MSG_DELETE_CONFIRM)) return
+    const item = payments.find(p => p.id === id)
+    const label = item ? `[${item.payment_number}]` : ""
+    if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
       const { error } = await supabase.from("payments").delete().eq("id", id)
       if (error) throw error
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_DELETED || "Payment deleted.")
-      fetchData()
+      
+      setPayments(prev => prev.filter(p => p.id !== id))
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     }
@@ -203,24 +284,17 @@ export default function PaymentsPage() {
     try {
       const { error } = await supabase.from("payments").update({ status }).eq("id", id)
       if (error) throw error
+      
+      setPayments(prev => prev.map(p => p.id === id ? { ...p, status } : p))
       notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_STATUS_UPDATED || "Payment status updated.")
-      fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_UPDATE_FAILED, err.message)
     }
   }
 
-  const filteredPayments = useMemo(() => {
-    return payments.filter(p =>
-      p.payment_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.invoice?.invoice_number || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.invoice?.company?.name || "").toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }, [payments, searchQuery])
-
   return (
-    <div className="page-container">
-      <div className="page-header">
+    <div className="page-container h-full flex flex-col overflow-hidden">
+      <div className="page-header shrink-0">
         <h1 className="page-title">
           <Wallet className="size-5 mr-2 inline-block text-primary" />
           {dict.MENU_PAYMENTS || "Payments"}
@@ -279,8 +353,8 @@ export default function PaymentsPage() {
                 />
                 {selectedInvoiceInfo && (
                   <div className="text-xs text-muted-foreground flex gap-4 mt-1">
-                    <span>{dict.VERIFY_LABEL_TOTAL?.split(' ')[0]} Total: Rp {Number(selectedInvoiceInfo.total_amount).toLocaleString()}</span>
-                    <span className="text-amber-600 font-medium">{dict.LABEL_DUE_DATE?.split(' ')[0]} Due: Rp {(selectedInvoiceInfo.total_amount - selectedInvoiceInfo.paid_amount).toLocaleString()}</span>
+                    <span>{dict.VERIFY_LABEL_TOTAL?.split(' ')[0]} Total: {SITE_CONFIG.currencySymbol} {Number(selectedInvoiceInfo.total_amount).toLocaleString()}</span>
+                    <span className="text-amber-600 font-medium">{dict.LABEL_DUE_DATE?.split(' ')[0]} Due: {SITE_CONFIG.currencySymbol} {(selectedInvoiceInfo.total_amount - selectedInvoiceInfo.paid_amount).toLocaleString()}</span>
                   </div>
                 )}
               </div>
@@ -291,7 +365,7 @@ export default function PaymentsPage() {
                   <Input type="date" value={formData.payment_date} onChange={e => setFormData({ ...formData, payment_date: e.target.value })} />
                 </div>
                 <div className="grid gap-2">
-                  <Label>{dict.LABEL_AMOUNT} (Rp)</Label>
+                  <Label>{dict.LABEL_AMOUNT} ({SITE_CONFIG.currencySymbol})</Label>
                   <Input type="number" value={formData.amount} onChange={e => setFormData({ ...formData, amount: Number(e.target.value) })} className="text-right font-bold" />
                 </div>
               </div>
@@ -321,7 +395,7 @@ export default function PaymentsPage() {
                 <Textarea value={formData.note} onChange={e => setFormData({ ...formData, note: e.target.value })} placeholder={dict.PLACEHOLDER_EDITOR} />
               </div>
             </div>
-            <DialogFooter className="p-5 border-t">
+            <DialogFooter className="p-5 border-t shrink-0">
               <Button variant="outline" onClick={() => setIsOpen(false)}><X className="mr-2 size-4" />{dict.BUTTON_CANCEL}</Button>
               <Button onClick={handleSave} disabled={isSaving || !canEdit}>
                 {isSaving ? <ButtonLoader /> : <Save className="mr-2 size-4" />}
@@ -332,16 +406,16 @@ export default function PaymentsPage() {
         </Dialog>
       </div>
 
-      <div className="action-bar">
+      <div className="action-bar shrink-0">
         <div className="relative flex-1 w-full max-w-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input placeholder={dict.PLACEHOLDER_SEARCH} className="pl-8" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
       </div>
 
-      <Card className="data-card overflow-hidden">
+      <Card ref={containerRef} className="data-card flex-1 overflow-auto custom-scrollbar">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_PAYMENT_NUMBER || "Payment No"}</TableHead>
               <TableHead>{dict.MENU_INVOICE} & {dict.LABEL_TYPE_CUSTOMER}</TableHead>
@@ -354,9 +428,9 @@ export default function PaymentsPage() {
           <TableBody>
             {loading ? (
               <TableRow><TableCell colSpan={6} className="p-0"><SectionLoader /></TableCell></TableRow>
-            ) : filteredPayments.length === 0 ? (
+            ) : payments.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell></TableRow>
-            ) : filteredPayments.map((p) => (
+            ) : payments.map((p) => (
               <TableRow key={p.id}>
                 <TableCell className="px-7 font-mono font-bold text-sm">
                   {p.payment_number}
@@ -369,7 +443,7 @@ export default function PaymentsPage() {
                   {format(new Date(p.payment_date), "dd MMM yyyy")}
                 </TableCell>
                 <TableCell className="text-right font-bold text-green-700">
-                  Rp {Number(p.amount).toLocaleString()}
+                  {SITE_CONFIG.currencySymbol} {Number(p.amount).toLocaleString()}
                 </TableCell>
                 <TableCell>
                   <span className={cn("px-2 py-0.5 rounded text-xs font-bold uppercase", 
@@ -404,6 +478,22 @@ export default function PaymentsPage() {
                 </TableCell>
               </TableRow>
             ))}
+
+            {/* Infinite Scroll Sentinel & Loader */}
+            <TableRow ref={observerTarget} className="border-0">
+              <TableCell colSpan={6} className="p-0 border-0 overflow-hidden">
+                {loadingMore && (
+                  <div className="relative h-24 w-full">
+                    <SectionLoader />
+                  </div>
+                )}
+                {!hasMore && payments.length > 0 && !loading && (
+                  <div className="text-center py-3 text-xs text-danger/70 select-none">
+                    — End of data —
+                  </div>
+                )}
+              </TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </Card>

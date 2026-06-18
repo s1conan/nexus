@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
+import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
 import {
@@ -115,7 +116,7 @@ export default function DepositReportPage() {
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{dict.LABEL_TOTAL_AMOUNT || "Total Amount"}</p>
-            <p className="text-xl font-black">Rp {stats.totalAmount.toLocaleString()}</p>
+            <p className="text-xl font-black">{SITE_CONFIG.currencySymbol} {stats.totalAmount.toLocaleString()}</p>
             <p className="text-[10px] text-muted-foreground">{stats.count} {dict.MENU_DEPOSIT}</p>
           </div>
         </Card>
@@ -217,7 +218,7 @@ export default function DepositReportPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <span className="font-black text-sm">
-                    Rp {d.amount?.toLocaleString()}
+                    {SITE_CONFIG.currencySymbol} {d.amount?.toLocaleString()}
                   </span>
                 </TableCell>
                 <TableCell>

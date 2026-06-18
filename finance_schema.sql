@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS public.invoices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_number TEXT UNIQUE NOT NULL,
   company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
-  po_id UUID REFERENCES public.purchase_orders(id) ON DELETE SET NULL, -- Optional link to PO
+  so_id UUID REFERENCES public.sales_orders(id) ON DELETE SET NULL, -- Optional link to PO
   issue_date DATE NOT NULL DEFAULT CURRENT_DATE,
   due_date DATE NOT NULL,
   subtotal NUMERIC(15,2) NOT NULL DEFAULT 0,

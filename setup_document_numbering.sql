@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.document_sequences (
 INSERT INTO public.app_settings (category, name, value, description)
 VALUES 
 ('numbering', 'quotation', '"QTN/{YYYY}/{SEQ:3}"', 'Format for Quotation numbers'),
-('numbering', 'purchase-order', '"PO/{YYYY}/{SEQ:3}"', 'Format for Purchase Order numbers'),
+('numbering', 'purchase-order', '"PO/{YYYY}/{SEQ:3}"', 'Format for Sales Order numbers'),
 ('numbering', 'delivery-order', '"DO/{YYYY}/{SEQ:3}"', 'Format for Delivery Order numbers'),
 ('numbering', 'deposit', '"DEP/{YYYY}/{SEQ:3}"', 'Format for Deposit numbers'),
 ('numbering', 'invoice', '"INV/{YYYY}/{SEQ:3}"', 'Format for Invoice numbers')

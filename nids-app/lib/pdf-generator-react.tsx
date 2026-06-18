@@ -42,6 +42,7 @@ interface QuotationData {
   terms_conditions: string
   closing_remarks: string
   bank_accounts: { name: string; bank_name?: string; account_number: string; account_name: string; branch: string }[]
+  tax_details: any[]
   qr_code_url?: string
 }
 
@@ -495,47 +496,28 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
           </View>
 
 
-          {/* PPN 11% */}
-          <View style={styles.tableRow}>
-            <View style={[styles.cell, { width: 140 }]}>
-              <Text>PPN</Text>
+          {/* Dynamic Taxes */}
+          {data.tax_details?.filter(t => t.enabled).map((tax, taxIdx) => (
+            <View key={`tax-${taxIdx}`} style={styles.tableRow}>
+              <View style={[styles.cell, { width: 140 }]}>
+                <Text>{tax.name}</Text>
+              </View>
+              <View style={[styles.cell, styles.center, { width: 40 }]}>
+                <Text>{tax.rate}%</Text>
+              </View>
+              {data.discounts.map((d, i) => {
+                const discountValue = Math.round(data.base_price * (d.value / 100));
+                const baseABS = data.base_price - discountValue;
+                const taxableAmount = baseABS + data.delivery_price;
+                const taxAmount = Math.round(taxableAmount * (Number(tax.rate) / 100));
+                return (
+                  <View key={i} style={[styles.cell, styles.right, { width: 65 }]}>
+                    <Text>{formatNumber(taxAmount)}</Text>
+                  </View>
+                );
+              })}
             </View>
-            <View style={[styles.cell, styles.center, { width: 40 }]}>
-              <Text>11%</Text>
-            </View>
-            {data.discounts.map((d, i) => {
-              const discountValue = Math.round(data.base_price * (d.value / 100));
-              const baseABS = data.base_price - discountValue;
-              const taxableAmount = baseABS + data.delivery_price;
-              const ppn = Math.round(taxableAmount * 0.11);
-              return (
-                <View key={i} style={[styles.cell, styles.right, { width: 65 }]}>
-                  <Text>{formatNumber(ppn)}</Text>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* PBBKB 7.5% */}
-          <View style={styles.tableRow}>
-            <View style={[styles.cell, { width: 140 }]}>
-              <Text>PBBKB</Text>
-            </View>
-            <View style={[styles.cell, styles.center, { width: 40 }]}>
-              <Text>7.50%</Text>
-            </View>
-            {data.discounts.map((d, i) => {
-              const discountValue = Math.round(data.base_price * (d.value / 100));
-              const baseABS = data.base_price - discountValue;
-              const taxableAmount = baseABS + data.delivery_price;
-              const pbbkb = Math.round(taxableAmount * 0.075);
-              return (
-                <View key={i} style={[styles.cell, styles.right, { width: 65 }]}>
-                  <Text>{formatNumber(pbbkb)}</Text>
-                </View>
-              );
-            })}
-          </View>
+          ))}
 
           {/* Biaya Pengiriman */}
           {data.delivery_price && (
@@ -566,9 +548,15 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
               const discountValue = Math.round(data.base_price * (d.value / 100));
               const baseABS = data.base_price - discountValue;
               const taxableAmount = baseABS + Math.round(data.delivery_price);
-              const ppn = Math.round(taxableAmount * 0.11);
-              const pbbkb = Math.round(taxableAmount * 0.075);
-              const total = taxableAmount + ppn + pbbkb;
+              
+              let totalTaxes = 0;
+              if (data.tax_details) {
+                data.tax_details.filter(t => t.enabled).forEach(tax => {
+                  totalTaxes += Math.round(taxableAmount * (Number(tax.rate) / 100));
+                });
+              }
+              
+              const total = taxableAmount + totalTaxes;
               return (
                 <View key={i} style={[styles.cell, styles.right, { width: 65 }]}>
                   <Text style={{ fontWeight: "bold" }}>{formatNumber(total)}</Text>
@@ -768,7 +756,8 @@ export async function generateStandardQuotationPDF(
       note: q.is_note_enabled ? q.note : "",
       terms_conditions: q.is_terms_enabled ? q.terms_conditions : "",
       closing_remarks: q.is_closing_enabled ? q.closing_remarks : "",
-      bank_accounts: q.bank_accounts || []
+      bank_accounts: q.bank_accounts || [],
+      tax_details: q.tax_details || []
     },
     options
   );

@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
+import { SITE_CONFIG } from "@/lib/site-content"
 
 export default function InventoryReportPage() {
   const { dict } = useDictionary()
@@ -104,7 +105,7 @@ export default function InventoryReportPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{dict.LABEL_INVENTORY_VALUE || "Inventory Value"}</p>
-              <p className="text-2xl font-black">Rp {totals.value.toLocaleString()}</p>
+              <p className="text-2xl font-black">{SITE_CONFIG.currencySymbol} {totals.value.toLocaleString()}</p>
             </div>
           </Card>
         )}
@@ -187,11 +188,11 @@ export default function InventoryReportPage() {
                 {canViewValue && (
                   <>
                     <TableCell className="text-right text-sm font-medium text-muted-foreground">
-                      Rp {item.weighted_average_cost.toLocaleString()}
+                      {SITE_CONFIG.currencySymbol} {item.weighted_average_cost.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right">
                       <span className="font-bold text-green-700">
-                        Rp {item.total_inventory_value.toLocaleString()}
+                        {SITE_CONFIG.currencySymbol} {item.total_inventory_value.toLocaleString()}
                       </span>
                     </TableCell>
                   </>

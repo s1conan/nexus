@@ -8,7 +8,7 @@ ALTER TABLE public.inventory_ledger ADD COLUMN IF NOT EXISTS is_active BOOLEAN D
 -- 2. Add Dynamic Tax Storage to all relevant tables
 ALTER TABLE public.deposits ADD COLUMN IF NOT EXISTS tax_details JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS tax_details JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS tax_details JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS tax_details JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS tax_details JSONB DEFAULT '[]'::jsonb;
 
 -- 3. Update Summary View to respect the 'is_active' status

@@ -12,8 +12,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { AlertTriangle } from "lucide-react"
+import { cn } from "@/lib/utils"
 
-interface ConfirmationDialogProps {
+interface DeleteConfirmationDialogProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
@@ -25,7 +26,7 @@ interface ConfirmationDialogProps {
   variant?: "default" | "destructive"
 }
 
-export function ConfirmationDialog({
+export function DeleteConfirmationDialog({
   isOpen,
   onOpenChange,
   onConfirm,
@@ -35,7 +36,54 @@ export function ConfirmationDialog({
   confirmText = "Confirm",
   cancelText = "Cancel",
   variant = "destructive"
-}: ConfirmationDialogProps) {
+}: DeleteConfirmationDialogProps) {
+  return (
+    <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
+      <AlertDialogContent className={cn("p-0")}>
+        <AlertDialogHeader>
+          <AlertDialogTitle className={cn("flex w-full items-center gap-2 text-destructive bg-destructive/20 rounded-t-xl py-2 px-4")}>
+            {variant === "destructive" && <AlertTriangle className="size-4 shrink-0" />}
+            {title}
+          </AlertDialogTitle>
+          <div className={cn("flex flex-col gap-3 py-2 px-4 w-full")}>
+            {description && <div className="flex-1 text-sm text-muted-foreground">{description}</div>}
+            {dataName && (
+              <div className="bg-muted/50 p-2 rounded-md border border-dashed border-muted-foreground/30 text-center font-semibold text-foreground text-base break-all">
+                {dataName}
+              </div>
+            )}
+          </div>
+        </AlertDialogHeader>
+        <AlertDialogFooter className={cn("flex flex-col gap-8 p-2 border-t")}>
+          <AlertDialogCancel className={cn("min-w-[90px]")}>{cancelText}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              e.preventDefault()
+              onConfirm()
+              onOpenChange(false)
+            }}
+            variant="destructive"
+            className={cn("min-w-[90px] hover:bg-destructive/90 hover:text-destructive-foreground")}
+          >
+            {confirmText}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+export function SendConfirmationDialog({
+  isOpen,
+  onOpenChange,
+  onConfirm,
+  title,
+  description,
+  dataName,
+  confirmText = "Confirm",
+  cancelText = "Cancel",
+  variant = "destructive"
+}: DeleteConfirmationDialogProps) {
   return (
     <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
       <AlertDialogContent>

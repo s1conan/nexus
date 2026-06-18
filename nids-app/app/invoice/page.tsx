@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
+import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
+import { useDebounce } from "@/hooks/use-debounce"
 import {
   Table,
   TableBody,
@@ -49,6 +51,9 @@ import { format } from "date-fns"
 import { ButtonLoader } from "@/components/button-loader"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { Switch } from "@/components/ui/switch"
+import { NumberInput } from "@/components/number-input"
+
+const PAGE_SIZE = 50
 
 export default function InvoicePage() {
   const { dict } = useDictionary()
@@ -58,6 +63,9 @@ export default function InvoicePage() {
   const [invoices, setInvoices] = useState<any[]>([])
   const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
@@ -66,12 +74,16 @@ export default function InvoicePage() {
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
+
+  const observerTarget = useRef(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Form State
   const [formData, setFormData] = useState(() => ({
     invoice_number: "",
     company_id: "",
-    po_id: "",
+    so_id: "",
     issue_date: format(new Date(), "yyyy-MM-dd"),
     due_date: format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
     subtotal: 0,
@@ -98,36 +110,93 @@ export default function InvoicePage() {
     return { subtotal, taxTotal, grandTotal, appliedTaxes };
   }, [formData])
 
-  async function fetchData() {
-    setLoading(true)
+  // Fetch Data
+  const fetchData = useCallback(async (isInitial = false) => {
+    if (isInitial) {
+      setLoading(true)
+      setOffset(0)
+    } else {
+      setLoadingMore(true)
+    }
+
     try {
-      const [iRes, tRes] = await Promise.all([
-        supabase.from("invoices").select("*, company:companies(id, name), po:purchase_orders(id, po_number, tax_details)").order("created_at", { ascending: false }),
-        supabase.from("app_settings").select("*").eq("category", "tax")
-      ])
+      const currentOffset = isInitial ? 0 : offset
 
-      if (iRes.error) throw iRes.error
-      if (tRes.error) throw tRes.error
+      if (isInitial) {
+        const { data: tRes } = await supabase.from("app_settings").select("*").eq("category", "tax")
+        setGlobalTaxes(tRes || [])
+      }
 
-      setInvoices(iRes.data || [])
-      setGlobalTaxes(tRes.data || [])
+      let query = supabase
+        .from("invoices")
+        .select("*, company:companies(id, name), po:sales_orders(id, so_number, tax_details)")
+        .order("created_at", { ascending: false })
+        .range(currentOffset, currentOffset + PAGE_SIZE - 1)
+
+      if (debouncedSearchQuery) {
+        const searchStr = constructMultiWordSearch(debouncedSearchQuery, ['invoice_number', 'company.name'])
+        if (searchStr) query = query.or(searchStr)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+
+      if (data) {
+        if (isInitial) {
+          setInvoices(data)
+        } else {
+          setInvoices(prev => {
+            const newItems = data.filter((item: any) => !prev.some(p => p.id === item.id))
+            return [...prev, ...newItems]
+          })
+        }
+        setHasMore(data.length === PAGE_SIZE)
+        setOffset(currentOffset + data.length)
+      }
     } catch (err: any) {
       notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }
+  }, [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED])
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    fetchData(true)
+  }, [debouncedSearchQuery])
+
+  // Ordinary Infinite Scroll
+  useEffect(() => {
+    const rootElement = containerRef.current;
+    if (!rootElement) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        const entry = entries[0]
+        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
+          fetchData(false)
+        }
+      },
+      {
+        root: rootElement,
+        rootMargin: "400px",
+        threshold: 0,
+      }
+    )
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current)
+    }
+
+    return () => observer.disconnect()
+  }, [fetchData, hasMore, loading, loadingMore])
 
   const canView = hasPermission("invoice", "view")
   const canInsert = hasPermission("invoice", "insert")
   const canEdit = hasPermission("invoice", "edit")
   const canDelete = hasPermission("invoice", "delete")
 
-  if (!canView && !loading) {
+  if (!canView && !loading && !authLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
         <div className="text-center space-y-2">
@@ -163,7 +232,7 @@ export default function InvoicePage() {
       setFormData({
         invoice_number: item.invoice_number,
         company_id: item.company_id,
-        po_id: item.po_id || "",
+        so_id: item.so_id || "",
         issue_date: item.issue_date,
         due_date: item.due_date,
         subtotal: item.subtotal,
@@ -181,7 +250,7 @@ export default function InvoicePage() {
       setFormData({
         invoice_number: "",
         company_id: "",
-        po_id: "",
+        so_id: "",
         issue_date: format(new Date(), "yyyy-MM-dd"),
         due_date: format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
         subtotal: 0,
@@ -199,11 +268,9 @@ export default function InvoicePage() {
     try {
       const payload = {
         ...formData,
-        tax_amount: totals.tax_amount,
-        total_amount: totals.total_amount
+        tax_amount: totals.taxTotal,
+        total_amount: totals.grandTotal
       }
-      // @ts-ignore
-      delete payload.is_tax_enabled
 
       if (!editingItem && !payload.invoice_number) {
         const { data, error: rpcError } = await supabase.rpc('generate_document_number', { p_doc_type: 'invoice' })
@@ -214,14 +281,27 @@ export default function InvoicePage() {
       if (editingItem) {
         const { error } = await supabase.from("invoices").update(payload).eq("id", editingItem.id)
         if (error) throw error
+
+        // Fetch updated row to keep local state in sync with relations
+        const { data: updatedRow, error: fetchError } = await supabase
+          .from("invoices")
+          .select("*, company:companies(id, name), po:sales_orders(id, so_number, tax_details)")
+          .eq("id", editingItem.id)
+          .single();
+        
+        if (!fetchError && updatedRow) {
+          setInvoices(prev => prev.map(i => i.id === editingItem.id ? updatedRow : i));
+        } else {
+          fetchData(true);
+        }
       } else {
         const { error } = await supabase.from("invoices").insert([payload])
         if (error) throw error
+        fetchData(true)
       }
 
       notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SAVE_SUCCESS?.replace("%data%", dict.MENU_INVOICE) || "Invoice saved successfully.")
       setIsOpen(false)
-      fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     } finally {
@@ -230,12 +310,15 @@ export default function InvoicePage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(dict.MSG_DELETE_CONFIRM)) return
+    const item = invoices.find(i => i.id === id)
+    const label = item ? `[${item.invoice_number}]` : ""
+    if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
       const { error } = await supabase.from("invoices").delete().eq("id", id)
       if (error) throw error
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_DELETED || "Invoice deleted.")
-      fetchData()
+      
+      setInvoices(prev => prev.filter(i => i.id !== id))
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     }
@@ -245,32 +328,22 @@ export default function InvoicePage() {
     try {
       const { error } = await supabase.from("invoices").update({ status }).eq("id", id)
       if (error) throw error
+      
+      setInvoices(prev => prev.map(i => i.id === id ? { ...i, status } : i))
       notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_STATUS_UPDATED || "Invoice status updated.")
-      fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_UPDATE_FAILED, err.message)
     }
   }
 
-  const filteredInvoices = useMemo(() => {
-    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
-    if (words.length === 0) return invoices
-
-    return invoices.filter(i => {
-      const searchFields = [
-        i.invoice_number,
-        i.company?.name || ""
-      ]
-      return searchFields.some(field => {
-        const val = String(field).toLowerCase()
-        return words.every(word => val.includes(word))
-      })
-    })
-  }, [invoices, searchQuery])
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    handleSave()
+  }
 
   return (
-    <div className="page-container">
-      <div className="page-header">
+    <div className="page-container h-full flex flex-col overflow-hidden">
+      <div className="page-header shrink-0">
         <h1 className="page-title">
           <Receipt className="size-5 mr-2 inline-block text-primary" />
           {dict.MENU_INVOICE || "Invoices"}
@@ -289,7 +362,7 @@ export default function InvoicePage() {
                 {editingItem ? `${dict.BUTTON_EDIT} ${dict.MENU_INVOICE}` : `${dict.BUTTON_ADD} ${dict.MENU_INVOICE}`}
               </DialogTitle>
             </DialogHeader>
-            <div className="p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div className="grid gap-2">
@@ -311,7 +384,7 @@ export default function InvoicePage() {
                       }}
                       value={formData.company_id}
                       onSelect={(val, item) => {
-                        setFormData({ ...formData, company_id: val, po_id: "" })
+                        setFormData({ ...formData, company_id: val, so_id: "" })
                         setSelectedCompanyInfo(item)
                         setSelectedPOInfo(null)
                       }}
@@ -329,15 +402,15 @@ export default function InvoicePage() {
                       data={selectedPOInfo ? [selectedPOInfo] : []}
                       fetchData={async (query) => {
                         if (!formData.company_id) return []
-                        let q = supabase.from("purchase_orders").select("id, po_number, total_amount, tax_rate, details").eq("company_id", formData.company_id).limit(8)
+                        let q = supabase.from("sales_orders").select("id, so_number, total_amount, tax_details").eq("company_id", formData.company_id).limit(8)
                         if (query) {
-                          const searchStr = constructMultiWordSearch(query, ['po_number'])
+                          const searchStr = constructMultiWordSearch(query, ['so_number'])
                           if (searchStr) q = q.or(searchStr)
                         }
                         const { data } = await q
                         return data || []
                       }}
-                      value={formData.po_id}
+                      value={formData.so_id}
                       onSelect={(val, item) => {
                         const poTaxes = Array.isArray(item?.tax_details) ? item.tax_details : []
                         const mergedTaxes = globalTaxes.map(gt => {
@@ -348,17 +421,17 @@ export default function InvoicePage() {
 
                         setFormData({ 
                           ...formData, 
-                          po_id: val,
+                          so_id: val,
                           tax_details: mergedTaxes
                         })
                         setSelectedPOInfo(item)
                       }}
                       keyField="id"
-                      displayField="po_number"
-                      defaultDisplay={selectedPOInfo?.po_number || ""}
-                      searchColumns={["po_number"]}
-                      visualColumns={[{ key: "po_number", header: dict.LABEL_PO_NUMBER, className: "w-full font-medium", primary: true }]}
-                      placeholder={dict.PLACEHOLDER_SELECT_QUOTATION?.replace(dict.MENU_QUOTATION, "PO")}
+                      displayField="so_number"
+                      defaultDisplay={selectedPOInfo?.so_number || ""}
+                      searchColumns={["so_number"]}
+                      visualColumns={[{ key: "so_number", header: dict.LABEL_SO_NUMBER, className: "w-full font-medium", primary: true }]}
+                      placeholder={dict.PLACEHOLDER_SELECT_QUOTATION?.replace(dict.MENU_QUOTATION, "SO")}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -376,7 +449,7 @@ export default function InvoicePage() {
                 <div className="space-y-4">
                   <div className="grid gap-2">
                     <Label>{dict.LABEL_SUBTOTAL}</Label>
-                    <NumberInput value={formData.subtotal} onChange={val => setFormData({ ...formData, subtotal: val })} className="text-right font-bold text-lg" leftBadge="Rp" />
+                    <NumberInput value={formData.subtotal} onChange={val => setFormData({ ...formData, subtotal: val })} className="text-right font-bold text-lg" leftBadge={SITE_CONFIG.currencySymbol} />
                   </div>
 
                   {/* Aligned Tax Section */}
@@ -417,7 +490,7 @@ export default function InvoicePage() {
                                 "font-mono font-medium text-xs transition-opacity",
                                 tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground"
                               )}>
-                                Rp {calculatedAmount.toLocaleString()}
+                                {SITE_CONFIG.currencySymbol} {calculatedAmount.toLocaleString()}
                               </span>
                             </div>
                           </div>
@@ -429,15 +502,15 @@ export default function InvoicePage() {
                   <div className="mt-6 p-4 rounded-lg bg-primary/10 space-y-2 border border-primary/20 font-mono">
                     <div className="flex justify-between text-sm">
                       <span>{dict.LABEL_SUBTOTAL}</span>
-                      <span className="font-semibold">Rp {totals.subtotal.toLocaleString()}</span>
+                      <span className="font-semibold">{SITE_CONFIG.currencySymbol} {totals.subtotal.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>{dict.LABEL_TAXES || "Taxes"}</span>
-                      <span className="font-semibold">+Rp {totals.taxTotal.toLocaleString()}</span>
+                      <span className="font-semibold">+{SITE_CONFIG.currencySymbol} {totals.taxTotal.toLocaleString()}</span>
                     </div>
                     <div className="border-t border-primary/20 pt-2 flex justify-between font-bold text-lg text-primary">
                       <span>{dict.LABEL_GRAND_TOTAL}</span>
-                      <span>Rp {totals.grandTotal.toLocaleString()}</span>
+                      <span>{SITE_CONFIG.currencySymbol} {totals.grandTotal.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
@@ -452,31 +525,31 @@ export default function InvoicePage() {
                   <RichTextEditor value={formData.note} onChange={val => setFormData({ ...formData, note: val || "" })} placeholder={dict.PLACEHOLDER_EDITOR} />
                 )}
               </div>
-            </div>
-            <DialogFooter className="p-5 border-t">
-              <Button variant="outline" onClick={() => setIsOpen(false)}><X className="mr-2 size-4" />{dict.BUTTON_CANCEL}</Button>
-              <Button onClick={handleSave} disabled={isSaving || !canEdit}>
-                {isSaving ? <ButtonLoader /> : <Save className="mr-2 size-4" />}
-                {dict.BUTTON_SAVE}
-              </Button>
-            </DialogFooter>
+              <DialogFooter className="pt-5 border-t">
+                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}><X className="mr-2 size-4" />{dict.BUTTON_CANCEL}</Button>
+                <Button onClick={handleSave} disabled={isSaving || !canEdit}>
+                  {isSaving ? <ButtonLoader /> : <Save className="mr-2 size-4" />}
+                  {dict.BUTTON_SAVE}
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="action-bar">
+      <div className="action-bar shrink-0">
         <div className="relative flex-1 w-full max-w-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input placeholder={dict.PLACEHOLDER_SEARCH} className="pl-8" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
       </div>
 
-      <Card className="data-card overflow-hidden">
+      <Card ref={containerRef} className="data-card flex-1 overflow-auto custom-scrollbar">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_INVOICE_NUMBER || "Invoice No"}</TableHead>
-              <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
+              <TableHead>{dict.MENU_INVOICE} & {dict.LABEL_TYPE_CUSTOMER}</TableHead>
               <TableHead>{dict.LABEL_DATES || "Dates"}</TableHead>
               <TableHead className="text-right">{dict.LABEL_AMOUNTS || "Amounts"}</TableHead>
               <TableHead>{dict.LABEL_STATUS}</TableHead>
@@ -486,13 +559,13 @@ export default function InvoicePage() {
           <TableBody>
             {loading ? (
               <TableRow><TableCell colSpan={6} className="p-0"><SectionLoader /></TableCell></TableRow>
-            ) : filteredInvoices.length === 0 ? (
+            ) : invoices.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell></TableRow>
-            ) : filteredInvoices.map((i) => (
+            ) : invoices.map((i) => (
               <TableRow key={i.id}>
                 <TableCell className="px-7">
                   <div className="font-mono font-bold text-sm">{i.invoice_number}</div>
-                  {i.po && <div className="text-xs text-muted-foreground">PO: {i.po.po_number}</div>}
+                  {i.po && <div className="text-xs text-muted-foreground">PO: {i.po.so_number}</div>}
                 </TableCell>
                 <TableCell className="font-medium">{i.company?.name}</TableCell>
                 <TableCell>
@@ -500,8 +573,8 @@ export default function InvoicePage() {
                   <div className="text-xs text-destructive font-medium">{dict.LABEL_DUE_DATE?.split(' ')[0]}: {format(new Date(i.due_date), "dd MMM yyyy")}</div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="font-bold">Rp {Number(i.total_amount).toLocaleString()}</div>
-                  <div className="text-xs text-green-600">{dict.LABEL_PAID || "Paid"}: Rp {Number(i.paid_amount).toLocaleString()}</div>
+                  <div className="font-bold">{SITE_CONFIG.currencySymbol} {Number(i.total_amount).toLocaleString()}</div>
+                  <div className="text-xs text-green-600">{dict.LABEL_PAID || "Paid"}: {SITE_CONFIG.currencySymbol} {Number(i.paid_amount).toLocaleString()}</div>
                 </TableCell>
                 <TableCell>
                   <span className={cn("px-2 py-0.5 rounded text-xs font-bold uppercase", 
@@ -538,6 +611,22 @@ export default function InvoicePage() {
                 </TableCell>
               </TableRow>
             ))}
+
+            {/* Infinite Scroll Sentinel & Loader */}
+            <TableRow ref={observerTarget} className="border-0">
+              <TableCell colSpan={6} className="p-0 border-0 overflow-hidden">
+                {loadingMore && (
+                  <div className="relative h-24 w-full">
+                    <SectionLoader />
+                  </div>
+                )}
+                {!hasMore && invoices.length > 0 && !loading && (
+                  <div className="text-center py-3 text-xs text-danger/70 select-none">
+                    — End of data —
+                  </div>
+                )}
+              </TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </Card>

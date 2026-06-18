@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
+import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
+import { useDebounce } from "@/hooks/use-debounce"
 import {
   Table,
   TableBody,
@@ -24,10 +26,10 @@ import {
   Trash2,
   ChevronDown,
   CheckCircle2,
-  ShoppingCart,
   Calendar,
   Truck,
-  AlertCircle
+  AlertCircle,
+  ShoppingBag
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -65,15 +67,22 @@ import {
   SelectValue
 } from "@/components/ui/select"
 import { ButtonLoader } from "@/components/button-loader"
+import { NumberInput } from "@/components/number-input"
 
-export default function PurchaseOrdersPage() {
+const PAGE_SIZE = 50
+
+export default function SalesOrdersPage() {
   const { dict, lang } = useDictionary()
   const { hasPermission, profile, loading: authLoading } = useAuth()
   const supabase = createClient()
 
   const [orders, setOrders] = useState<any[]>([])
+  const [quotations, setQuotations] = useState<any[]>([])
   const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
@@ -82,14 +91,18 @@ export default function PurchaseOrdersPage() {
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
+
+  const observerTarget = useRef(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Form State
   const [formData, setFormData] = useState(() => ({
-    po_number: "",
+    so_number: "", // Backend column is still so_number
     company_id: "",
     quotation_id: "",
     product_id: "",
-    po_date: format(new Date(), "yyyy-MM-dd"),
+    so_date: format(new Date(), "yyyy-MM-dd"),
     delivery_date: format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
     quantity: 0,
     unit_price: 0,
@@ -100,22 +113,22 @@ export default function PurchaseOrdersPage() {
     status: "Draft",
     note: "",
     is_note_enabled: true,
-    terms_conditions: "",
-    is_terms_enabled: true,
     tax_details: [] as any[]
   }))
 
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
   const [selectedProductInfo, setSelectedProductInfo] = useState<any>(null)
   const [selectedQuotationInfo, setSelectedQuotationInfo] = useState<any>(null)
+  const [availableDiscounts, setAvailableDiscounts] = useState<any[]>([])
 
   // Calculation logic
   const totals = useMemo(() => {
     const subtotal = formData.quantity * formData.unit_price
     const deliveryTotal = formData.quantity * formData.delivery_price_per_litre
-    const afterDiscount = subtotal - formData.discount
+    const discountAmount = subtotal * ((formData.discount || 0) / 100)
+    const afterDiscount = subtotal - discountAmount
     const taxableAmount = Math.max(0, afterDiscount + deliveryTotal)
-    
+
     let taxTotal = 0;
     const appliedTaxes = formData.tax_details.map(t => {
       if (!t.enabled) return { ...t, amount: 0 };
@@ -125,7 +138,7 @@ export default function PurchaseOrdersPage() {
     });
 
     const grandTotal = taxableAmount + taxTotal
-    return { subtotal, deliveryTotal, taxTotal, grandTotal, appliedTaxes }
+    return { subtotal, deliveryTotal, taxTotal, grandTotal, appliedTaxes, discountAmount }
   }, [formData])
 
   const companyAddresses = useMemo(() => {
@@ -136,7 +149,8 @@ export default function PurchaseOrdersPage() {
   const handleQuotationSelect = (qId: string, quote?: any) => {
     if (quote) {
       setSelectedQuotationInfo(quote)
-      
+      setAvailableDiscounts(quote.discounts || [])
+
       // Inherit taxes from quotation if available
       const qTaxes = Array.isArray(quote.tax_details) ? quote.tax_details : []
       const mergedTaxes = globalTaxes.map(gt => {
@@ -150,58 +164,124 @@ export default function PurchaseOrdersPage() {
         quotation_id: qId,
         company_id: quote.company_id,
         product_id: quote.product_id,
+        quantity: quote.minimum_order || 0,
         unit_price: quote.base_price || 0,
         delivery_price_per_litre: quote.delivery_price || 0,
-        tax_details: mergedTaxes
+        tax_details: mergedTaxes,
+        // Also take delivery address if available from quotation
+        delivery_address: quote.delivery_address || prev.delivery_address,
+        discount: 0,
+        term_of_payment: ""
       }))
       // Also update dependent info
       setSelectedCompanyInfo(quote.company)
       setSelectedProductInfo(quote.product)
     } else {
-      setFormData(prev => ({ ...prev, quotation_id: qId }))
+      setSelectedQuotationInfo(null)
+      setAvailableDiscounts([])
+      setFormData(prev => ({ ...prev, quotation_id: "" }))
     }
   }
 
   // Fetch Data
-  async function fetchData() {
-    setLoading(true)
+  const fetchData = useCallback(async (isInitial = false) => {
+    if (isInitial) {
+      setLoading(true)
+      setOffset(0)
+    } else {
+      setLoadingMore(true)
+    }
+
     try {
-      const [oRes, qRes, tRes] = await Promise.all([
-        supabase.from("purchase_orders").select("*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details)").order("created_at", { ascending: false }),
-        supabase.from("quotations").select("id, quotation_number, company_id, product_id, base_price, delivery_price, tax_details, company:companies(id, name, details), product:products(id, sku, name)").eq("status", "Accepted"),
-        supabase.from("app_settings").select("*").eq("category", "tax")
-      ])
+      const currentOffset = isInitial ? 0 : offset
 
-      if (oRes.error) throw oRes.error
-      if (qRes.error) throw qRes.error
-      if (tRes.error) throw tRes.error
+      if (isInitial) {
+        const [qRes, tRes] = await Promise.all([
+          supabase.from("quotations").select("*, company:companies(id, name, details), product:products(id, sku, name)").eq("status", "Accepted"),
+          supabase.from("app_settings").select("*").eq("category", "tax")
+        ])
+        if (qRes.error) throw qRes.error
+        if (tRes.error) throw tRes.error
+        setQuotations(qRes.data || [])
+        setGlobalTaxes(tRes.data || [])
+      }
 
-      setOrders(oRes.data || [])
-      setQuotations(qRes.data || [])
-      setGlobalTaxes(tRes.data || [])
+      let query = supabase
+        .from("sales_orders")
+        .select("*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts)")
+        .order("created_at", { ascending: false })
+        .range(currentOffset, currentOffset + PAGE_SIZE - 1)
+
+      if (debouncedSearchQuery) {
+        const searchStr = constructMultiWordSearch(debouncedSearchQuery, ['so_number', 'company.name', 'product.sku'])
+        if (searchStr) query = query.or(searchStr)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+
+      if (data) {
+        if (isInitial) {
+          setOrders(data)
+        } else {
+          setOrders(prev => {
+            const newItems = data.filter((item: any) => !prev.some(p => p.id === item.id))
+            return [...prev, ...newItems]
+          })
+        }
+        setHasMore(data.length === PAGE_SIZE)
+        setOffset(currentOffset + data.length)
+      }
     } catch (err: any) {
       notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }
+  }, [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED])
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    fetchData(true)
+  }, [debouncedSearchQuery])
+
+  // Ordinary Infinite Scroll
+  useEffect(() => {
+    const rootElement = containerRef.current;
+    if (!rootElement) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        const entry = entries[0]
+        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
+          fetchData(false)
+        }
+      },
+      {
+        root: rootElement,
+        rootMargin: "400px",
+        threshold: 0,
+      }
+    )
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current)
+    }
+
+    return () => observer.disconnect()
+  }, [fetchData, hasMore, loading, loadingMore])
 
   // Permission Checks
-  const canView = hasPermission("purchase-order", "view")
-  const canInsert = hasPermission("purchase-order", "insert")
-  const canEdit = hasPermission("purchase-order", "edit")
-  const canDelete = hasPermission("purchase-order", "delete")
-  const canPrint = hasPermission("purchase-order", "print")
+  const canView = hasPermission("sales-order", "view")
+  const canInsert = hasPermission("sales-order", "insert")
+  const canEdit = hasPermission("sales-order", "edit")
+  const canDelete = hasPermission("sales-order", "delete")
+  const canPrint = hasPermission("sales-order", "print")
 
   const handlePrint = (o: any) => {
     notify.info("Print function is not implemented yet")
   }
 
-  if (!canView && !loading) {
+  if (!canView && !loading && !authLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
         <div className="text-center space-y-2">
@@ -220,6 +300,7 @@ export default function PurchaseOrdersPage() {
       setSelectedCompanyInfo(item.company)
       setSelectedProductInfo(item.product)
       setSelectedQuotationInfo(item.quotation)
+      setAvailableDiscounts(item.quotation?.discounts || [])
 
       // Merge saved taxes with current global taxes
       const savedTaxes = Array.isArray(item.tax_details) ? item.tax_details : []
@@ -237,11 +318,11 @@ export default function PurchaseOrdersPage() {
       })
 
       setFormData({
-        po_number: item.po_number,
+        so_number: item.so_number,
         company_id: item.company_id || "",
         quotation_id: item.quotation_id || "",
         product_id: item.product_id || "",
-        po_date: item.po_date,
+        so_date: item.so_date,
         delivery_date: item.delivery_date,
         quantity: item.quantity || 0,
         unit_price: item.unit_price || 0,
@@ -252,8 +333,6 @@ export default function PurchaseOrdersPage() {
         status: item.status,
         note: item.note || "",
         is_note_enabled: item.is_note_enabled ?? true,
-        terms_conditions: item.terms_conditions || "",
-        is_terms_enabled: item.is_terms_enabled ?? true,
         tax_details: mergedTaxes
       })
     } else {
@@ -262,13 +341,14 @@ export default function PurchaseOrdersPage() {
       setSelectedCompanyInfo(null)
       setSelectedProductInfo(null)
       setSelectedQuotationInfo(null)
+      setAvailableDiscounts([])
 
       setFormData({
-        po_number: "", // Will be auto-generated on save if empty
+        so_number: "", // Will be auto-generated on save if empty
         company_id: "",
         quotation_id: "",
         product_id: "",
-        po_date: format(new Date(), "yyyy-MM-dd"),
+        so_date: format(new Date(), "yyyy-MM-dd"),
         delivery_date: format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
         quantity: 0,
         unit_price: 0,
@@ -279,8 +359,6 @@ export default function PurchaseOrdersPage() {
         status: "Draft",
         note: "",
         is_note_enabled: true,
-        terms_conditions: "",
-        is_terms_enabled: true,
         tax_details: globalTaxes.map(gt => ({ ...gt, rate: gt.value, enabled: false }))
       })
     }
@@ -293,23 +371,53 @@ export default function PurchaseOrdersPage() {
     try {
       const payload = { ...formData }
       if (editingItem) {
-        const { error } = await supabase.from("purchase_orders").update(payload).eq("id", editingItem.id)
-        if (error) throw error
-        notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_PO_SAVED)
-      } else {
-        // Generate document number if empty
-        if (!payload.po_number) {
-          const { data, error: rpcError } = await supabase.rpc('generate_document_number', { p_doc_type: 'purchase-order' })
-          if (rpcError) throw rpcError
-          payload.po_number = data
+        // Handle Quotation Reversion if changed
+        if (editingItem.quotation_id && editingItem.quotation_id !== payload.quotation_id) {
+          await supabase.from("quotations").update({ status: 'Accepted' }).eq("id", editingItem.quotation_id)
         }
 
-        const { error } = await supabase.from("purchase_orders").insert([payload])
+        // If a NEW quotation is being linked
+        if (payload.quotation_id && editingItem.quotation_id !== payload.quotation_id) {
+          await supabase.from("quotations").update({ status: 'Processed' }).eq("id", payload.quotation_id)
+        }
+
+        const { error } = await supabase.from("sales_orders").update(payload).eq("id", editingItem.id)
         if (error) throw error
-        notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_PO_SAVED)
+
+        // Fetch updated row to keep local state in sync with relations
+        const { data: updatedRow, error: fetchError } = await supabase
+          .from("sales_orders")
+          .select("*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts)")
+          .eq("id", editingItem.id)
+          .single();
+
+        if (!fetchError && updatedRow) {
+          setOrders(prev => prev.map(o => o.id === editingItem.id ? updatedRow : o));
+        } else {
+          fetchData(true);
+        }
+
+        notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SO_SAVED)
+      } else {
+        // Generate document number if empty
+        if (!payload.so_number) {
+          const { data, error: rpcError } = await supabase.rpc('generate_document_number', { p_doc_type: 'sales-order' })
+          if (rpcError) throw rpcError
+          payload.so_number = data
+        }
+
+        const { error } = await supabase.from("sales_orders").insert([payload])
+        if (error) throw error
+
+        // If from quotation, update quotation status to Processed
+        if (payload.quotation_id) {
+          await supabase.from("quotations").update({ status: 'Processed' }).eq("id", payload.quotation_id)
+        }
+
+        notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SO_SAVED)
+        fetchData(true)
       }
       setIsOpen(false)
-      fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     } finally {
@@ -318,12 +426,20 @@ export default function PurchaseOrdersPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(dict.MSG_DELETE_CONFIRM)) return
+    const item = orders.find(p => p.id === id)
+    const label = item ? `[${item.so_number}]` : ""
+    if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
-      const { error } = await supabase.from("purchase_orders").delete().eq("id", id)
+      // Revert quotation status if linked
+      if (item?.quotation_id) {
+        await supabase.from("quotations").update({ status: 'Accepted' }).eq("id", item.quotation_id)
+      }
+
+      const { error } = await supabase.from("sales_orders").delete().eq("id", id)
       if (error) throw error
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_PO_DELETED)
-      fetchData()
+
+      setOrders(prev => prev.filter(o => o.id !== id))
+      notify.deleted(dict.MSG_SO_DELETED.replace("%data%", label))
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     }
@@ -331,58 +447,43 @@ export default function PurchaseOrdersPage() {
 
   const updateStatus = async (id: string, status: string) => {
     try {
-      const { error } = await supabase.from("purchase_orders").update({ status }).eq("id", id)
+      const { error } = await supabase.from("sales_orders").update({ status }).eq("id", id)
       if (error) throw error
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_PO_STATUS_UPDATED)
-      fetchData()
+
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o))
+      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SO_STATUS_UPDATED)
     } catch (err: any) {
       notify.error(dict.MSG_UPDATE_FAILED, err.message)
     }
   }
-
-  // Search filter
-  const filteredOrders = useMemo(() => {
-    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
-    if (words.length === 0) return orders
-
-    return orders.filter(o => {
-      const searchFields = [
-        o.po_number,
-        o.company?.name || "",
-        o.product?.sku || ""
-      ]
-      return searchFields.some(field => {
-        const val = String(field).toLowerCase()
-        return words.every(word => val.includes(word))
-      })
-    })
-  }, [orders, searchQuery])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     handleSave()
   }
 
+  const isFromQuotation = !!formData.quotation_id
+
   return (
-    <div className="page-container">
+    <div className="page-container h-full flex flex-col overflow-hidden">
       {/* Page Header */}
-      <div className="page-header">
+      <div className="page-header shrink-0">
         <h1 className="page-title">
-          <ShoppingCart className="size-5 mr-2 inline-block text-primary" />
-          {dict.MENU_PURCHASE_ORDER}
+          <ShoppingBag className="size-5 mr-2 inline-block text-primary" />
+          {dict.MENU_SALES_ORDER}
         </h1>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
             <Button size="sm" onClick={() => handleOpenDialog()} disabled={!canInsert}>
               <Plus data-icon="inline-start" />
-              {dict.BUTTON_NEW_PO}
+              {dict.BUTTON_NEW_SO}
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+          <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto p-0 gap-0">
             <DialogHeader className="p-5 border-b sticky top-0 bg-background z-10">
               <DialogTitle>
-                {editingItem ? dict.BUTTON_EDIT + " PO" : dict.BUTTON_NEW_PO}
+                <ShoppingBag className="size-5 mr-2 inline-block" />{editingItem ? dict.BUTTON_EDIT + " SO" : dict.BUTTON_NEW_SO}
               </DialogTitle>
             </DialogHeader>
 
@@ -390,41 +491,57 @@ export default function PurchaseOrdersPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="ponum">{dict.LABEL_PO_NUMBER}</Label>
-                    <Input id="ponum" value={formData.po_number} onChange={e => setFormData({ ...formData, po_number: e.target.value })} disabled={editingItem && !hasPermission("purchase-order", "edit")} placeholder={dict.LABEL_AUTO_GENERATED} />
+                    <Label htmlFor="sonum">{dict.LABEL_SO_NUMBER}</Label>
+                    <Input id="sonum" value={formData.so_number} onChange={e => setFormData({ ...formData, so_number: e.target.value })} disabled={editingItem && !hasPermission("sales-order", "edit")} placeholder={dict.LABEL_AUTO_GENERATED} />
                   </div>
 
                   <div className="grid gap-2">
                     <Label>{dict.LABEL_QUOTATION_NUMBER} ({dict.LABEL_OPTIONAL})</Label>
-                    <LiveSearch
-                      data={selectedQuotationInfo ? [selectedQuotationInfo] : []}
-                      fetchData={async (query) => {
-                        let q = supabase.from("quotations").select("*, company:companies(id, name, details), product:products(id, sku, name)").limit(8)
-                        if (query) {
-                          const searchStr = constructMultiWordSearch(query, ['quotation_number'])
-                          if (searchStr) q = q.or(searchStr)
-                        }
-                        const { data } = await q
-                        return data || []
-                      }}
-                      value={formData.quotation_id}
-                      onSelect={handleQuotationSelect}
-                      keyField="id"
-                      displayField="quotation_number"
-                      defaultDisplay={selectedQuotationInfo?.quotation_number || ""}
-                      searchColumns={["quotation_number"]}
-                      visualColumns={[
-                        { key: "quotation_number", header: dict.LABEL_QUOTATION_NUMBER, className: "w-2/5 font-medium", primary: true }
-                      ]}
-                      placeholder={dict.PLACEHOLDER_SELECT_QUOTATION}
-                      emptyMessage={dict.NO_DATA}
-                    />
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <LiveSearch
+                          key={`quotation-search-${formData.company_id}`}
+                          data={selectedQuotationInfo ? [selectedQuotationInfo] : []}
+                          fetchData={async (query) => {
+                            let q = supabase.from("quotations").select("*, company:companies(id, name, details), product:products(id, sku, name)").eq("status", "Accepted")
+
+                            if (formData.company_id) {
+                              q = q.eq("company_id", formData.company_id)
+                            }
+
+                            if (query) {
+                              const searchStr = constructMultiWordSearch(query, ['quotation_number'])
+                              if (searchStr) q = q.or(searchStr)
+                            }
+                            const { data } = await q
+                            return data || []
+                          }}
+                          value={formData.quotation_id}
+                          onSelect={handleQuotationSelect}
+                          keyField="id"
+                          displayField="quotation_number"
+                          defaultDisplay={selectedQuotationInfo?.quotation_number || ""}
+                          searchColumns={["quotation_number"]}
+                          visualColumns={[
+                            { key: "quotation_number", header: dict.LABEL_QUOTATION_NUMBER, className: "w-2/5 font-medium", primary: true }
+                          ]}
+                          placeholder={dict.PLACEHOLDER_SELECT_QUOTATION}
+                          emptyMessage={dict.NO_DATA}
+                        />
+                      </div>
+                      {isFromQuotation && (
+                        <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => handleQuotationSelect("")}>
+                          <X className="size-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid gap-2">
                     <Label>{dict.LABEL_COMPANY_NAME}</Label>
                     <LiveSearch
                       data={selectedCompanyInfo ? [selectedCompanyInfo] : []}
+                      disabled={isFromQuotation}
                       fetchData={async (query) => {
                         let q = supabase.from("companies").select("id, name, type, details").or('type.cs.{Supplier},type.cs.{Customer}').limit(8)
                         if (query) {
@@ -459,6 +576,7 @@ export default function PurchaseOrdersPage() {
                     <Label>{dict.LABEL_SKU}</Label>
                     <LiveSearch
                       data={selectedProductInfo ? [selectedProductInfo] : []}
+                      disabled={isFromQuotation}
                       fetchData={async (query) => {
                         let q = supabase.from("products").select("id, sku, name").limit(8)
                         if (query) {
@@ -488,106 +606,97 @@ export default function PurchaseOrdersPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                      <Label htmlFor="qty">{dict.LABEL_QUANTITY}</Label>
-                      <Input id="qty" type="number" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })} />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="uprice">{dict.LABEL_UNIT_PRICE}</Label>
-                      <Input id="uprice" type="number" value={formData.unit_price} onChange={e => setFormData({ ...formData, unit_price: Number(e.target.value) })} />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="top">{dict.LABEL_TERM_OF_PAYMENT}</Label>
-                    <Input id="top" value={formData.term_of_payment} onChange={e => setFormData({ ...formData, term_of_payment: e.target.value })} placeholder={dict.PLACEHOLDER_TOP} />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label>{dict.LABEL_DELIVERY_ADDRESS}</Label>
-                    {companyAddresses.length > 0 ? (
-                      <Select value={formData.delivery_address} onValueChange={val => setFormData({ ...formData, delivery_address: val })}>
-                        <SelectTrigger>
-                          <SelectValue placeholder={dict.PLACEHOLDER_SELECT_ADDRESS} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {companyAddresses.map((addr, idx) => (
-                            <SelectItem key={idx} value={addr.address}>
-                              <div className="flex flex-col items-start">
-                                <span className="font-medium text-xs">{addr.label}</span>
-                                <span className="text-[10px] text-muted-foreground line-clamp-1">{addr.address}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input value={formData.delivery_address} onChange={e => setFormData({ ...formData, delivery_address: e.target.value })} placeholder={dict.PLACEHOLDER_ENTER_ADDRESS} />
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="space-y-4 border rounded-lg p-4 bg-muted/10 h-fit">
-                    <div className="grid gap-2">
-                      <Label className="flex items-center gap-2"><Calendar className="size-4" /> {dict.LABEL_PO_DATE}</Label>
-                      <Input type="date" value={formData.po_date} onChange={e => setFormData({ ...formData, po_date: e.target.value })} />
+                      <Label className="flex items-center gap-2"><Calendar className="size-4" /> {dict.LABEL_SO_DATE}</Label>
+                      <Input type="date" value={formData.so_date} onChange={e => setFormData({ ...formData, so_date: e.target.value })} />
                     </div>
                     <div className="grid gap-2">
                       <Label className="flex items-center gap-2"><Truck className="size-4" /> {dict.LABEL_DELIVERY_DATE}</Label>
                       <Input type="date" value={formData.delivery_date} onChange={e => setFormData({ ...formData, delivery_date: e.target.value })} />
                     </div>
                   </div>
+                </div>
 
-                  <div className="space-y-4 border rounded-lg p-4 bg-primary/5 h-fit">
+                <div className="space-y-6">
+                  <div className="space-y-4 border rounded-lg p-4 bg-primary/5 h-full flex flex-col justify-between">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="grid gap-2">
-                        <Label htmlFor="discount">{dict.LABEL_DISCOUNTS}</Label>
-                        <NumberInput id="discount" value={formData.discount} onChange={val => setFormData({ ...formData, discount: val })} leftBadge="Rp" />
+                        <Label htmlFor="qty">{dict.LABEL_QUANTITY}</Label>
+                        <NumberInput id="qty" value={formData.quantity} onChange={val => setFormData({ ...formData, quantity: val })} />
                       </div>
                       <div className="grid gap-2">
-                        <Label htmlFor="deliv_price">{dict.LABEL_TRANSPORT_COST}</Label>
-                        <NumberInput id="deliv_price" value={formData.delivery_price_per_litre} onChange={val => setFormData({ ...formData, delivery_price_per_litre: val })} leftBadge="Rp" rightBadge="/ L" />
+                        <Label htmlFor="uprice">{dict.LABEL_UNIT_PRICE}</Label>
+                        <NumberInput id="uprice" value={formData.unit_price} onChange={val => setFormData({ ...formData, unit_price: val })} leftBadge={SITE_CONFIG.currencySymbol} disabled={isFromQuotation} />
                       </div>
                     </div>
 
-                    <div className="space-y-3 pt-2 border-t">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="top">{dict.LABEL_TERM_OF_PAYMENT}</Label>
+                        {isFromQuotation && availableDiscounts.length > 0 ? (
+                          <Select
+                            value={formData.term_of_payment}
+                            onValueChange={val => {
+                              const disc = availableDiscounts.find(d => d.label === val)
+                              setFormData({ ...formData, term_of_payment: val, discount: disc ? disc.value : 0 })
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={dict.PLACEHOLDER_SELECT_TERM} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableDiscounts.map((d, idx) => (
+                                <SelectItem key={idx} value={d.label}>
+                                  {d.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input id="top" value={formData.term_of_payment} onChange={e => setFormData({ ...formData, term_of_payment: e.target.value })} placeholder={dict.PLACEHOLDER_TOP} />
+                        )}
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="discount">{dict.LABEL_DISCOUNTS}</Label>
+                        <NumberInput id="discount" value={formData.discount} onChange={val => setFormData({ ...formData, discount: val })} rightBadge="%" disabled={isFromQuotation} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="deliv_price">{dict.LABEL_TRANSPORT_COST}</Label>
+                        <NumberInput id="deliv_price" value={formData.delivery_price_per_litre} onChange={val => setFormData({ ...formData, delivery_price_per_litre: val })} leftBadge={SITE_CONFIG.currencySymbol} rightBadge="/ L" disabled={isFromQuotation} />
+                      </div>
+                      <div className="flex flex-col justify-end">
+                        <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">{dict.LABEL_SUBTOTAL}</div>
+                        <div className="font-mono font-bold text-sm">{SITE_CONFIG.currencySymbol} {totals.subtotal.toLocaleString()}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-4 border-t">
                       <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 block">{dict.LABEL_TAXES || "Taxes"}</Label>
                       <div className="space-y-2">
                         {formData.tax_details.map((tax, idx) => {
                           const calculatedAmount = totals.appliedTaxes.find(t => t.name === tax.name)?.amount || 0;
                           return (
-                            <div key={idx} className="flex items-center p-2 border rounded bg-background h-12 gap-4">
-                              <div className="w-20 shrink-0 font-medium">
-                                <Label htmlFor={`tax-${idx}`} className="cursor-pointer text-xs">{tax.name}</Label>
+                            <div key={idx} className="flex items-center p-2 border rounded bg-background h-10 gap-3">
+                              <div className="w-20 shrink-0 font-medium truncate">
+                                <Label htmlFor={`tax-${idx}`} className="cursor-pointer text-[10px]">{tax.name}</Label>
                               </div>
-
-                              <div className="shrink-0 flex items-center justify-center w-10">
+                              <div className="shrink-0 flex items-center justify-center w-8">
                                 <Switch id={`tax-${idx}`} checked={tax.enabled} onCheckedChange={(val) => {
                                   const newTaxes = [...formData.tax_details];
                                   newTaxes[idx].enabled = val;
                                   setFormData({ ...formData, tax_details: newTaxes })
-                                }} />
+                                }} disabled={isFromQuotation} />
                               </div>
-
-                              <div className="w-24 shrink-0">
+                              <div className="w-20 shrink-0">
                                 <div style={{ opacity: tax.enabled ? 1 : 0.3 }} className="transition-opacity w-full">
-                                  <NumberInput
-                                    className="text-right font-mono text-xs"
-                                    containerClassName="h-8 bg-muted/50"
-                                    disabled
-                                    value={tax.rate}
-                                    onChange={() => { }}
-                                    rightBadge="%"
-                                  />
+                                  <NumberInput className="text-right font-mono text-[10px]" containerClassName="h-7 bg-muted/50" disabled value={tax.rate} onChange={() => { }} rightBadge="%" />
                                 </div>
                               </div>
-
                               <div className="flex-1 flex justify-end">
-                                <span className={cn(
-                                  "font-mono font-medium text-xs transition-opacity",
-                                  tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground"
-                                )}>
-                                  Rp {calculatedAmount.toLocaleString()}
+                                <span className={cn("font-mono font-medium text-[10px] transition-opacity", tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground")}>
+                                  {SITE_CONFIG.currencySymbol}{calculatedAmount.toLocaleString()}
                                 </span>
                               </div>
                             </div>
@@ -597,31 +706,39 @@ export default function PurchaseOrdersPage() {
                     </div>
 
                     <div className="space-y-2 border-t pt-4">
-                      <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                        <span>{dict.LABEL_SUBTOTAL}:</span>
-                        <span>Rp {totals.subtotal.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                        <span>{dict.LABEL_DISCOUNTS}:</span>
-                        <span className="text-destructive">-Rp {formData.discount.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                        <span>{dict.LABEL_DELIVERY_TOTAL}:</span>
-                        <span>Rp {totals.deliveryTotal.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                        <span>{dict.LABEL_TAXES || "Taxes"}:</span>
-                        <span>+Rp {totals.taxTotal.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-lg font-bold border-t pt-2 font-mono">
+                      <div className="flex justify-between text-lg font-bold font-mono">
                         <span>{dict.LABEL_GRAND_TOTAL}:</span>
-                        <span className="text-primary">Rp {totals.grandTotal.toLocaleString()}</span>
+                        <span className="text-primary">{SITE_CONFIG.currencySymbol} {totals.grandTotal.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="space-y-6">
+
+              <div className="grid gap-2 w-full">
+                <Label>{dict.LABEL_DELIVERY_ADDRESS}</Label>
+                {companyAddresses.length > 0 ? (
+                  <Select value={formData.delivery_address} onValueChange={val => setFormData({ ...formData, delivery_address: val })} disabled={isFromQuotation}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={dict.PLACEHOLDER_SELECT_ADDRESS} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {companyAddresses.map((addr, idx) => (
+                        <SelectItem key={idx} value={addr.address}>
+                          <div className="flex flex-col items-start">
+                            <span className="font-medium text-xs">{addr.label}</span>
+                            <span className="text-[10px] text-muted-foreground line-clamp-1">{addr.address}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={formData.delivery_address} onChange={e => setFormData({ ...formData, delivery_address: e.target.value })} disabled={isFromQuotation} placeholder={dict.PLACEHOLDER_ENTER_ADDRESS} className="w-full" />
+                )}
+              </div>
+
+              <div className="w-full">
                 <RichTextEditor
                   label={dict.LABEL_NOTE}
                   value={formData.note}
@@ -630,28 +747,20 @@ export default function PurchaseOrdersPage() {
                   onToggleEnabled={val => setFormData(prev => ({ ...prev, is_note_enabled: val }))}
                   placeholder={dict.PLACEHOLDER_EDITOR}
                 />
-                <RichTextEditor
-                  label={dict.LABEL_TERMS}
-                  value={formData.terms_conditions}
-                  onChange={val => setFormData(prev => ({ ...prev, terms_conditions: val || "" }))}
-                  isEnabled={formData.is_terms_enabled}
-                  onToggleEnabled={val => setFormData(prev => ({ ...prev, is_terms_enabled: val }))}
-                  placeholder={dict.PLACEHOLDER_EDITOR}
-                />
               </div>
-              <DialogFooter className="mt-2 sticky bottom-0 bg-background z-10 border-t pt-4 gap-2 *:w-full *:flex-1 h-22 sm:h-auto">
-                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>{dict.BUTTON_CANCEL}</Button>
-                <Button onClick={() => handleSave()} disabled={isSaving || (editingItem ? !canEdit : !canInsert)}>
-                  {isSaving ? <ButtonLoader /> : <Save data-icon="inline-start" />} {dict.BUTTON_SAVE_PO}
-                </Button>
-              </DialogFooter>
             </form>
+            <DialogFooter className="p-5 border-t shrink-0 sticky bottom-0 bg-background">
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>{dict.BUTTON_CANCEL}</Button>
+              <Button onClick={() => handleSave()} disabled={isSaving || (editingItem ? !canEdit : !canInsert)}>
+                {isSaving ? <ButtonLoader /> : <Save data-icon="inline-start" />} {dict.BUTTON_SAVE_SO}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
       {/* Action Bar / Filters */}
-      <div className="action-bar">
+      <div className="action-bar shrink-0">
         <div className="relative flex-1 w-full max-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
@@ -664,13 +773,13 @@ export default function PurchaseOrdersPage() {
       </div>
 
       {/* Data Area */}
-      <Card className="data-card">
+      <Card ref={containerRef} className="data-card flex-1 overflow-auto custom-scrollbar">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_NAME} (No.)</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
-              <TableHead>{dict.LABEL_PO_DATE}</TableHead>
+              <TableHead>{dict.LABEL_SO_DATE}</TableHead>
               <TableHead>{dict.LABEL_QUANTITY}</TableHead>
               <TableHead>{dict.LABEL_STATUS}</TableHead>
               <TableHead className="text-right"> </TableHead>
@@ -681,13 +790,13 @@ export default function PurchaseOrdersPage() {
               <TableRow>
                 <TableCell colSpan={6} className="p-0"><SectionLoader /></TableCell>
               </TableRow>
-            ) : filteredOrders.length === 0 ? (
+            ) : orders.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell></TableRow>
-            ) : filteredOrders.map(o => (
+            ) : orders.map(o => (
               <TableRow key={o.id} className="group">
-                <TableCell className="font-medium">{o.po_number}</TableCell>
+                <TableCell className="font-medium">{o.so_number}</TableCell>
                 <TableCell>{o.company?.name || "-"}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{format(new Date(o.po_date), "dd MMM yyyy")}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{format(new Date(o.so_date), "dd MMM yyyy")}</TableCell>
                 <TableCell className="text-sm">{o.quantity}</TableCell>
                 <TableCell>
                   <div className={cn(
@@ -717,7 +826,7 @@ export default function PurchaseOrdersPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
-                            <CheckCircle2 className="size-4 mr-2" /> {dict.MSG_STATUS_UPDATED}
+                            <CheckCircle2 className="size-4 mr-2" /> {dict.LABEL_STATUS}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuPortal>
                             <DropdownMenuSubContent>
@@ -740,6 +849,22 @@ export default function PurchaseOrdersPage() {
                 </TableCell>
               </TableRow>
             ))}
+
+            {/* Infinite Scroll Sentinel & Loader */}
+            <TableRow ref={observerTarget} className="border-0">
+              <TableCell colSpan={6} className="p-0 border-0 overflow-hidden">
+                {loadingMore && (
+                  <div className="relative h-24 w-full">
+                    <SectionLoader />
+                  </div>
+                )}
+                {!hasMore && orders.length > 0 && !loading && (
+                  <div className="text-center py-3 text-xs text-danger/70 select-none">
+                    — End of data —
+                  </div>
+                )}
+              </TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </Card>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
+import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
 import {
@@ -16,8 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Save, X, Plus, Package, Search, Pencil, RefreshCw, AlertCircle, Banknote, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { SummaryCard } from "@/components/summary-card"
-import { ConfirmationDialog } from "@/components/confirmation-dialog"
+import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 
 import {
   Dialog,
@@ -189,7 +189,6 @@ export default function ProductsPage() {
         setProducts(prev => [data, ...prev])
         notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", ""), dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`))
       }
-      fetchStats()
       setIsOpen(false)
     } catch (err: any) {
       console.error("Products: Save error:", err)
@@ -210,9 +209,8 @@ export default function ProductsPage() {
     try {
       const { error } = await supabase.from("products").delete().eq("id", deleteConfirm.id)
       if (error) throw error
-      notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", dict.TITLE_PRODUCTS || "Product"))
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`))
       setProducts(prev => prev.filter(p => p.id !== deleteConfirm.id))
-      fetchStats()
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     } finally {
@@ -297,7 +295,7 @@ export default function ProductsPage() {
                     id="base_price"
                     value={formData.base_price}
                     onChange={(val) => setFormData({ ...formData, base_price: val })}
-                    leftBadge="Rp"
+                    leftBadge={SITE_CONFIG.currencySymbol}
                     rightBadge="/ L"
                     required
                   />
@@ -414,7 +412,7 @@ export default function ProductsPage() {
         </Table>
       </Card>
 
-      <ConfirmationDialog
+      <DeleteConfirmationDialog
         isOpen={deleteConfirm !== null}
         onOpenChange={(open) => !open && setDeleteConfirm(null)}
         onConfirm={confirmDelete}

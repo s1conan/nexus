@@ -17,7 +17,7 @@ import { Card } from "@/components/ui/card"
 import { Plus, Building2, Search, Pencil, Save, X, Phone, Mail, User, Info, Warehouse, Truck, Trash2, RefreshCw, AlertCircle, Users, CheckCircle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { SummaryCard } from "@/components/summary-card"
-import { ConfirmationDialog } from "@/components/confirmation-dialog"
+import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 
 import {
   Dialog,
@@ -387,7 +387,7 @@ export default function CompaniesPage() {
     try {
       const { error } = await supabase.from("companies").delete().eq("id", deleteConfirm.id)
       if (error) throw error
-      notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", dict.TITLE_COMPANIES))
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`))
       setCompanies(prev => prev.filter(c => c.id !== deleteConfirm.id))
       fetchStats()
     } catch (err: any) {
@@ -840,7 +840,7 @@ export default function CompaniesPage() {
           </TableBody>
         </Table>
       </Card>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-1 shrink-0">
+      <div className="grid grid-cols-4 gap-2 md:gap-4 mb-1 shrink-0">
         <SummaryCard
           label={dict.LABEL_ACTIVE_COMPANIES}
           value={stats.activeCompanies}
@@ -867,7 +867,7 @@ export default function CompaniesPage() {
         />
       </div>
 
-      <ConfirmationDialog
+      <DeleteConfirmationDialog
         isOpen={deleteConfirm !== null}
         onOpenChange={(open) => !open && setDeleteConfirm(null)}
         onConfirm={confirmDelete}

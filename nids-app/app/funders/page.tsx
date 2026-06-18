@@ -17,7 +17,7 @@ import { Card } from "@/components/ui/card"
 import { Plus, User, Search, Pencil, Save, X, Phone, Fingerprint, CreditCard, Trash2, RefreshCw, AlertCircle, CheckCircle, Users } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { SummaryCard } from "@/components/summary-card"
-import { ConfirmationDialog } from "@/components/confirmation-dialog"
+import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 
 import {
   Dialog,
@@ -277,7 +277,7 @@ export default function FundersPage() {
     try {
       const { error } = await supabase.from("funders").delete().eq("id", deleteConfirm.id)
       if (error) throw error
-      notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", dict.TITLE_FUNDERS || "Funder"))
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`))
       setFunders(prev => prev.filter(f => f.id !== deleteConfirm.id))
       fetchStats()
     } catch (err: any) {
@@ -596,7 +596,7 @@ export default function FundersPage() {
         />
       </div>
 
-      <ConfirmationDialog
+      <DeleteConfirmationDialog
         isOpen={deleteConfirm !== null}
         onOpenChange={(open) => !open && setDeleteConfirm(null)}
         onConfirm={confirmDelete}

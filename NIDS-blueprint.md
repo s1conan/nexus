@@ -1,87 +1,65 @@
-NIDS: Operational Workflow Blueprint
-1. Pre-Operational Setup (Configuration)
-Before any transactions occur, the system must be initialized to ensure zero hardcoding and full traceability.
+# NIDS: Operational Workflow Blueprint
 
-Dictionary Initialization: The system loads the dictionary table. All UI elements (labels, buttons, headers) fetch their values from this state.
+## 1. Foundation & System Core
+The system is built for zero hardcoding and full traceability, controlled via centralized parameters.
 
-Audit Hooking: Every UI interaction triggers a Supabase call that includes the auth.uid(). PostgreSQL triggers handle the heavy lifting of recording the "Before" and "After" state of every table row.
+*   **App Settings (Global Config):** All dynamic parameters—Tax rates (PPN, PBBKB, PPh 22), Document Numbering prefixes, and Email CC settings—are managed in `app_settings`.
+*   **Document Numbering:** Automated, year-based numbering system for Quotations, Sales Orders, Delivery Orders, Invoices, and Payments.
+*   **Dictionary & UI:** All labels, buttons, and headers are fetched from the `dictionary` table to allow instant multi-language or terminology updates.
+*   **Audit Engine:** PostgreSQL triggers capture every row change (Before/After) linked to `auth.uid()`, providing a tamper-proof history of all operations.
 
-Master Data Entry: Admin populates companies (Suppliers, Customers, Transporters) and products (specific oil grades/SKUs).
+## 2. Master Data Management
+Initialization of the entities that drive the transactions.
 
-2. The Sales Pipeline (Quotes to Orders)
-This covers the "Customer asks for pricing" and "Agreement" phase.
+*   **Companies:** categorized as Customers, Suppliers, Transporters, or Funders.
+*   **Products:** Specific fuel grades or SKUs with suggested base pricing.
+*   **Vehicles & Logistics:** Master list of trucks and tankers, including **Compartment Mapping** (defining capacity per compartment) for precise loading.
+*   **Profiles & RBAC:** Role-based access control (Admin, Boss, Staff) with specific RLS policies protecting sensitive financial data.
 
-Drafting the Quote: The Distributor (user) creates a quote.
+## 3. The Sales Pipeline (Quotes to Orders)
+The workflow from initial inquiry to binding agreement.
 
-Input: Selects a customer from companies, adds items from products.
+*   **Quotations (Advanced):**
+    *   **Logic:** Suggests `base_price` while allowing manual overrides.
+    *   **Price Snapshot:** Captures the price at the moment of quoting to prevent "hidden" changes during negotiation.
+    *   **Multi-Tax Engine:** Users toggle specific taxes (PPN, PBBKB, etc.) per quote. Rates are locked once saved.
+    *   **Processed Tracking:** Status flow from Draft → Sent → Processed (Converted to Order).
+*   **Sales Orders (SO):**
+    *   **Outbound:** Customer orders stock from the Distributor.
+    *   **Inbound:** Distributor orders stock from a Supplier (formerly PO).
+    *   **Inheritance:** Automatically inherits Tax Details and Pricing from the linked Quotation.
 
-Logic: The system suggests a base_price but allows for manual adjustment.
+## 4. Logistics & Inventory (The Ledger System)
+Handling physical movement and stock accounting.
 
-Quote Negotiation: If the customer asks for a change, the user edits the quote. The audit_logs track every price change made during negotiation.
+*   **Inventory Ledger (Event-Sourced):**
+    *   Every movement is an immutable `IN` or `OUT` event.
+    *   **Zero-Reset Logic:** When stock hits 0, historical "price baggage" is cleared (`is_active = false`), ensuring new stock starts with fresh average cost calculations.
+*   **Deposits (Inbound):** Recording fuel received into the system, linked to Suppliers.
+*   **Delivery Orders (Outbound):**
+    *   **Vehicle Integration:** Links to specific Trucks and Drivers.
+    *   **Compartment Seals:** Recording specific seal numbers and quantities for each vehicle compartment to prevent tampering and ensure accuracy.
 
-Acceptance & Conversion: Once the customer agrees, the user clicks "Convert to Order".
+## 5. The Financial Cycle (Revenue & Expenses)
+Managing the money, partial billing, and funding.
 
-Action: The system creates a record in orders (type: outbound) and moves all quote_items into order_items.
+*   **Funders:** Managing external funding sources for large transactions.
+*   **Invoices:**
+    *   Generated against Sales Orders or specific Delivery Orders.
+    *   Inherits tax configuration through the propagation chain.
+*   **Payments & Verification:**
+    *   Support for partial payments and installments.
+    *   **Verification Workflow:** Payments move from Pending → Verified. Only Verified payments update the Invoice balance and status.
+*   **Real-time P&L:** Direct calculation of Revenue (Sales) vs. COGS (Procurement + Freight + Overhead).
 
-Status: Order moves to Pending Fulfillment.
+## 6. Automation & Distribution
+Reducing manual work and increasing transparency.
 
-3. Procurement (Stock Replenishment)
-When the distributor needs to buy stock from a supplier.
+*   **Email Automation:** Automatic distribution of Quotations and Invoices to clients with configurable CC recipients.
+*   **Document Verification (QR):** Every official document includes a QR code linking to `api/verify-document`, allowing third parties to verify the authenticity of a printed NIDS document.
 
-Purchase Order (PO): User creates an order (type: inbound).
+## 7. Reporting & Analytics
+The summary layer for executive decision-making.
 
-Supplier Assignment: Links the order to a specific supplier in the companies table.
-
-Cost Tracking: The unit_price in order_items here represents the Inbound Cost, which is vital for the P&L report later.
-
-4. Fulfillment & Logistics (The Batch System)
-Oil is often delivered in multiple trucks/batches, not all at once.
-
-Scheduling Shipments: From an active order, the user creates a shipment.
-
-Transporter Assignment: User selects a transporter and inputs the freight_cost.
-
-Batch Definition: User selects which items from the order are in this specific batch (shipment_items) and defines the qty_loaded.
-
-Status Tracking: The shipment moves from Scheduled → In-Transit → Delivered.
-
-Audit Note: The system logs who dispatched the truck and who confirmed the delivery.
-
-5. The Financial Cycle (Invoicing & Installments)
-Handling the money, partial billing, and split payments.
-
-Invoice Generation: Users can generate an invoice for:
-
-The Entire Order.
-
-Or Specific Shipments (Billing only what was delivered).
-
-Installment Management: When a payment arrives:
-
-User creates a payment record linked to the invoice.
-
-The system calculates amount_due - amount_paid.
-
-If the balance hits zero, the invoice status updates to Paid.
-
-Balance Sheet Impact: Every payment and invoice automatically updates the real-time P&L data.
-
-6. Insights & AI Dashboard (Summary Layer)
-The final layer for executive decision-making.
-
-P&L Calculation: The system runs a view joining order_items (Revenue), procurement_costs (Expenses), and shipment.freight_cost (Overhead).
-
-AI Insight Generation: A background worker (Supabase Edge Function) sends recent audit_logs and order_statuses to the LLM.
-
-Output: "Customer X has 3 late shipments; suggest switching Transporter Y for the next batch to save 5% on freight."
-
-The Summary View: A dedicated page showing total volume distributed vs. total profit collected.
-
-Summary of Action Flow (for CLI)
-Customer Request → quotes (Editable/Audited) → Agreement → orders → Batch Planning → shipments (Transporter assigned) → Delivery → invoices (Partial/Full) → Payment → payments (Installments) → Reporting → AI Dashboard.
-
-Logic Check: How to handle "Changed minds"?
-If a user edits a price after an order is completed, the Audit Log will flag this for the Admin. Because we use a details JSONB field on every table, if you need to add a "Reason for Discount" suddenly, the CLI can implement it without a database migration.
-
-
-
+*   **Comprehensive Reports:** Dedicated modules for Delivery, Deposit, Inventory, Invoice, Payments, P&L, Quotation, and Sales Orders.
+*   **Data Structure:** Utilization of the `details` JSONB field on all primary tables allows for future field expansion without breaking the core schema.

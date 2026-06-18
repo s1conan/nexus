@@ -29,6 +29,7 @@ import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns"
 import { Button } from "@/components/ui/button"
+import { SITE_CONFIG } from "@/lib/site-content"
 
 export default function InvoiceReportPage() {
   const { dict } = useDictionary()
@@ -114,7 +115,7 @@ export default function InvoiceReportPage() {
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{dict.LABEL_GRAND_TOTAL || "Grand Total"}</p>
-            <p className="text-xl font-black">Rp {stats.totalAmount.toLocaleString()}</p>
+            <p className="text-xl font-black">{SITE_CONFIG.currencySymbol} {stats.totalAmount.toLocaleString()}</p>
             <p className="text-[10px] text-muted-foreground">{stats.count} {dict.MENU_INVOICE}</p>
           </div>
         </Card>
@@ -212,7 +213,7 @@ export default function InvoiceReportPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <span className="font-black text-sm">
-                    Rp {i.grand_total?.toLocaleString()}
+                    {SITE_CONFIG.currencySymbol} {i.grand_total?.toLocaleString()}
                   </span>
                 </TableCell>
                 <TableCell>

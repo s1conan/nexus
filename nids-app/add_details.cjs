@@ -5,7 +5,7 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.
 async function addDetailsField() {
   const sql = `
     ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb;
-    ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb;
+    ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb;
     ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'::jsonb;
   `;
   const { error } = await supabase.rpc('exec_sql', { sql });

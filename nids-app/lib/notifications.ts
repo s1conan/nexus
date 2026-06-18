@@ -35,6 +35,13 @@ export const notify = {
     })
   },
 
+  deleted: (title: string, description?: string, duration = 5000) => {
+    return toast.error(title, {
+      description,
+      duration,
+    })
+  },
+
   /**
    * Special high-importance notification (e.g., Security links)
    */

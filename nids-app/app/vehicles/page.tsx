@@ -32,10 +32,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { SummaryCard } from "@/components/summary-card"
-import { ConfirmationDialog } from "@/components/confirmation-dialog"
+import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 
 import {
- cn } from "@/lib/utils"
+  cn
+} from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { usePersistedState } from "@/hooks/use-persisted-state"
@@ -110,7 +111,7 @@ export default function VehiclesPage() {
         supabase.from('vehicles').select('capacity')
       ])
 
-      const totalCap = capacities?.reduce((acc, v) => acc + (v.capacity || 0), 0) || 0
+      const totalCap = capacities?.reduce((acc: number, v: any) => acc + (v.capacity || 0), 0) || 0
 
       setStats({
         totalVehicles: totalCount || 0,
@@ -279,7 +280,7 @@ export default function VehiclesPage() {
     try {
       const { error } = await supabase.from("vehicles").delete().eq("id", deleteConfirm.id)
       if (error) throw error
-      notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", dict.MENU_VEHICLES))
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`))
       setVehicles(prev => prev.filter(v => v.id !== deleteConfirm.id))
       fetchStats()
     } catch (err: any) {
@@ -553,7 +554,7 @@ export default function VehiclesPage() {
           </TableBody>
         </Table>
       </Card>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-1 shrink-0">
+      <div className="grid grid-cols-3 gap-2 md:gap-4 mb-1 shrink-0">
         <SummaryCard
           label={dict.LABEL_TOTAL_VEHICLES || "Total Vehicles"}
           value={stats.totalVehicles}
@@ -574,7 +575,7 @@ export default function VehiclesPage() {
         />
       </div>
 
-      <ConfirmationDialog
+      <DeleteConfirmationDialog
         isOpen={deleteConfirm !== null}
         onOpenChange={(open) => !open && setDeleteConfirm(null)}
         onConfirm={confirmDelete}

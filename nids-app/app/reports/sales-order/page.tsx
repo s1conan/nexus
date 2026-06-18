@@ -29,14 +29,14 @@ import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns"
 import { Button } from "@/components/ui/button"
-import { NumberInput } from "@/components/number-input"
+import { SITE_CONFIG } from "@/lib/site-content"
 
-export default function PurchaseOrderReportPage() {
+export default function SalesOrderReportPage() {
   const { dict } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
-  const [pos, setPos] = useState<any[]>([])
+  const [orders, setOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -44,16 +44,16 @@ export default function PurchaseOrderReportPage() {
   const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"))
   const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), "yyyy-MM-dd"))
 
-  async function fetchPOs() {
+  async function fetchOrders() {
     setLoading(true)
     try {
       const { data, error } = await supabase
-        .from("purchase_orders")
+        .from("sales_orders") // table name remains same
         .select("*, supplier:companies(id, name), product:products(id, name, sku)")
-        .order("po_date", { ascending: false })
+        .order("so_date", { ascending: false })
 
       if (error) throw error
-      setPos(data || [])
+      setOrders(data || [])
     } catch (err: any) {
       notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
     } finally {
@@ -62,34 +62,34 @@ export default function PurchaseOrderReportPage() {
   }
 
   useEffect(() => {
-    fetchPOs()
+    fetchOrders()
   }, [])
 
-  const filteredPOs = useMemo(() => {
-    return pos.filter(p => {
-      const dateMatch = isWithinInterval(parseISO(p.po_date), {
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      const dateMatch = isWithinInterval(parseISO(o.so_date), {
         start: parseISO(startDate),
         end: parseISO(endDate)
       })
 
       const searchMatch =
-        p.po_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.supplier?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.product?.name || "").toLowerCase().includes(searchQuery.toLowerCase())
+        o.so_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (o.supplier?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (o.product?.name || "").toLowerCase().includes(searchQuery.toLowerCase())
 
       return dateMatch && searchMatch
     })
-  }, [pos, searchQuery, startDate, endDate])
+  }, [orders, searchQuery, startDate, endDate])
 
   const stats = useMemo(() => {
-    const totalAmount = filteredPOs.reduce((sum, p) => sum + (p.quantity * p.unit_price || 0), 0)
-    const totalQty = filteredPOs.reduce((sum, p) => sum + (p.quantity || 0), 0)
-    return { totalAmount, totalQty, count: filteredPOs.length }
-  }, [filteredPOs])
+    const totalAmount = filteredOrders.reduce((sum, o) => sum + (o.quantity * o.unit_price || 0), 0)
+    const totalQty = filteredOrders.reduce((sum, o) => sum + (o.quantity || 0), 0)
+    return { totalAmount, totalQty, count: filteredOrders.length }
+  }, [filteredOrders])
 
-  const canViewReport = hasPermission("purchase-order", "view")
+  const canViewReport = hasPermission("sales-order", "view")
 
-  if (!canViewReport && !loading) {
+  if (!canViewReport && !loading && !authLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
         <div className="text-center space-y-2">
@@ -102,23 +102,23 @@ export default function PurchaseOrderReportPage() {
   }
 
   return (
-    <div className="page-container">
-      <div className="page-header">
+    <div className="page-container h-full flex flex-col overflow-hidden">
+      <div className="page-header shrink-0">
         <h1 className="page-title">
           <ShoppingBag className="size-5 mr-2 inline-block text-primary" />
-          {dict.MENU_REPORTS_PO || "PO Report"}
+          {dict.MENU_REPORTS_SO}
         </h1>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 shrink-0">
         <Card className="p-4 flex items-center gap-4 border-l-4 border-l-primary">
           <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
             <DollarSign className="size-5" />
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{dict.LABEL_TOTAL_AMOUNT || "Total Amount"}</p>
-            <p className="text-xl font-black">Rp {stats.totalAmount.toLocaleString()}</p>
-            <p className="text-[10px] text-muted-foreground">{stats.count} {dict.MENU_PURCHASE_ORDER}</p>
+            <p className="text-xl font-black">{SITE_CONFIG.currencySymbol} {stats.totalAmount.toLocaleString()}</p>
+            <p className="text-[10px] text-muted-foreground">{stats.count} {dict.MENU_SALES_ORDER}</p>
           </div>
         </Card>
 
@@ -140,18 +140,18 @@ export default function PurchaseOrderReportPage() {
           <div>
             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{dict.LABEL_STATUS || "Status"}</p>
             <p className="text-xl font-black">{dict.LABEL_ACTIVE || "Active"}</p>
-            <p className="text-[10px] text-muted-foreground">Active procurement summary</p>
+            <p className="text-[10px] text-muted-foreground">Active sales summary</p>
           </div>
         </Card>
       </div>
 
-      <div className="action-bar items-end gap-4">
+      <div className="action-bar items-end gap-4 shrink-0">
         <div className="grid gap-1.5 flex-1 max-w-sm">
           <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">{dict.PLACEHOLDER_SEARCH || "Search"}</label>
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
             <Input
-              placeholder={`${dict.LABEL_PO_NUMBER}, ${dict.LABEL_COMPANY_NAME}...`}
+              placeholder={`${dict.LABEL_SO_NUMBER}, ${dict.LABEL_COMPANY_NAME}...`}
               className="pl-8"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -185,22 +185,22 @@ export default function PurchaseOrderReportPage() {
           </div>
         </div>
 
-        <Button variant="outline" onClick={fetchPOs} className="h-10">
+        <Button variant="outline" onClick={fetchOrders} className="h-10">
           <Filter className="size-4 mr-2" />
           {dict.BUTTON_REFRESH || "Refresh"}
         </Button>
       </div>
 
-      <Card className="data-card overflow-hidden">
+      <Card className="data-card flex-1 overflow-auto custom-scrollbar">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
             <TableRow>
-              <TableHead className="px-7">{dict.LABEL_PO_NUMBER}</TableHead>
-              <TableHead>{dict.LABEL_PO_DATE}</TableHead>
+              <TableHead className="px-7">{dict.LABEL_SO_NUMBER}</TableHead>
+              <TableHead>{dict.LABEL_SO_DATE}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
               <TableHead>{dict.LABEL_PRODUCT_NAME}</TableHead>
               <TableHead className="text-right">{dict.LABEL_QUANTITY}</TableHead>
-              <TableHead className="text-right">{dict.LABEL_TOTAL_AMOUNT || "Total"}</TableHead>
+              <TableHead className="text-right">{dict.LABEL_GRAND_TOTAL}</TableHead>
               <TableHead>{dict.LABEL_STATUS}</TableHead>
             </TableRow>
           </TableHeader>
@@ -209,42 +209,42 @@ export default function PurchaseOrderReportPage() {
               <TableRow>
                 <TableCell colSpan={7} className="p-0"><SectionLoader /></TableCell>
               </TableRow>
-            ) : filteredPOs.length === 0 ? (
+            ) : filteredOrders.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
                   {dict.NO_DATA}
                 </TableCell>
               </TableRow>
-            ) : filteredPOs.map((p) => (
-              <TableRow key={p.id}>
+            ) : filteredOrders.map((o) => (
+              <TableRow key={o.id}>
                 <TableCell className="px-7">
-                  <span className="font-bold text-sm font-mono">{p.po_number}</span>
+                  <span className="font-bold text-sm font-mono">{o.so_number}</span>
                 </TableCell>
                 <TableCell className="text-sm">
-                  {format(parseISO(p.po_date), "dd MMM yyyy")}
+                  {format(parseISO(o.so_date), "dd MMM yyyy")}
                 </TableCell>
                 <TableCell>
-                  <span className="font-medium text-sm">{p.supplier?.name}</span>
+                  <span className="font-medium text-sm">{o.supplier?.name}</span>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  {p.product?.name}
+                  {o.product?.name}
                 </TableCell>
                 <TableCell className="text-right font-bold text-sm">
-                  {p.quantity?.toLocaleString()} L
+                  {o.quantity?.toLocaleString()} L
                 </TableCell>
                 <TableCell className="text-right">
-                  <span className="font-black text-sm">
-                    Rp {(p.quantity * p.unit_price)?.toLocaleString()}
+                  <span className="font-black text-sm text-primary">
+                    {SITE_CONFIG.currencySymbol} {Number(o.total_amount || (o.quantity * o.unit_price)).toLocaleString()}
                   </span>
                 </TableCell>
                 <TableCell>
                   <span className={cn(
                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                    p.status === 'Completed' ? "bg-green-100 text-green-700" :
-                      p.status === 'Cancelled' ? "bg-red-100 text-red-700" :
-                        p.status === 'Processing' ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-700"
+                    o.status === 'Completed' ? "bg-green-100 text-green-700" :
+                      o.status === 'Cancelled' ? "bg-red-100 text-red-700" :
+                        o.status === 'Sent' ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-700"
                   )}>
-                    {p.status || 'Draft'}
+                    {o.status || 'Draft'}
                   </span>
                 </TableCell>
               </TableRow>

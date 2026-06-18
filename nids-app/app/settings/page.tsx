@@ -78,7 +78,7 @@ export default function SettingsPage() {
   // 6. Document Numbering State
   const [numberingFormats, setNumberingFormats] = useState<Record<string, string>>({
     quotation: "QTN/{YYYY}/{SEQ:3}",
-    'purchase-order': "PO/{YYYY}/{SEQ:3}",
+    'sales-order': "PO/{YYYY}/{SEQ:3}",
     'delivery-order': "DO/{YYYY}/{SEQ:3}",
     deposit: "DEP/{YYYY}/{SEQ:3}",
     invoice: "INV/{YYYY}/{SEQ:3}"
@@ -154,7 +154,7 @@ export default function SettingsPage() {
           const defaultSeeds = [
             { category: "company", name: "name", value: "PT Anugerah Buana Sriwijaya" },
             { category: "company", name: "address", value: "Jl. Bayam No. 1702 Kel. Sembilan Ilir Kec. Ilir Timur III Kota Palembang, Sumatera Selatan" },
-            { category: "company", name: "email", value: "purchase-order@anugerahbuanasriwijaya.co.id" },
+            { category: "company", name: "email", value: "sales-order@anugerahbuanasriwijaya.co.id" },
             { category: "company", name: "npwp", value: "" },
             { category: "company", name: "npwp_address", value: "" },
             { category: "company", name: "logo_url", value: "" },
@@ -235,7 +235,7 @@ export default function SettingsPage() {
 
         const formats: Record<string, string> = {
           quotation: data.find((r: any) => r.category === "numbering" && r.name === "quotation")?.value || "QTN/{YYYY}/{SEQ:3}",
-          'purchase-order': data.find((r: any) => r.category === "numbering" && r.name === "purchase-order")?.value || "PO/{YYYY}/{SEQ:3}",
+          'sales-order': data.find((r: any) => r.category === "numbering" && r.name === "sales-order")?.value || "PO/{YYYY}/{SEQ:3}",
           'delivery-order': data.find((r: any) => r.category === "numbering" && r.name === "delivery-order")?.value || "DO/{YYYY}/{SEQ:3}",
           deposit: data.find((r: any) => r.category === "numbering" && r.name === "deposit")?.value || "DEP/{YYYY}/{SEQ:3}",
           invoice: data.find((r: any) => r.category === "numbering" && r.name === "invoice")?.value || "INV/{YYYY}/{SEQ:3}"
@@ -309,12 +309,16 @@ export default function SettingsPage() {
 
   const handleDeleteBank = async (id: string) => {
     if (!canEdit) return
+    const bank = bankAccounts.find(b => b.id === id)
+    const label = bank ? `[${bank.bank_name}]` : ""
+    if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
       setDeletingBankId(id)
       const updatedBanks = bankAccounts.filter(b => b.id !== id)
       const { error } = await supabase.from("app_settings").upsert({ category: "company", name: "bank", value: updatedBanks })
       if (error) throw error
       setBankAccounts(updatedBanks)
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
     } catch (error: any) {
       notify.error("Deletion failed", error.message)
     } finally {
@@ -358,10 +362,12 @@ export default function SettingsPage() {
 
   const handleDeleteParam = async (key: string) => {
     if (!canEdit) return
+    if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
       const { error } = await supabase.from("app_settings").delete().eq("category", "tax").eq("name", key)
       if (error) throw error
       setParameters(prev => prev.filter(p => p.key !== key))
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", `[${key}]`))
     } catch (error: any) {
       notify.error("Deletion failed", error.message)
     }

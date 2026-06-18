@@ -18,7 +18,7 @@ import { ShieldCheck, ShieldAlert, ShieldX, Save, X, Clock, Pencil, UserCog, Ale
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SummaryCard } from "@/components/summary-card"
-import { ConfirmationDialog } from "@/components/confirmation-dialog"
+import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 import {
   Dialog,
   DialogContent,
@@ -72,7 +72,7 @@ export default function UsersPage() {
     },
     {
       label: dict.MENU_TRANSACTION || "Transactions",
-      modules: ['quotation', 'purchase-order', 'delivery-order', 'deposit', 'invoice', 'payments']
+      modules: ['quotation', 'sales-order', 'delivery-order', 'deposit', 'invoice', 'payments']
     },
     {
       label: dict.MENU_GROUP_REPORTS || "Reports",
@@ -207,7 +207,7 @@ export default function UsersPage() {
     } else {
       // Update the target action
       modulePerms[action] = value
-      
+
       // Logic: Checking any other permission automatically checks "view"
       if (value && action !== 'view') {
         modulePerms.view = true
@@ -319,7 +319,7 @@ export default function UsersPage() {
         .select()
 
       console.log("Users: [DEBUG] Supabase response status:", status, statusText)
-      
+
       if (error) {
         console.error("Users: [DEBUG] Update error:", error)
         throw error
@@ -330,7 +330,7 @@ export default function UsersPage() {
       } else {
         console.log("Users: [DEBUG] Update successful, row affected:", data[0])
       }
-      
+
       setIsDialogOpen(false)
       await fetchData()
     } catch (err: any) {
@@ -458,8 +458,8 @@ export default function UsersPage() {
 
       {/* User Management Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
-          <DialogHeader className="p-6 border-b">
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
             <DialogTitle><UserCog className="size-5 mr-2 inline-block" />{dict.TITLE_MANAGE_USER}</DialogTitle>
           </DialogHeader>
 
@@ -518,15 +518,15 @@ export default function UsersPage() {
                     <Label htmlFor="customize-toggle" className="text-xs font-semibold cursor-pointer">
                       {lang === "id" ? "Sesuaikan Izin" : "Customize Permission"}
                     </Label>
-                    <Switch 
-                      id="customize-toggle" 
-                      checked={isCustomizing} 
+                    <Switch
+                      id="customize-toggle"
+                      checked={isCustomizing}
                       onCheckedChange={handleCustomizationToggle}
                       disabled={!canEdit}
                     />
                   </div>
                 </div>
-                
+
                 <div className={cn(
                   "grid grid-cols-[150px_repeat(5,1fr)] gap-2 text-center text-xs font-bold text-muted-foreground mb-2 px-2",
                   !isCustomizing && "opacity-50"
@@ -548,12 +548,12 @@ export default function UsersPage() {
                         <div className="text-sm font-medium capitalize">{m.replace('-', ' ')}</div>
                         {actions.map(a => (
                           <div key={a} className="flex justify-center">
-                            <input 
-                              type="checkbox" 
-                              className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed" 
-                              checked={editingUser?.permissions?.[m]?.[a] || false} 
-                              onChange={(e) => handlePermissionChange(m, a, e.target.checked)} 
-                              disabled={!canEdit || !isCustomizing} 
+                            <input
+                              type="checkbox"
+                              className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                              checked={editingUser?.permissions?.[m]?.[a] || false}
+                              onChange={(e) => handlePermissionChange(m, a, e.target.checked)}
+                              disabled={!canEdit || !isCustomizing}
                             />
                           </div>
                         ))}
@@ -577,12 +577,12 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
 
-      <ConfirmationDialog
+      <DeleteConfirmationDialog
         isOpen={deleteConfirm !== null}
         onOpenChange={(open) => !open && setDeleteConfirm(null)}
         onConfirm={confirmApproveToggle}
         title={deleteConfirm?.type === 'revoke' ? (dict.BUTTON_REVOKE || "Revoke Access") : (dict.BUTTON_APPROVE || "Approve Access")}
-        description={deleteConfirm?.type === 'revoke' 
+        description={deleteConfirm?.type === 'revoke'
           ? `Are you sure you want to revoke access for this user?`
           : `Are you sure you want to approve access for this user?`}
         dataName={deleteConfirm?.name}

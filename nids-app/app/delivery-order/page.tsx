@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
+import { useDebounce } from "@/hooks/use-debounce"
 import {
   Table,
   TableBody,
@@ -65,6 +66,8 @@ import { ButtonLoader } from "@/components/button-loader"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
+const PAGE_SIZE = 50
+
 export default function DeliveryOrdersPage() {
   const { dict, lang } = useDictionary()
   const { hasPermission, profile, loading: authLoading } = useAuth()
@@ -74,6 +77,9 @@ export default function DeliveryOrdersPage() {
   const [companyInfo, setCompanyInfo] = useState<any>(null)
   const [previewDoc, setPreviewDoc] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
@@ -82,6 +88,10 @@ export default function DeliveryOrdersPage() {
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
+
+  const observerTarget = useRef(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   // Tracking info for LiveSearch / Display
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
@@ -96,7 +106,7 @@ export default function DeliveryOrdersPage() {
     do_number: "",
     company_id: "",
     supplier_id: "",
-    po_id: "",
+    so_id: "",
     product_id: "",
     do_date: format(new Date(), "yyyy-MM-dd"),
     shipment_date: format(new Date(), "yyyy-MM-dd"),
@@ -111,29 +121,89 @@ export default function DeliveryOrdersPage() {
   }))
 
   // Fetch Data
-  async function fetchData() {
-    setLoading(true)
+  const fetchData = useCallback(async (isInitial = false) => {
+    if (isInitial) {
+      setLoading(true)
+      setOffset(0)
+    } else {
+      setLoadingMore(true)
+    }
+
     try {
-      const [oRes, sRes] = await Promise.all([
-        supabase.from("delivery_orders").select("*, company:companies!delivery_orders_company_id_fkey(id, name, details->contact_person, details->email), supplier:companies!delivery_orders_supplier_id_fkey(id, name), po:purchase_orders(id, po_number, quantity), product:products(id, sku, name), vehicle:vehicles(id, license_number), compartments:delivery_order_compartments(*, vehicle_compartment:vehicle_compartments(id, compartment_number))").order("created_at", { ascending: false }),
-        supabase.from("app_settings").select("*").eq("category", "company")
-      ])
+      const currentOffset = isInitial ? 0 : offset
 
-      if (oRes.error) throw oRes.error
+      if (isInitial) {
+        const { data: sRes } = await supabase.from("app_settings").select("*").eq("category", "company")
+        if (sRes) {
+          const info: any = {}
+          sRes.forEach((r: any) => { info[r.name] = r.value })
+          setCompanyInfo(info)
+        }
+      }
 
-      setOrders(oRes.data || [])
+      let query = supabase
+        .from("delivery_orders")
+        .select("*, company:companies!delivery_orders_company_id_fkey(id, name, details->contact_person, details->email), supplier:companies!delivery_orders_supplier_id_fkey(id, name), po:sales_orders(id, so_number, quantity), product:products(id, sku, name), vehicle:vehicles(id, license_number), compartments:delivery_order_compartments(*, vehicle_compartment:vehicle_compartments(id, compartment_number))")
+        .order("created_at", { ascending: false })
+        .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
-      if (sRes.data) {
-        const info: any = {}
-        sRes.data.forEach((r: any) => { info[r.name] = r.value })
-        setCompanyInfo(info)
+      if (debouncedSearchQuery) {
+        const searchStr = constructMultiWordSearch(debouncedSearchQuery, ['do_number', 'company.name', 'product.sku', 'driver_name', 'vehicle_number'])
+        if (searchStr) query = query.or(searchStr)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+
+      if (data) {
+        if (isInitial) {
+          setOrders(data)
+        } else {
+          setOrders(prev => {
+            const newItems = data.filter((item: any) => !prev.some(p => p.id === item.id))
+            return [...prev, ...newItems]
+          })
+        }
+        setHasMore(data.length === PAGE_SIZE)
+        setOffset(currentOffset + data.length)
       }
     } catch (err: any) {
       notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }
+  }, [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED])
+
+  useEffect(() => {
+    fetchData(true)
+  }, [debouncedSearchQuery])
+
+  // Ordinary Infinite Scroll
+  useEffect(() => {
+    const rootElement = containerRef.current;
+    if (!rootElement) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        const entry = entries[0]
+        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
+          fetchData(false)
+        }
+      },
+      {
+        root: rootElement,
+        rootMargin: "400px",
+        threshold: 0,
+      }
+    )
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current)
+    }
+
+    return () => observer.disconnect()
+  }, [fetchData, hasMore, loading, loadingMore])
 
   // Fetch Stock for selected supplier and product
   useEffect(() => {
@@ -150,10 +220,6 @@ export default function DeliveryOrdersPage() {
     }
     fetchStock()
   }, [formData.supplier_id, formData.product_id])
-
-  useEffect(() => {
-    fetchData()
-  }, [])
 
   // When vehicle changes, auto-fill compartments
   const handleVehicleSelect = (vId: string, vehicle?: any) => {
@@ -184,7 +250,7 @@ export default function DeliveryOrdersPage() {
   const canDelete = hasPermission("delivery-order", "delete")
   const canPrint = hasPermission("delivery-order", "print")
 
-  if (!canView && !loading) {
+  if (!canView && !loading && !authLoading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
         <div className="text-center space-y-2">
@@ -210,7 +276,7 @@ export default function DeliveryOrdersPage() {
         do_number: item.do_number,
         company_id: item.company_id,
         supplier_id: item.supplier_id || "",
-        po_id: item.po_id || "",
+        so_id: item.so_id || "",
         product_id: item.product_id,
         do_date: item.do_date,
         shipment_date: item.shipment_date,
@@ -241,7 +307,7 @@ export default function DeliveryOrdersPage() {
         do_number: "", // Will be auto-generated on save if empty
         company_id: "",
         supplier_id: "",
-        po_id: "",
+        so_id: "",
         product_id: "",
         do_date: format(new Date(), "yyyy-MM-dd"),
         shipment_date: format(new Date(), "yyyy-MM-dd"),
@@ -301,9 +367,25 @@ export default function DeliveryOrdersPage() {
         }
       }
 
+      if (editingItem) {
+        // Fetch updated row to keep local state in sync with relations
+        const { data: updatedRow, error: fetchError } = await supabase
+          .from("delivery_orders")
+          .select("*, company:companies!delivery_orders_company_id_fkey(id, name, details->contact_person, details->email), supplier:companies!delivery_orders_supplier_id_fkey(id, name), po:sales_orders(id, so_number, quantity), product:products(id, sku, name), vehicle:vehicles(id, license_number), compartments:delivery_order_compartments(*, vehicle_compartment:vehicle_compartments(id, compartment_number))")
+          .eq("id", editingItem.id)
+          .single();
+        
+        if (!fetchError && updatedRow) {
+          setOrders(prev => prev.map(o => o.id === editingItem.id ? updatedRow : o));
+        } else {
+          fetchData(true);
+        }
+      } else {
+        fetchData(true)
+      }
+
       notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_DO_SAVED)
       setIsOpen(false)
-      fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     } finally {
@@ -312,12 +394,15 @@ export default function DeliveryOrdersPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(dict.MSG_DELETE_CONFIRM)) return
+    const item = orders.find(d => d.id === id)
+    const label = item ? `[${item.do_number}]` : ""
+    if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
       const { error } = await supabase.from("delivery_orders").delete().eq("id", id)
       if (error) throw error
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_DO_DELETED)
-      fetchData()
+      
+      setOrders(prev => prev.filter(o => o.id !== id))
+      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
     } catch (err: any) {
       notify.error(dict.MSG_SAVE_FAILED, err.message)
     }
@@ -327,8 +412,9 @@ export default function DeliveryOrdersPage() {
     try {
       const { error } = await supabase.from("delivery_orders").update({ status }).eq("id", id)
       if (error) throw error
+      
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o))
       notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_DO_STATUS_UPDATED)
-      fetchData()
     } catch (err: any) {
       notify.error(dict.MSG_UPDATE_FAILED, err.message)
     }
@@ -378,26 +464,6 @@ export default function DeliveryOrdersPage() {
     })
   }
 
-  // Search filter
-  const filteredOrders = useMemo(() => {
-    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
-    if (words.length === 0) return orders
-
-    return orders.filter(o => {
-      const searchFields = [
-        o.do_number,
-        o.company?.name || "",
-        o.product?.sku || "",
-        o.driver_name || "",
-        o.vehicle?.license_number || o.vehicle_number || ""
-      ]
-      return searchFields.some(field => {
-        const val = String(field).toLowerCase()
-        return words.every(word => val.includes(word))
-      })
-    })
-  }, [orders, searchQuery])
-
   // Recalculate total quantity from compartments
   useEffect(() => {
     if (formData.compartment_details.length > 0) {
@@ -409,9 +475,9 @@ export default function DeliveryOrdersPage() {
   }, [formData.compartment_details])
 
   return (
-    <div className="page-container">
+    <div className="page-container h-full flex flex-col overflow-hidden">
       {/* Page Header */}
-      <div className="page-header">
+      <div className="page-header shrink-0">
         <h1 className="page-title">
           <Truck className="size-5 mr-2 inline-block text-primary" />
           {dict.MENU_DELIVERY_ORDER}
@@ -455,7 +521,7 @@ export default function DeliveryOrdersPage() {
                         }}
                         value={formData.company_id}
                         onSelect={(val, item) => {
-                          setFormData({ ...formData, company_id: val, po_id: "" })
+                          setFormData({ ...formData, company_id: val, so_id: "" })
                           setSelectedCompanyInfo(item)
                           setSelectedPOInfo(null)
                         }}
@@ -474,25 +540,25 @@ export default function DeliveryOrdersPage() {
                         data={selectedPOInfo ? [selectedPOInfo] : []}
                         fetchData={async (query) => {
                           if (!formData.company_id) return []
-                          let q = supabase.from("purchase_orders").select("id, po_number, quantity, product_id, product:products(id, sku, name)").eq("company_id", formData.company_id).limit(8)
+                          let q = supabase.from("sales_orders").select("id, so_number, quantity, product_id, product:products(id, sku, name)").eq("company_id", formData.company_id).limit(8)
                           if (query) {
-                            const searchStr = constructMultiWordSearch(query, ['po_number'])
+                            const searchStr = constructMultiWordSearch(query, ['so_number'])
                             if (searchStr) q = q.or(searchStr)
                           }
                           const { data } = await q
                           return data || []
                         }}
-                        value={formData.po_id}
+                        value={formData.so_id}
                         onSelect={(val, item) => {
-                          setFormData({ ...formData, po_id: val, product_id: item?.product_id || formData.product_id })
+                          setFormData({ ...formData, so_id: val, product_id: item?.product_id || formData.product_id })
                           setSelectedPOInfo(item)
                           if (item?.product) setSelectedProductInfo(item.product)
                         }}
                         keyField="id"
-                        displayField="po_number"
-                        defaultDisplay={selectedPOInfo?.po_number || ""}
-                        searchColumns={["po_number"]}
-                        visualColumns={[{ key: "po_number", header: "PO Number", className: "w-3/5 font-medium", primary: true }, { key: "quantity", header: "Qty", className: "w-2/5" }]}
+                        displayField="so_number"
+                        defaultDisplay={selectedPOInfo?.so_number || ""}
+                        searchColumns={["so_number"]}
+                        visualColumns={[{ key: "so_number", header: "SO Number", className: "w-3/5 font-medium", primary: true }, { key: "quantity", header: "Qty", className: "w-2/5" }]}
                         placeholder="Search Customer PO..."
                         emptyMessage="No PO found for this customer."
                       />
@@ -657,7 +723,7 @@ export default function DeliveryOrdersPage() {
       </div>
 
       {/* Action Bar / Filters */}
-      <div className="action-bar">
+      <div className="action-bar shrink-0">
         <div className="relative flex-1 w-full max-w-sm">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
@@ -670,9 +736,9 @@ export default function DeliveryOrdersPage() {
       </div>
 
       {/* Data Area */}
-      <Card className="data-card">
+      <Card ref={containerRef} className="data-card flex-1 overflow-auto custom-scrollbar">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_NAME} (No.)</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
@@ -688,9 +754,9 @@ export default function DeliveryOrdersPage() {
               <TableRow>
                 <TableCell colSpan={7} className="p-0"><SectionLoader /></TableCell>
               </TableRow>
-            ) : filteredOrders.length === 0 ? (
+            ) : orders.length === 0 ? (
               <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">{dict.NO_DATA}</TableCell></TableRow>
-            ) : filteredOrders.map(o => (
+            ) : orders.map(o => (
               <TableRow key={o.id} className="group">
                 <TableCell className="font-medium">{o.do_number}</TableCell>
                 <TableCell>{o.company?.name || "-"}</TableCell>
@@ -752,6 +818,22 @@ export default function DeliveryOrdersPage() {
                 </TableCell>
               </TableRow>
             ))}
+
+            {/* Infinite Scroll Sentinel & Loader */}
+            <TableRow ref={observerTarget} className="border-0">
+              <TableCell colSpan={7} className="p-0 border-0 overflow-hidden">
+                {loadingMore && (
+                  <div className="relative h-24 w-full">
+                    <SectionLoader />
+                  </div>
+                )}
+                {!hasMore && orders.length > 0 && !loading && (
+                  <div className="text-center py-3 text-xs text-danger/70 select-none">
+                    — End of data —
+                  </div>
+                )}
+              </TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </Card>

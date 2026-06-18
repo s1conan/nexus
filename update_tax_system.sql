@@ -1,6 +1,6 @@
 ALTER TABLE public.deposits ADD COLUMN IF NOT EXISTS tax_details JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS tax_details JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS tax_details JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS tax_details JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS tax_details JSONB DEFAULT '[]'::jsonb;
 
 INSERT INTO public.app_settings (category, name, value, description)

@@ -31,7 +31,8 @@ import {
   Wallet,
   ArrowDownToLine,
   ClipboardList,
-  Warehouse
+  Warehouse,
+  Activity
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -81,18 +82,19 @@ import ComponentTestPage from "@/app/component-test/page"
 import SettingsPage from "@/app/settings/page"
 import QuotationsPage from "@/app/quotations/page"
 import DepositsPage from "@/app/deposit/page"
-import PurchaseOrdersPage from "@/app/purchase-order/page"
+import SalesOrdersPage from "@/app/sales-order/page"
 import DeliveryOrdersPage from "@/app/delivery-order/page"
+import VehiclesPage from "@/app/vehicles/page"
 import InvoicePage from "@/app/invoice/page"
 import PaymentsPage from "@/app/payments/page"
-import VehiclesPage from "@/app/vehicles/page"
 import FundersPage from "@/app/funders/page"
 import InventoryReportPage from "@/app/reports/inventory/page"
 import DepositReportPage from "@/app/reports/deposit/page"
 import QuotationReportPage from "@/app/reports/quotation/page"
-import PurchaseOrderReportPage from "@/app/reports/purchase-order/page"
+import SalesOrderReportPage from "@/app/reports/sales-order/page"
 import InvoiceReportPage from "@/app/reports/invoice/page"
 import PaymentsReportPage from "@/app/reports/payments/page"
+import ProfitLossReportPage from "@/app/reports/profit-loss/page"
 
 function TransactionPlaceholder({ title, icon: Icon }: { title: string; icon: any }) {
   const { dict } = useDictionary()
@@ -164,12 +166,12 @@ export function MdiLayout() {
     console.log("MDI Layout: [DEBUG] User loaded:", user)
     console.log("MDI Layout: [DEBUG] Profile loaded:", profile)
     console.log("MDI Layout: [DEBUG] Resolved Permissions loaded:", resolvedPermissions)
-    
+
     if (profile && resolvedPermissions) {
       if (lastToastedUserIdRef.current === profile.id) {
         return // Already toasted for this profile load!
       }
-      
+
       const activeModules = Object.keys(resolvedPermissions).filter(
         key => resolvedPermissions[key] && Object.values(resolvedPermissions[key]).some(val => val === true)
       )
@@ -193,7 +195,7 @@ export function MdiLayout() {
     vehicles: { title: dict.MENU_VEHICLES, content: <VehiclesPage /> },
     deposit: { title: dict.MENU_DEPOSIT, content: <DepositsPage /> },
     quotation: { title: dict.MENU_QUOTATION, content: <QuotationsPage /> },
-    "purchase-order": { title: dict.MENU_PURCHASE_ORDER, content: <PurchaseOrdersPage /> },
+    "sales-order": { title: dict.MENU_SALES_ORDER || "Sales Order", content: <SalesOrdersPage /> },
     "delivery-order": { title: dict.MENU_DELIVERY_ORDER, content: <DeliveryOrdersPage /> },
     invoice: { title: dict.MENU_INVOICE, content: <InvoicePage /> },
     payments: { title: dict.MENU_PAYMENTS, content: <PaymentsPage /> },
@@ -201,9 +203,10 @@ export function MdiLayout() {
     shipments: { title: dict.MENU_SHIPMENTS, content: <ShipmentsPage /> },
     "report-deposit": { title: dict.MENU_REPORTS_DEPOSIT, content: <DepositReportPage /> },
     "report-quotation": { title: dict.MENU_REPORTS_QUOTATION, content: <QuotationReportPage /> },
-    "report-po": { title: dict.MENU_REPORTS_PO, content: <PurchaseOrderReportPage /> },
+    "report-po": { title: dict.MENU_REPORTS_SO || "Sales Order Report", content: <SalesOrderReportPage /> },
     "report-invoice": { title: dict.MENU_REPORTS_INVOICE, content: <InvoiceReportPage /> },
     "report-payments": { title: dict.MENU_REPORTS_PAYMENTS, content: <PaymentsReportPage /> },
+    "report-profit-loss": { title: dict.MENU_REPORTS_PROFIT_LOSS, content: <ProfitLossReportPage /> },
     users: { title: dict.MENU_USERS, content: <UsersPage /> },
     settings: { title: dict.MENU_SETTINGS, content: <SettingsPage /> },
     "component-test": { title: dict.MENU_SHOWCASE, content: <ComponentTestPage /> },
@@ -217,7 +220,7 @@ export function MdiLayout() {
   const handleOpenVehicles = () => openTab("vehicles", dict.MENU_VEHICLES, <VehiclesPage />)
   const handleOpenDeposit = () => openTab("deposit", dict.MENU_DEPOSIT, <DepositsPage />)
   const handleOpenQuotation = () => openTab("quotation", dict.MENU_QUOTATION, <QuotationsPage />)
-  const handleOpenPurchaseOrder = () => openTab("purchase-order", dict.MENU_PURCHASE_ORDER, <PurchaseOrdersPage />)
+  const handleOpenSalesOrder = () => openTab("sales-order", dict.MENU_SALES_ORDER || "Sales Order", <SalesOrdersPage />)
   const handleOpenDeliveryOrder = () => openTab("delivery-order", dict.MENU_DELIVERY_ORDER, <DeliveryOrdersPage />)
   const handleOpenInvoice = () => openTab("invoice", dict.MENU_INVOICE, <InvoicePage />)
   const handleOpenPayments = () => openTab("payments", dict.MENU_PAYMENTS, <PaymentsPage />)
@@ -225,30 +228,31 @@ export function MdiLayout() {
   const handleOpenShipments = () => openTab("shipments", dict.MENU_SHIPMENTS, <ShipmentsPage />)
   const handleOpenReportDeposit = () => openTab("report-deposit", dict.MENU_REPORTS_DEPOSIT, <DepositReportPage />)
   const handleOpenReportQuotation = () => openTab("report-quotation", dict.MENU_REPORTS_QUOTATION, <QuotationReportPage />)
-  const handleOpenReportPO = () => openTab("report-po", dict.MENU_REPORTS_PO, <PurchaseOrderReportPage />)
+  const handleOpenReportSO = () => openTab("report-po", dict.MENU_REPORTS_SO || "Sales Order Report", <SalesOrderReportPage />)
   const handleOpenReportInvoice = () => openTab("report-invoice", dict.MENU_REPORTS_INVOICE, <InvoiceReportPage />)
   const handleOpenReportPayments = () => openTab("report-payments", dict.MENU_REPORTS_PAYMENTS, <PaymentsReportPage />)
+  const handleOpenReportProfitLoss = () => openTab("report-profit-loss", dict.MENU_REPORTS_PROFIT_LOSS, <ProfitLossReportPage />)
   const handleOpenUsers = () => openTab("users", dict.MENU_USERS, <UsersPage />)
   const handleOpenSettings = () => openTab("settings", dict.MENU_SETTINGS, <SettingsPage />)
   const handleOpenComponentTest = () => openTab("component-test", dict.MENU_SHOWCASE, <ComponentTestPage />)
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (newPassword.length < 6) {
       notify.error(lang === "id" ? "Kata sandi baru harus minimal 6 karakter." : "New password must be at least 6 characters.")
       return
     }
-    
+
     if (newPassword !== confirmPassword) {
       notify.error(lang === "id" ? "Kata sandi baru tidak cocok. Silakan coba lagi." : "New passwords do not match. Please try again.")
       return
     }
-    
+
     try {
       setIsChangingPassword(true)
       const supabase = createClient()
-      
+
       // 1. Verify current password by signing in
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: user?.email,
@@ -266,9 +270,9 @@ export function MdiLayout() {
 
       // 2. Perform password update
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
-      
+
       if (updateError) throw updateError
-      
+
       notify.success(
         lang === "id" ? "Keamanan Diperbarui" : "Security Updated",
         lang === "id" ? "Kata sandi Anda berhasil diubah." : "Your password has been changed successfully."
@@ -304,7 +308,7 @@ export function MdiLayout() {
       else if (pathname === "/funders") handleOpenFunders()
       else if (pathname === "/deposit") handleOpenDeposit()
       else if (pathname === "/quotation") handleOpenQuotation()
-      else if (pathname === "/purchase-order") handleOpenPurchaseOrder()
+      else if (pathname === "/sales-order") handleOpenSalesOrder()
       else if (pathname === "/delivery-order") handleOpenDeliveryOrder()
       else if (pathname === "/invoice") handleOpenInvoice()
       else if (pathname === "/payments") handleOpenPayments()
@@ -332,8 +336,8 @@ export function MdiLayout() {
 
   const isDashboardActive = activeTabId === 'dashboard'
   const isMasterActive = activeTabId === 'companies' || activeTabId === 'products' || activeTabId === 'funders' || activeTabId === 'vehicles'
-  const isTransactionActive = ['deposit', 'quotation', 'purchase-order', 'delivery-order', 'invoice', 'payments'].includes(activeTabId || '')
-  const isReportsActive = activeTabId === 'shipments' || activeTabId === 'inventory'
+  const isTransactionActive = ['deposit', 'quotation', 'sales-order', 'delivery-order', 'invoice', 'payments'].includes(activeTabId || '')
+  const isReportsActive = activeTabId === 'shipments' || activeTabId === 'inventory' || activeTabId?.startsWith('report-')
   const isSystemActive = activeTabId === 'users' || activeTabId === 'component-test' || activeTabId === 'settings'
 
   const renderMenuItems = () => (
@@ -371,7 +375,7 @@ export function MdiLayout() {
               <ChevronDown className="size-3 opacity-60" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="rounded-lg p-1 bg-popover border border-border/60 shadow-none">
+          <DropdownMenuContent align="start" className="min-w-full rounded-lg p-1 bg-popover border border-border/60 shadow-none">
             {hasPermission('companies', 'view') && (
               <DropdownMenuItem onClick={() => { handleOpenCompanies(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
                 <Building2 className="size-4 text-muted-foreground" />
@@ -400,69 +404,69 @@ export function MdiLayout() {
         </DropdownMenu>
       )}
 
-      {(hasPermission('deposit', 'view') || 
-        hasPermission('quotation', 'view') || 
-        hasPermission('purchase-order', 'view') || 
-        hasPermission('delivery-order', 'view') || 
-        hasPermission('invoice', 'view') || 
+      {(hasPermission('deposit', 'view') ||
+        hasPermission('quotation', 'view') ||
+        hasPermission('sales-order', 'view') ||
+        hasPermission('delivery-order', 'view') ||
+        hasPermission('invoice', 'view') ||
         hasPermission('payments', 'view')) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "justify-start md:justify-center w-full md:w-auto px-4 py-1.5 rounded text-xs md:text-sm font-medium transition-all duration-150 flex items-center gap-2 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none focus:ring-0",
-                isTransactionActive
-                  ? "bg-primary/10 text-primary font-semibold"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "justify-start md:justify-center px-4 py-1.5 rounded text-xs md:text-sm font-medium transition-all duration-150 flex items-center gap-2 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none focus:ring-0",
+                  isTransactionActive
+                    ? "bg-primary/10 text-primary font-semibold"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                )}
+              >
+                <Banknote className="size-4" />
+                <span>{dict.MENU_TRANSACTION}</span>
+                <ChevronDown className="size-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-full w-full rounded-lg p-1 bg-popover border border-border/60 shadow-none">
+              {hasPermission('deposit', 'view') && (
+                <DropdownMenuItem onClick={() => { handleOpenDeposit(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                  <ArrowDownToLine className="size-4 text-muted-foreground" />
+                  <span>{dict.MENU_DEPOSIT}</span>
+                </DropdownMenuItem>
               )}
-            >
-              <Banknote className="size-4" />
-              <span>{dict.MENU_TRANSACTION}</span>
-              <ChevronDown className="size-3 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="rounded-lg p-1 bg-popover border border-border/60 shadow-none">
-            {hasPermission('deposit', 'view') && (
-              <DropdownMenuItem onClick={() => { handleOpenDeposit(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
-                <ArrowDownToLine className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_DEPOSIT}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission('quotation', 'view') && (
-              <DropdownMenuItem onClick={() => { handleOpenQuotation(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
-                <ClipboardList className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_QUOTATION}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission('purchase-order', 'view') && (
-              <DropdownMenuItem onClick={() => { handleOpenPurchaseOrder(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
-                <ShoppingBag className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_PURCHASE_ORDER}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission('delivery-order', 'view') && (
-              <DropdownMenuItem onClick={() => { handleOpenDeliveryOrder(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
-                <Truck className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_DELIVERY_ORDER}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission('invoice', 'view') && (
-              <DropdownMenuItem onClick={() => { handleOpenInvoice(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
-                <Receipt className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_INVOICE}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission('payments', 'view') && (
-              <DropdownMenuItem onClick={() => { handleOpenPayments(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
-                <Wallet className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_PAYMENTS}</span>
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+              {hasPermission('quotation', 'view') && (
+                <DropdownMenuItem onClick={() => { handleOpenQuotation(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                  <ClipboardList className="size-4 text-muted-foreground" />
+                  <span>{dict.MENU_QUOTATION}</span>
+                </DropdownMenuItem>
+              )}
+              {hasPermission('sales-order', 'view') && (
+                <DropdownMenuItem onClick={() => { handleOpenSalesOrder(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                  <ShoppingBag className="size-4 text-muted-foreground" />
+                  <span>{dict.MENU_SALES_ORDER}</span>
+                </DropdownMenuItem>
+              )}
+              {hasPermission('delivery-order', 'view') && (
+                <DropdownMenuItem onClick={() => { handleOpenDeliveryOrder(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                  <Truck className="size-4 text-muted-foreground" />
+                  <span>{dict.MENU_DELIVERY_ORDER}</span>
+                </DropdownMenuItem>
+              )}
+              {hasPermission('invoice', 'view') && (
+                <DropdownMenuItem onClick={() => { handleOpenInvoice(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                  <Receipt className="size-4 text-muted-foreground" />
+                  <span>{dict.MENU_INVOICE}</span>
+                </DropdownMenuItem>
+              )}
+              {hasPermission('payments', 'view') && (
+                <DropdownMenuItem onClick={() => { handleOpenPayments(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                  <Wallet className="size-4 text-muted-foreground" />
+                  <span>{dict.MENU_PAYMENTS}</span>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
       {(hasPermission('shipments', 'view') || hasPermission('inventory', 'view')) && (
         <DropdownMenu>
@@ -482,7 +486,7 @@ export function MdiLayout() {
               <ChevronDown className="size-3 opacity-60" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="rounded-lg p-1 bg-popover border border-border/60 shadow-none">
+          <DropdownMenuContent align="start" className="min-w-full w-full rounded-lg p-1 bg-popover border border-border/60 shadow-none">
             {hasPermission('inventory', 'view') && (
               <DropdownMenuItem onClick={() => { handleOpenInventory(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
                 <Warehouse className="size-4 text-muted-foreground" />
@@ -508,10 +512,10 @@ export function MdiLayout() {
                 <span>{dict.MENU_REPORTS_QUOTATION}</span>
               </DropdownMenuItem>
             )}
-            {hasPermission('purchase-order', 'view') && (
-              <DropdownMenuItem onClick={() => { handleOpenReportPO(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+            {hasPermission('sales-order', 'view') && (
+              <DropdownMenuItem onClick={() => { handleOpenReportSO(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
                 <ShoppingBag className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_REPORTS_PO}</span>
+                <span>{dict.MENU_REPORTS_SO}</span>
               </DropdownMenuItem>
             )}
             {hasPermission('invoice', 'view') && (
@@ -526,6 +530,11 @@ export function MdiLayout() {
                 <span>{dict.MENU_REPORTS_PAYMENTS}</span>
               </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator className="my-1 border-border/60" />
+            <DropdownMenuItem onClick={() => { handleOpenReportProfitLoss(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2 font-semibold text-emerald-600">
+              <Activity className="size-4" />
+              <span>{dict.MENU_REPORTS_PROFIT_LOSS || "Profit & Loss"}</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -548,7 +557,7 @@ export function MdiLayout() {
               <ChevronDown className="size-3 opacity-60" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="rounded-lg p-1 bg-popover border border-border/60 shadow-none">
+          <DropdownMenuContent align="start" className="min-w-full w-full rounded-lg p-1 bg-popover border border-border/60 shadow-none">
             {hasPermission('users', 'view') && (
               <DropdownMenuItem onClick={() => { handleOpenUsers(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
                 <UserCog className="size-4 text-muted-foreground" />
@@ -687,7 +696,7 @@ export function MdiLayout() {
           <Button
             variant="ghost"
             size="icon"
-            className="size-7 shrink-0 rounded-full z-20 bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-muted"
+            className="border-gray-400 size-7 shrink-0 rounded-full z-20 bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-muted"
             onClick={() => scrollTabs('left')}
           >
             <ChevronLeft className="size-4" />
@@ -721,14 +730,14 @@ export function MdiLayout() {
                 {tab.closable !== false && (
                   <button
                     className={cn(
-                      "size-5 shrink-0 flex items-center justify-center transition-colors rounded-full hover:bg-primary/20 text-muted-foreground hover:text-primary relative z-20"
+                      "size-4 shrink-0 flex items-center justify-center transition-colors rounded-full hover:bg-destructive/70 bg-destructive/30 text-destructive-foreground relative z-20"
                     )}
                     onClick={(e) => {
                       e.stopPropagation()
                       closeTab(tab.id)
                     }}
                   >
-                    <X className="size-3.5"/>
+                    <X className="size-3.5" />
                   </button>
                 )}
               </div>
@@ -741,7 +750,7 @@ export function MdiLayout() {
           <Button
             variant="ghost"
             size="icon"
-            className="size-7 shrink-0 rounded-full z-20 bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-muted"
+            className="border-gray-400 size-7 shrink-0 rounded-full z-20 bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-muted"
             onClick={() => scrollTabs('right')}
           >
             <ChevronRight className="size-4" />

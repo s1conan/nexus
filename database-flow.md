@@ -1,99 +1,80 @@
-NIDS MVP: Development Blueprint		
-		
-Nexus Integrated Distribution System		
-		
-This plan is optimized for AI consumption and direct implementation.		
-		
-		
-		
-1. Core Technical Stack		
-		
-Framework: Next.js (App Router) + TypeScript		
-		
-Database/Auth: Supabase (PostgreSQL)		
-		
-Styling: Tailwind CSS + Shadcn/ui		
-		
-State/Labels: React Context for Dynamic Dictionary		
-		
-		
-		
-2. Database Schema (PostgreSQL)		
-		
-A. Infrastructure & Audit		
-		
-Table	Purpose	Key Columns
-dictionary	Soft-coded UI	key_name (Unique), display_value
-audit_logs	Traceability	table_name, record_id, action, old_data (JSONB), new_data (JSONB), changed_by
-B. Master Data		
-		
-Table	Purpose	Key Columns
-companies	Entities	type (Supplier/Customer/Transporter), name, details (JSONB)
-products	Inventory	sku, name, base_cost, base_price, details (JSONB)
-C. The Transaction Pipeline		
-		
-Table	Purpose	Key Columns
-quotes	Pricing Offers	company_id, status, total_value, details (JSONB)
-orders	Binding Contracts	quote_id, company_id, type (Inbound/Outbound), status, details (JSONB)
-order_items	Itemized Lines	order_id, product_id, qty, unit_price
-shipments	Logistics (Batches)	order_id, transporter_id, freight_cost, status, details (JSONB)
-shipment_items	Loaded Quantity	shipment_id, order_item_id, qty_loaded
-invoices	Billing	order_id, amount_due, status, details (JSONB)
-payments	Installments	invoice_id, amount_paid, payment_date, recorded_by
-		
-		
-3. The Functional Workflow		
-		
-1. Quoting: Distributor creates an offer in quotes.		
-		
-2. Conversion: Upon acceptance, quotes data migrates to orders.		
-		
-3. Fulfillment: Create one or more shipments against an order. Each shipment records a specific batch and transporter.		
-		
-4. Invoicing: Generate invoices based on total order or delivered batches.		
-		
-5. Settlement: Record multiple payments against a single invoice until amount_due is zero.		
-		
-		
-		
-4. Implementation Rules for CLI		
-		
-R1: The Dictionary Rule (No Hardcoding)		
-		
-All UI labels must be fetched from the dictionary table.		
-		
-Fetch: SELECT * FROM dictionary on App init.		
-		
-Usage: <span>{dict['LABEL_PO']}</span>		
-		
-R2: The Audit Trigger (Automated History)		
-		
-Use a PostgreSQL Function to populate audit_logs.		
-		
-SQL		
--- Logic for CLI Implementation		
-CREATE OR REPLACE FUNCTION audit_trigger_func() RETURNS trigger AS $$		
-BEGIN		
-  INSERT INTO audit_logs (table_name, record_id, action, old_data, new_data, changed_by)		
-  VALUES (TG_TABLE_NAME, OLD.id, TG_OP, to_jsonb(OLD), to_jsonb(NEW), auth.uid());		
-  RETURN NEW;		
-END;		
-$$ LANGUAGE plpgsql;		
-		
-R3: JSONB Extensibility		
-		
-Every table includes a details JSONB column. Use this for specific phone numbers, driver licenses, or extra notes to avoid schema bloat.		
-		
-		
-		
-5. MVP Milestone Roadmap		
-		
-1. Milestone 1: Setup Supabase Auth + companies & products CRUD.		
-		
-2. Milestone 2: Implement quotes to orders conversion logic.		
-		
-3. Milestone 3: Build the Batching system (shipments and shipment_items).		
-		
-4. Milestone 4: Finance module for invoices and partial payments.		
-		
-5. Milestone 5: Global Audit Log Viewer and Dictionary Management page.		
+# NIDS: Database & Technical Architecture Flow
+
+This document outlines the technical schema and data flow for the Nexus Integrated Distribution System (NIDS).
+
+## 1. System Infrastructure
+Core tables that provide the foundation for all other modules.
+
+| Table | Purpose | Key Columns |
+| :--- | :--- | :--- |
+| `app_settings` | Global Configuration | `category` (tax, numbering, email), `key`, `value`, `is_active` |
+| `dictionary` | UI Localization | `key_name` (Unique), `display_value` |
+| `audit_logs` | Traceability | `table_name`, `record_id`, `action`, `old_data` (JSONB), `new_data` (JSONB), `changed_by` |
+
+## 2. Master Data
+Entities that serve as the building blocks for transactions.
+
+| Table | Purpose | Key Columns |
+| :--- | :--- | :--- |
+| `companies` | Parties involved | `type` (Supplier/Customer/Transporter/Funder), `name`, `details` (JSONB) |
+| `products` | Inventory Items | `sku`, `name`, `base_price`, `details` (JSONB) |
+| `vehicles` | Logistics Assets | `license_number`, `vehicle_type`, `capacity` |
+| `vehicle_compartments` | Tanker Sub-divisions | `vehicle_id`, `compartment_number`, `capacity` |
+| `profiles` | User Management | `id` (references auth.users), `full_name`, `role` (Admin/Boss/Staff) |
+
+## 3. Transaction Pipeline
+The flow of data from Quote to Payment.
+
+### A. Sales & Procurement
+| Table | Purpose | Key Columns |
+| :--- | :--- | :--- |
+| `quotations` | Pricing Offers | `company_id`, `status`, `total_amount`, `tax_details` (JSONB), `price_snapshot` |
+| `sales_orders` | Binding Contracts | `quote_id`, `company_id`, `type` (Inbound/Outbound), `status` |
+| `sales_order_items` | Itemized Lines | `so_id`, `product_id`, `qty`, `unit_price` |
+
+### B. Inventory & Logistics
+| Table | Purpose | Key Columns |
+| :--- | :--- | :--- |
+| `inventory_ledger` | Stock Accounting | `transaction_type` (IN/OUT), `qty`, `unit_cost`, `is_active` |
+| `deposits` | Stock Inbound | `company_id` (Supplier), `amount`, `status`, `details` (JSONB) |
+| `delivery_orders` | Stock Outbound | `so_id`, `vehicle_id`, `driver_name`, `status` |
+| `do_items` | Delivered Quantities | `do_id`, `so_item_id`, `qty_delivered` |
+| `do_compartments` | Loading Details | `do_id`, `compartment_id`, `seal_number`, `quantity` |
+
+### C. Finance
+| Table | Purpose | Key Columns |
+| :--- | :--- | :--- |
+| `invoices` | Billing | `so_id`, `total_amount`, `paid_amount`, `status`, `tax_details` (JSONB) |
+| `payments` | Settlement | `invoice_id`, `amount`, `status` (Pending/Verified), `payment_method` |
+| `funders` | External Capital | `name`, `details` (JSONB) |
+
+## 4. Technical Logic & Automation
+
+### R1: Audit Trigger
+All tables must have the `audit_trigger_func()` attached to capture row-level changes.
+```sql
+CREATE TRIGGER audit_table_trigger 
+AFTER INSERT OR UPDATE OR DELETE ON <table_name> 
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
+```
+
+### R2: Inventory Zero-Reset
+When stock for a specific item hits zero, the ledger entries are optimized:
+```sql
+-- Trigger sets is_active = false for historical records when balance = 0
+```
+
+### R3: Payment Verification
+Invoice balances are only updated when a payment status is set to `Verified`.
+
+### R4: Tax Propagation Chain
+`Quotations` (Defined) → `Sales Orders` (Inherited) → `Invoices` (Locked).
+
+## 5. Development Roadmap (Updated)
+1. **Core Infrastructure:** Supabase, Auth, RLS, Dictionary, Audit. (Done)
+2. **Master Data:** Companies, Products, Vehicles, Compartments. (Done)
+3. **The Pipeline:** Quotations to Sales Orders with Multi-Tax logic. (Done)
+4. **Logistics:** Delivery Orders with Compartment/Seal tracking. (Done)
+5. **Inventory:** Event-sourced Ledger with Zero-Reset triggers. (Done)
+6. **Finance:** Invoices, Verified Payments, and Funder integration. (In-Progress/Verification)
+7. **Reports:** Real-time P&L and comprehensive module reporting. (Active)
