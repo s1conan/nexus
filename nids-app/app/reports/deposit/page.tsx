@@ -35,6 +35,12 @@ export default function DepositReportPage() {
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
+  const statusStyles: Record<string, string> = {
+    Accepted: "bg-green-100 text-green-700",
+    Rejected: "bg-red-100 text-red-700",
+    Pending: "bg-amber-100 text-amber-700",
+  }
+
   const [deposits, setDeposits] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -224,7 +230,7 @@ export default function DepositReportPage() {
                 <TableCell>
                   <span className={cn(
                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                    d.status === 'Confirmed' ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-700"
+                    statusStyles[d.status || 'Pending']
                   )}>
                     {d.status || 'Pending'}
                   </span>

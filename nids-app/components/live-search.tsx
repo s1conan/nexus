@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronRight, Loader2 } from "lucide-react"
+import { Check, ChevronRight, Loader2, Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -41,6 +41,18 @@ interface LiveSearchProps<T> {
   className?: string
   disabled?: boolean
   defaultDisplay?: string // Initial text to show before data is fetched/available
+  allowCustomValue?: boolean
+  onCustomValue?: (value: string) => void
+}
+
+/** Resolve dot-notation path like "company.name" to nested value */
+function getNestedValue<T>(obj: T, path: string): unknown {
+  return path.split(".").reduce((acc: unknown, key: string) => {
+    if (acc != null && typeof acc === "object") {
+      return (acc as Record<string, unknown>)[key]
+    }
+    return undefined
+  }, obj as unknown)
 }
 
 export function LiveSearch<T extends Record<string, any>>({
@@ -58,12 +70,14 @@ export function LiveSearch<T extends Record<string, any>>({
   className,
   disabled = false,
   defaultDisplay,
+  allowCustomValue = false,
+  onCustomValue,
 }: LiveSearchProps<T>) {
   const [open, setOpen] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [results, setResults] = React.useState<T[]>([])
   const [isLoading, setIsLoading] = React.useState(false)
-  
+
   const debouncedQuery = useDebounce(searchQuery, 300)
 
   // Store latest fetchData to avoid infinite loops from inline functions in parents
@@ -77,7 +91,7 @@ export function LiveSearch<T extends Record<string, any>>({
     if (fetchRef.current) {
       let isMounted = true
       setIsLoading(true)
-      
+
       fetchRef.current(debouncedQuery)
         .then(res => {
           if (isMounted) {
@@ -92,7 +106,7 @@ export function LiveSearch<T extends Record<string, any>>({
             setIsLoading(false)
           }
         })
-        
+
       return () => { isMounted = false }
     }
   }, [debouncedQuery])
@@ -126,11 +140,12 @@ export function LiveSearch<T extends Record<string, any>>({
     if (!searchQuery) return data.slice(0, 8)
     const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
     if (words.length === 0) return data.slice(0, 8)
-    
+
     return data.filter((item) => {
       // Return true if ANY column contains ALL words
       return searchColumns.some((col) => {
-        const val = String(item[col] || "").toLowerCase()
+        const raw = getNestedValue(item, String(col))
+        const val = String(raw ?? "").toLowerCase()
         return words.every(word => val.includes(word))
       })
     }).slice(0, 8)
@@ -155,17 +170,45 @@ export function LiveSearch<T extends Record<string, any>>({
           <span className="truncate">
             {triggerText}
           </span>
-          <ChevronRight className="ml-2 size-4 shrink-0 opacity-50" />
+          <span className="flex items-center gap-0.5 shrink-0">
+            {value && !disabled ? (
+              <span
+                role="button"
+                className="size-4 shrink-0 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                  onSelect("")
+                  setOpen(false)
+                  setSearchQuery("")
+                }}
+                tabIndex={-1}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    onSelect("")
+                    setOpen(false)
+                    setSearchQuery("")
+                  }
+                }}
+              >
+                <X className="size-3.5" />
+              </span>
+            ) : (
+              <ChevronRight className="size-4 shrink-0 opacity-50" />
+            )}
+          </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent 
-        className="w-[var(--radix-popover-trigger-width)] p-0 border shadow-lg" 
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] p-0 border shadow-lg"
         align="start"
       >
         <Command shouldFilter={false}>
           <div className="relative">
-            <CommandInput 
-              placeholder={searchPlaceholder} 
+            <CommandInput
+              placeholder={searchPlaceholder}
               value={searchQuery}
               onValueChange={setSearchQuery}
               className="border-none focus:ring-0"
@@ -174,7 +217,7 @@ export function LiveSearch<T extends Record<string, any>>({
                 if ((e.key === "Home" || e.key === "End") && e.isTrusted) {
                   e.stopPropagation()
                 }
-                
+
                 // Map PageUp and PageDown to cmdk's Home and End behaviors
                 if (e.key === "PageUp" || e.key === "PageDown") {
                   e.preventDefault()
@@ -200,20 +243,21 @@ export function LiveSearch<T extends Record<string, any>>({
             <CommandGroup>
               {/* Optional multi-column visual header */}
               {visualColumns && displayData.length > 0 && (
-                <div className="flex px-2 py-1.5 text-[10px] uppercase font-bold text-muted-foreground border-b mb-1 gap-2 w-full">
+                <div className="flex px-2 py-1.5 text-[10px] w-1/3 flex-1 uppercase font-bold text-muted-foreground border-b mb-1 gap-2 w-full">
                   <div className="size-4 shrink-0" /> {/* Space for checkmark */}
                   {visualColumns.map((col) => (
                     <div key={String(col.key)} className={cn("truncate", col.className, col.primary ? "" : "")}>
                       {col.header}
                     </div>
                   ))}
+                  <div className="size-4"></div>
                 </div>
               )}
-              
+
               {displayData.map((item) => {
                 const itemValue = String(item[keyField])
                 const isSelected = value === itemValue
-                
+
                 return (
                   <CommandItem
                     key={itemValue}
@@ -231,27 +275,46 @@ export function LiveSearch<T extends Record<string, any>>({
                         isSelected ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    
+
                     {/* Render visual columns OR fallback to simple display field */}
                     {visualColumns ? (
-                      visualColumns.map((col) => (
-                        <div 
-                          key={String(col.key)} 
-                          className={cn(
-                            "truncate", 
-                            col.className,
-                            col.primary ? "font-medium" : "text-muted-foreground"
-                          )}
-                        >
-                          {String(item[col.key] || "-")}
-                        </div>
-                      ))
+                      visualColumns.map((col) => {
+                        const val = getNestedValue(item, String(col.key))
+                        return (
+                          <div
+                            key={String(col.key)}
+                            className={cn(
+                              "truncate",
+                              col.className,
+                              col.primary ? "font-medium" : "text-muted-foreground"
+                            )}
+                          >
+                            {val != null ? String(val) : "-"}
+                          </div>
+                        )
+                      })
                     ) : (
                       <span className="truncate flex-1">{getDisplayText(item)}</span>
                     )}
                   </CommandItem>
                 )
               })}
+
+              {allowCustomValue && searchQuery && (
+                <CommandItem
+                  key="custom-value-item"
+                  value={searchQuery}
+                  onSelect={() => {
+                    if (onCustomValue) onCustomValue(searchQuery)
+                    setOpen(false)
+                    setSearchQuery("")
+                  }}
+                  className="flex items-center gap-2 w-full cursor-pointer text-primary border-t rounded-none mt-1 pt-2"
+                >
+                  <Plus className="size-4 shrink-0" />
+                  <span>Use &quot;{searchQuery}&quot;</span>
+                </CommandItem>
+              )}
             </CommandGroup>
           </CommandList>
         </Command>

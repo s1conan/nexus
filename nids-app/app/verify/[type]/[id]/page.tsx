@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { CheckCircle2, AlertCircle, ShieldCheck, Download, Languages, Loader2 } from "lucide-react"
 import { format } from "date-fns"
 import { id as dateLocaleId } from "date-fns/locale"
-import { generateStandardQuotationPDF } from "@/lib/pdf-generator-react"
+import { generateStandardQuotationPDF } from "@/lib/pdf-generator"
 import { notify } from "@/lib/notifications"
 import { cn } from "@/lib/utils"
 

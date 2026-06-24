@@ -8,6 +8,7 @@ interface SendEmailOptions {
   subject: string
   html: string
   from?: string
+  category?: "auth" | "ordinary"
   attachments?: {
     filename: string;
     content: string; // Base64 encoded string
@@ -18,10 +19,13 @@ interface SendEmailOptions {
  * Shared utility for sending emails via Resend.
  * This can be used in server-side routes or background jobs.
  */
-export async function sendEmail({ to, cc, subject, html, from, attachments }: SendEmailOptions) {
+export async function sendEmail({ to, cc, subject, html, from, category, attachments }: SendEmailOptions) {
+  const defaultFrom = category === "auth"
+    ? process.env.RESEND_FROM_EMAIL_AUTH || process.env.RESEND_FROM_EMAIL || 'Nexus <onboarding@resend.dev>'
+    : from || process.env.RESEND_FROM_EMAIL || 'Nexus <onboarding@resend.dev>'
   try {
     const { data, error } = await resend.emails.send({
-      from: from || process.env.RESEND_FROM_EMAIL || 'Nexus <onboarding@resend.dev>',
+      from: from || defaultFrom,
       to,
       cc,
       subject,

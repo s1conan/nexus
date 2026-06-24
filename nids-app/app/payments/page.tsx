@@ -25,7 +25,8 @@ import {
   Trash2,
   ChevronDown,
   Wallet,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -82,6 +83,12 @@ export default function PaymentsPage() {
 
   const observerTarget = useRef(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const statusStyles: Record<string, string> = {
+    Pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+    Verified: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+    Rejected: "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+  }
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -141,6 +148,8 @@ export default function PaymentsPage() {
       setLoadingMore(false)
     }
   }, [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED])
+
+  const handleRefresh = () => { fetchData(true) }
 
   useEffect(() => {
     fetchData(true)
@@ -256,10 +265,27 @@ export default function PaymentsPage() {
         fetchData(true)
       }
 
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SAVE_SUCCESS?.replace("%data%", dict.MENU_PAYMENTS) || "Payment saved successfully.")
+      const companyName = selectedInvoiceInfo?.company?.name || ""
+      const docLabel = `[${payload.payment_number || formData.payment_number}]`
+      if (editingItem) {
+        notify.success(
+          dict.MSG_UPDATE_SUCCESS.replace("%data%", docLabel),
+          dict.MSG_SUCCESS_UPDATE_DESC.replace("%entity%", "payment").replace("%company%", `[${companyName}]`),
+          undefined,
+          true
+        )
+      } else {
+        notify.success(
+          dict.MSG_SAVE_SUCCESS.replace("%data%", docLabel),
+          dict.MSG_SUCCESS_SAVE_DESC.replace("%entity%", "payment").replace("%company%", `[${companyName}]`),
+          undefined,
+          true
+        )
+      }
       setIsOpen(false)
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      const docLabel = `[${formData.payment_number}]`
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), err.message)
     } finally {
       setIsSaving(false)
     }
@@ -267,40 +293,60 @@ export default function PaymentsPage() {
 
   const handleDelete = async (id: string) => {
     const item = payments.find(p => p.id === id)
-    const label = item ? `[${item.payment_number}]` : ""
+    if (!item) return
+    const docLabel = `[${item.payment_number}]`
+    const companyName = item.invoice?.company?.name || ""
     if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
       const { error } = await supabase.from("payments").delete().eq("id", id)
       if (error) throw error
       
       setPayments(prev => prev.filter(p => p.id !== id))
-      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
+      notify.deleted(
+        dict.MSG_DELETE_SUCCESS.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "payment").replace("%company%", `[${companyName}]`),
+        undefined,
+        true
+      )
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), err.message)
     }
   }
 
   const updateStatus = async (id: string, status: string) => {
+    const item = payments.find(p => p.id === id)
+    if (!item) return
+    const docLabel = `[${item.payment_number}]`
+    const companyName = item.invoice?.company?.name || ""
     try {
       const { error } = await supabase.from("payments").update({ status }).eq("id", id)
       if (error) throw error
       
       setPayments(prev => prev.map(p => p.id === id ? { ...p, status } : p))
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_STATUS_UPDATED || "Payment status updated.")
+      notify.success(
+        dict.MSG_QUOTATION_STATUS_UPDATED.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace("%company%", `[${companyName}]`),
+        undefined,
+        true
+      )
     } catch (err: any) {
-      notify.error(dict.MSG_UPDATE_FAILED, err.message)
+      notify.error(dict.MSG_UPDATE_FAILED.replace("%data%", docLabel), err.message)
     }
   }
 
   return (
-    <div className="page-container h-full flex flex-col overflow-hidden">
+    <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title">
           <Wallet className="size-5 mr-2 inline-block text-primary" />
           {dict.MENU_PAYMENTS || "Payments"}
         </h1>
 
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading || loadingMore} title="Refresh Data">
+            <RefreshCw className={cn("size-4", (loading || loadingMore) && "animate-spin")} />
+          </Button>
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
             <Button size="sm" onClick={() => handleOpenDialog()} disabled={!canInsert}>
               <Plus data-icon="inline-start" />
@@ -404,6 +450,7 @@ export default function PaymentsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="action-bar shrink-0">
@@ -446,10 +493,7 @@ export default function PaymentsPage() {
                   {SITE_CONFIG.currencySymbol} {Number(p.amount).toLocaleString()}
                 </TableCell>
                 <TableCell>
-                  <span className={cn("px-2 py-0.5 rounded text-xs font-bold uppercase", 
-                    p.status === 'Verified' ? "bg-green-100 text-green-700" :
-                    p.status === 'Pending' ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"
-                  )}>
+                  <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold uppercase border", statusStyles[p.status] || statusStyles.Pending)}>
                     {p.status}
                   </span>
                 </TableCell>
@@ -463,9 +507,9 @@ export default function PaymentsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => updateStatus(p.id, 'Pending')}>{dict.LABEL_PENDING || "Pending"}</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => updateStatus(p.id, 'Verified')} className="text-green-600 font-medium">{dict.LABEL_VERIFY || "Verify"}</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => updateStatus(p.id, 'Rejected')} className="text-destructive">{dict.LABEL_REJECT || "Reject"}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateStatus(p.id, 'Pending')} className="text-amber-600 dark:text-amber-400 font-medium">{dict.LABEL_PENDING || "Pending"}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateStatus(p.id, 'Verified')} className="text-emerald-600 dark:text-emerald-400 font-medium">{dict.LABEL_VERIFY || "Verify"}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateStatus(p.id, 'Rejected')} className="text-rose-600 dark:text-rose-400 font-medium">{dict.LABEL_REJECT || "Reject"}</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(p)} disabled={!canEdit}>

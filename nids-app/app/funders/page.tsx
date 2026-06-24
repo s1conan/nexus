@@ -247,19 +247,32 @@ export default function FundersPage() {
         const { data, error } = await supabase.from("funders").update(payload).eq("id", editingFunder.id).select().single()
         if (error) throw error
         setFunders(prev => prev.map(f => f.id === editingFunder.id ? data : f))
-        notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", ""), dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`))
+        notify.success(
+          dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`),
+          dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace("%entity%", `funder [${formData.name}]`),
+          undefined,
+          true
+        )
       } else {
         const { data, error } = await supabase.from("funders").insert([payload]).select().single()
         if (error) throw error
         setFunders(prev => [data, ...prev])
-        notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", ""), dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`))
+        notify.success(
+          dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`),
+          dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace("%entity%", `funder [${formData.name}]`),
+          undefined,
+          true
+        )
       }
       fetchStats()
       setIsOpen(false)
     }
     catch (err) {
       console.error("Submit Funder Error:", err)
-      notify.error(dict.MSG_SAVE_FAILED, (err as Error).message)
+      notify.error(
+        dict.MSG_SAVE_FAILED.replace("%data%", `[${formData.name}]`),
+        (err as Error).message
+      )
     }
     finally {
       setIsSubmitting(false);
@@ -277,11 +290,19 @@ export default function FundersPage() {
     try {
       const { error } = await supabase.from("funders").delete().eq("id", deleteConfirm.id)
       if (error) throw error
-      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`))
+      notify.deleted(
+        dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`),
+        dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY.replace("%entity%", `funder [${deleteConfirm.name}]`),
+        undefined,
+        true
+      )
       setFunders(prev => prev.filter(f => f.id !== deleteConfirm.id))
       fetchStats()
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      notify.error(
+        dict.MSG_SAVE_FAILED.replace("%data%", `[${deleteConfirm.name}]`),
+        err.message
+      )
     } finally {
       setDeleteConfirm(null)
     }
@@ -300,7 +321,7 @@ export default function FundersPage() {
   }
 
   return (
-    <div className="page-container overflow-hidden">
+    <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title">
           <User className="size-5 mr-2 inline-block text-primary" />

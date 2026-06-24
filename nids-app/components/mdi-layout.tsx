@@ -32,7 +32,8 @@ import {
   ArrowDownToLine,
   ClipboardList,
   Warehouse,
-  Activity
+  Activity,
+  Bell
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -120,6 +121,423 @@ export function MdiLayout() {
   const [canScrollRight, setCanScrollRight] = useState(false)
   const [isOverflowing, setIsOverflowing] = useState(false)
 
+  // Notification states and sync logic
+  const MAX_HISTORY = 20
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [hasUnread, setHasUnread] = useState(false)
+  const [companyMap, setCompanyMap] = useState<Record<string, string>>({})
+  const [invoiceMap, setInvoiceMap] = useState<Record<string, { companyId: string, number: string }>>({})
+
+  // Format datetime string
+  const formatTime = (isoString: string) => {
+    try {
+      const date = new Date(isoString)
+      if (isNaN(date.getTime())) return ""
+
+      const now = new Date()
+      const isToday = date.toDateString() === now.toDateString()
+
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      const timeStr = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+
+      if (isToday) {
+        return timeStr
+      } else {
+        return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${timeStr}`
+      }
+    } catch (e) {
+      return ""
+    }
+  }
+
+  // Load reference maps and combined notifications from database & local storage
+  useEffect(() => {
+    if (!user?.id) return
+
+    const supabase = createClient()
+
+    const loadData = async () => {
+      try {
+        // 1. Fetch companies lookup
+        const { data: companiesData, error: coError } = await supabase
+          .from("companies")
+          .select("id, name")
+
+        let coMap: Record<string, string> = {}
+        if (!coError && companiesData) {
+          companiesData.forEach((c: any) => {
+            coMap[c.id] = c.name
+          })
+          setCompanyMap(coMap)
+        }
+
+        // 2. Fetch invoices lookup
+        const { data: invoicesData, error: invError } = await supabase
+          .from("invoices")
+          .select("id, invoice_number, company_id")
+
+        let invMap: Record<string, { companyId: string, number: string }> = {}
+        if (!invError && invoicesData) {
+          invoicesData.forEach((i: any) => {
+            invMap[i.id] = { companyId: i.company_id, number: i.invoice_number }
+          })
+          setInvoiceMap(invMap)
+        }
+
+        // 3. Fetch audit logs
+        const { data: logsData, error: logsError } = await supabase
+          .from("audit_logs")
+          .select("*")
+          .eq("changed_by", user.id)
+          .order("created_at", { ascending: false })
+          .limit(MAX_HISTORY)
+
+        const dbLogs: any[] = logsData || []
+
+        // 4. Load local notifications
+        const localNotifsStr = localStorage.getItem("nids_local_notifications")
+        const localNotifs: any[] = localNotifsStr ? JSON.parse(localNotifsStr) : []
+
+        // 5. Check clear time
+        const clearTimeStr = localStorage.getItem("nids_notifications_clear_time")
+        const clearTime = clearTimeStr ? new Date(clearTimeStr).getTime() : 0
+
+        // Filter out items cleared before
+        let filteredDbLogs = dbLogs
+        if (clearTime > 0) {
+          filteredDbLogs = dbLogs.filter(log => new Date(log.created_at).getTime() > clearTime)
+        }
+
+        let filteredLocalNotifs = localNotifs
+        if (clearTime > 0) {
+          filteredLocalNotifs = localNotifs.filter(notif => new Date(notif.timestamp).getTime() > clearTime)
+        }
+
+        // Combine and sort
+        const combined = [
+          ...filteredDbLogs.map(log => ({
+            id: log.id,
+            isDb: true,
+            table_name: log.table_name,
+            action: log.action,
+            old_data: log.old_data,
+            new_data: log.new_data,
+            timestamp: log.created_at
+          })),
+          ...filteredLocalNotifs.map(notif => ({
+            id: notif.id,
+            isDb: false,
+            type: notif.type,
+            title: notif.title,
+            description: notif.description,
+            timestamp: notif.timestamp
+          }))
+        ]
+
+        // Sort by timestamp desc
+        combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
+        // Filter out duplicate IDs (just in case)
+        const uniqueCombined = []
+        const seenIds = new Set<string>()
+        for (const item of combined) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id)
+            uniqueCombined.push(item)
+          }
+        }
+
+        setNotifications(uniqueCombined.slice(0, MAX_HISTORY))
+      } catch (err) {
+        console.error("Error loading notification history:", err)
+      }
+    }
+
+    loadData()
+  }, [user?.id])
+
+  // Listen to real-time custom notification event
+  useEffect(() => {
+    const handleNotification = (e: Event) => {
+      const customEvent = e as CustomEvent
+      const newNotif = customEvent.detail
+      if (!newNotif) return
+
+      setNotifications(prev => {
+        // If this ID is already in the list, ignore it to prevent duplicates
+        if (prev.some(x => x.id === newNotif.id)) {
+          return prev
+        }
+
+        const item = {
+          id: newNotif.id,
+          isDb: newNotif.isDb,
+          type: newNotif.type,
+          title: newNotif.title,
+          description: newNotif.description,
+          timestamp: newNotif.timestamp
+        }
+
+        // If it's not DB related, save it to localStorage
+        if (!newNotif.isDb) {
+          try {
+            const localNotifsStr = localStorage.getItem("nids_local_notifications")
+            let localNotifs = localNotifsStr ? JSON.parse(localNotifsStr) : []
+            localNotifs.unshift({
+              id: newNotif.id,
+              type: newNotif.type,
+              title: newNotif.title,
+              description: newNotif.description,
+              timestamp: newNotif.timestamp
+            })
+            localNotifs = localNotifs.slice(0, MAX_HISTORY)
+            localStorage.setItem("nids_local_notifications", JSON.stringify(localNotifs))
+          } catch (err) {
+            console.error("Failed to save local notification:", err)
+          }
+        }
+
+        return [item, ...prev].slice(0, MAX_HISTORY)
+      })
+
+      setHasUnread(true)
+    }
+
+    window.addEventListener("nids-notification", handleNotification)
+    return () => window.removeEventListener("nids-notification", handleNotification)
+  }, [])
+
+  const clearNotifications = () => {
+    setNotifications([])
+    setHasUnread(false)
+    localStorage.removeItem("nids_local_notifications")
+    localStorage.setItem("nids_notifications_clear_time", new Date().toISOString())
+  }
+
+  const getBadgeStyle = (type: string) => {
+    switch (type) {
+      case "success": return "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+      case "deleted": return "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+      case "error": return "bg-rose-500/10 text-rose-500 border border-rose-500/20"
+      case "warning": return "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+      case "info": return "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+      default: return "bg-muted text-muted-foreground"
+    }
+  }
+
+  const formatNotification = (item: any) => {
+    // If it's a pre-formatted notification (local log or real-time event log)
+    if (!item.table_name && item.title) {
+      return {
+        title: item.title,
+        description: item.description,
+        type: item.type || "info"
+      }
+    }
+
+    const data = item.new_data || item.old_data || {}
+    const oldVal = item.old_data || {}
+    const newVal = item.new_data || {}
+    const action = item.action
+    const table = item.table_name
+
+    const getCompanyName = (companyId: string) => {
+      return companyMap[companyId] ? `[${companyMap[companyId]}]` : ""
+    }
+
+    let title = ""
+    let description = ""
+    let type = action === "DELETE" ? "deleted" : "success"
+
+    switch (table) {
+      case "companies": {
+        const name = data.name || ""
+        if (action === "DELETE") {
+          title = dict.MSG_DELETE_SUCCESS?.replace("%data%", `[${name}]`) || `Company [${name}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY?.replace("%entity%", `company [${name}]`) || `Successfully deleted company [${name}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_SAVE_SUCCESS?.replace("%data%", `[${name}]`) || `Company [${name}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY?.replace("%entity%", `company [${name}]`) || `Successfully saved company [${name}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${name}]`) || `Company [${name}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY?.replace("%entity%", `company [${name}]`) || `Successfully updated company [${name}].`
+        }
+        break
+      }
+      case "products": {
+        const name = data.name || ""
+        if (action === "DELETE") {
+          title = dict.MSG_DELETE_SUCCESS?.replace("%data%", `[${name}]`) || `Product [${name}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY?.replace("%entity%", `product [${name}]`) || `Successfully deleted product [${name}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_SAVE_SUCCESS?.replace("%data%", `[${name}]`) || `Product [${name}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY?.replace("%entity%", `product [${name}]`) || `Successfully saved product [${name}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${name}]`) || `Product [${name}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY?.replace("%entity%", `product [${name}]`) || `Successfully updated product [${name}].`
+        }
+        break
+      }
+      case "funders": {
+        const name = data.name || ""
+        if (action === "DELETE") {
+          title = dict.MSG_DELETE_SUCCESS?.replace("%data%", `[${name}]`) || `Funder [${name}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY?.replace("%entity%", `funder [${name}]`) || `Successfully deleted funder [${name}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_SAVE_SUCCESS?.replace("%data%", `[${name}]`) || `Funder [${name}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY?.replace("%entity%", `funder [${name}]`) || `Successfully saved funder [${name}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${name}]`) || `Funder [${name}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY?.replace("%entity%", `funder [${name}]`) || `Successfully updated funder [${name}].`
+        }
+        break
+      }
+      case "vehicles": {
+        const lic = data.license_number || ""
+        if (action === "DELETE") {
+          title = dict.MSG_DELETE_SUCCESS?.replace("%data%", `[${lic}]`) || `Vehicle [${lic}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY?.replace("%entity%", `vehicle [${lic}]`) || `Successfully deleted vehicle [${lic}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_SAVE_SUCCESS?.replace("%data%", `[${lic}]`) || `Vehicle [${lic}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY?.replace("%entity%", `vehicle [${lic}]`) || `Successfully saved vehicle [${lic}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${lic}]`) || `Vehicle [${lic}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY?.replace("%entity%", `vehicle [${lic}]`) || `Successfully updated vehicle [${lic}].`
+        }
+        break
+      }
+      case "app_settings": {
+        const name = data.name || ""
+        if (action === "DELETE") {
+          title = dict.MSG_DELETE_SUCCESS?.replace("%data%", `[${name}]`) || `Setting [${name}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY?.replace("%entity%", `setting [${name}]`) || `Successfully deleted setting [${name}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_SAVE_SUCCESS?.replace("%data%", `[${name}]`) || `Setting [${name}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY?.replace("%entity%", `setting [${name}]`) || `Successfully saved setting [${name}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${name}]`) || `Setting [${name}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY?.replace("%entity%", `setting [${name}]`) || `Successfully updated setting [${name}].`
+        }
+        break
+      }
+      case "quotations": {
+        const num = data.quotation_number || ""
+        const co = getCompanyName(data.company_id)
+        if (action === "UPDATE" && newVal.status !== oldVal.status) {
+          title = dict.MSG_QUOTATION_STATUS_UPDATED?.replace("%data%", `[${num}]`) || `Quotation status [${num}] updated`
+          description = dict.MSG_SUCCESS_STATUS_DESC?.replace("%status%", `[${newVal.status}]`).replace("%company%", co) || `Successfully updated status for quotation [${num}].`
+        } else if (action === "DELETE") {
+          title = dict.MSG_QUOTATION_DELETED?.replace("%data%", `[${num}]`) || `Quotation [${num}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC?.replace("%entity%", "quotation").replace("%company%", co) || `Successfully deleted quotation [${num}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_QUOTATION_SAVED?.replace("%data%", `[${num}]`) || `Quotation [${num}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC?.replace("%entity%", "quotation").replace("%company%", co) || `Successfully saved quotation [${num}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${num}]`) || `Quotation [${num}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC?.replace("%entity%", "quotation").replace("%company%", co) || `Successfully updated quotation [${num}].`
+        }
+        break
+      }
+      case "deposits": {
+        const num = data.deposit_number || ""
+        const co = getCompanyName(data.company_id)
+        if (action === "UPDATE" && newVal.status !== oldVal.status) {
+          title = dict.MSG_DEPOSIT_STATUS_UPDATED?.replace("%data%", `[${num}]`) || `Deposit status [${num}] updated`
+          description = dict.MSG_SUCCESS_STATUS_DESC?.replace("%status%", `[${newVal.status}]`).replace("%company%", co) || `Successfully updated status for deposit [${num}].`
+        } else if (action === "DELETE") {
+          title = dict.MSG_DEPOSIT_DELETED?.replace("%data%", `[${num}]`) || `Deposit [${num}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC?.replace("%entity%", "deposit").replace("%company%", co) || `Successfully deleted deposit [${num}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_DEPOSIT_SAVED?.replace("%data%", `[${num}]`) || `Deposit [${num}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC?.replace("%entity%", "deposit").replace("%company%", co) || `Successfully saved deposit [${num}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${num}]`) || `Deposit [${num}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC?.replace("%entity%", "deposit").replace("%company%", co) || `Successfully updated deposit [${num}].`
+        }
+        break
+      }
+      case "sales_orders": {
+        const num = data.so_number || ""
+        const co = getCompanyName(data.company_id)
+        if (action === "UPDATE" && newVal.status !== oldVal.status) {
+          title = dict.MSG_SO_STATUS_UPDATED?.replace("%data%", `[${num}]`) || `Sales Order status [${num}] updated`
+          description = dict.MSG_SUCCESS_STATUS_DESC?.replace("%status%", `[${newVal.status}]`).replace("%company%", co) || `Successfully updated status for sales order [${num}].`
+        } else if (action === "DELETE") {
+          title = dict.MSG_SO_DELETED?.replace("%data%", `[${num}]`) || `Sales Order [${num}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC?.replace("%entity%", "sales order").replace("%company%", co) || `Successfully deleted sales order [${num}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_SO_SAVED?.replace("%data%", `[${num}]`) || `Sales Order [${num}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC?.replace("%entity%", "sales order").replace("%company%", co) || `Successfully saved sales order [${num}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${num}]`) || `Sales Order [${num}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC?.replace("%entity%", "sales order").replace("%company%", co) || `Successfully updated sales order [${num}].`
+        }
+        break
+      }
+      case "delivery_orders": {
+        const num = data.do_number || ""
+        const co = getCompanyName(data.company_id)
+        if (action === "UPDATE" && newVal.status !== oldVal.status) {
+          title = dict.MSG_DO_STATUS_UPDATED?.replace("%data%", `[${num}]`) || `Delivery Order status [${num}] updated`
+          description = dict.MSG_SUCCESS_STATUS_DESC?.replace("%status%", `[${newVal.status}]`).replace("%company%", co) || `Successfully updated status for delivery order [${num}].`
+        } else if (action === "DELETE") {
+          title = dict.MSG_DO_DELETED?.replace("%data%", `[${num}]`) || `Delivery Order [${num}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC?.replace("%entity%", "delivery order").replace("%company%", co) || `Successfully deleted delivery order [${num}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_DO_SAVED?.replace("%data%", `[${num}]`) || `Delivery Order [${num}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC?.replace("%entity%", "delivery order").replace("%company%", co) || `Successfully saved delivery order [${num}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${num}]`) || `Delivery Order [${num}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC?.replace("%entity%", "delivery order").replace("%company%", co) || `Successfully updated delivery order [${num}].`
+        }
+        break
+      }
+      case "invoices": {
+        const num = data.invoice_number || ""
+        const co = getCompanyName(data.company_id)
+        if (action === "UPDATE" && newVal.status !== oldVal.status) {
+          title = (dict.MSG_QUOTATION_STATUS_UPDATED || "Invoice status %data% updated").replace("%data%", `[${num}]`)
+          description = dict.MSG_SUCCESS_STATUS_DESC?.replace("%status%", `[${newVal.status}]`).replace("%company%", co) || `Successfully updated status for invoice [${num}].`
+        } else if (action === "DELETE") {
+          title = dict.MSG_DELETE_SUCCESS?.replace("%data%", `[${num}]`) || `Invoice [${num}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC?.replace("%entity%", "invoice").replace("%company%", co) || `Successfully deleted invoice [${num}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_SAVE_SUCCESS?.replace("%data%", `[${num}]`) || `Invoice [${num}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC?.replace("%entity%", "invoice").replace("%company%", co) || `Successfully saved invoice [${num}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${num}]`) || `Invoice [${num}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC?.replace("%entity%", "invoice").replace("%company%", co) || `Successfully updated invoice [${num}].`
+        }
+        break
+      }
+      case "payments": {
+        const num = data.payment_number || ""
+        const invDetails = invoiceMap[data.invoice_id] || {}
+        const co = getCompanyName(invDetails.companyId)
+        if (action === "UPDATE" && newVal.status !== oldVal.status) {
+          title = (dict.MSG_QUOTATION_STATUS_UPDATED || "Payment status %data% updated").replace("%data%", `[${num}]`)
+          description = dict.MSG_SUCCESS_STATUS_DESC?.replace("%status%", `[${newVal.status}]`).replace("%company%", co) || `Successfully updated status for payment [${num}].`
+        } else if (action === "DELETE") {
+          title = dict.MSG_DELETE_SUCCESS?.replace("%data%", `[${num}]`) || `Payment [${num}] deleted`
+          description = dict.MSG_SUCCESS_DELETE_DESC?.replace("%entity%", "payment").replace("%company%", co) || `Successfully deleted payment [${num}].`
+        } else if (action === "INSERT") {
+          title = dict.MSG_SAVE_SUCCESS?.replace("%data%", `[${num}]`) || `Payment [${num}] saved`
+          description = dict.MSG_SUCCESS_SAVE_DESC?.replace("%entity%", "payment").replace("%company%", co) || `Successfully saved payment [${num}].`
+        } else {
+          title = dict.MSG_UPDATE_SUCCESS?.replace("%data%", `[${num}]`) || `Payment [${num}] updated`
+          description = dict.MSG_SUCCESS_UPDATE_DESC?.replace("%entity%", "payment").replace("%company%", co) || `Successfully updated payment [${num}].`
+        }
+        break
+      }
+      default: {
+        title = `${action} on ${table}`
+        description = `Record ID: ${item.record_id}`
+        break
+      }
+    }
+
+    return { title, description, type }
+  }
   // Check if scrolling is possible
   const checkScroll = useCallback(() => {
     if (tabStripRef.current) {
@@ -161,7 +579,7 @@ export function MdiLayout() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isChangingPassword, setIsChangingPassword] = useState(false)
 
-  // Diagnostic Hook: log and toast permissions for debugging
+  // Diagnostic Hook: log permissions for debugging
   useEffect(() => {
     console.log("MDI Layout: [DEBUG] User loaded:", user)
     console.log("MDI Layout: [DEBUG] Profile loaded:", profile)
@@ -169,16 +587,8 @@ export function MdiLayout() {
 
     if (profile && resolvedPermissions) {
       if (lastToastedUserIdRef.current === profile.id) {
-        return // Already toasted for this profile load!
+        return // Already logged for this profile load!
       }
-
-      const activeModules = Object.keys(resolvedPermissions).filter(
-        key => resolvedPermissions[key] && Object.values(resolvedPermissions[key]).some(val => val === true)
-      )
-      notify.info(
-        `User Loaded: ${profile.username} (${profile.role.toUpperCase()})`,
-        `Permissions active for: ${activeModules.join(", ") || "none"}. Check browser developer tools console for raw details.`
-      )
       lastToastedUserIdRef.current = profile.id
     } else if (!profile) {
       lastToastedUserIdRef.current = null // Reset on logout
@@ -350,7 +760,7 @@ export function MdiLayout() {
           "justify-start md:justify-center w-full md:w-auto px-4 py-1.5 rounded text-xs md:text-sm font-medium transition-all duration-150 flex items-center gap-2 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none focus:ring-0",
           isDashboardActive
             ? "bg-primary/10 text-primary font-semibold"
-            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+            : "text-muted-foreground hover:bg-white/10 hover:text-foreground active:bg-white/15"
         )}
       >
         <LayoutDashboard className="size-4" />
@@ -367,7 +777,7 @@ export function MdiLayout() {
                 "justify-start md:justify-center w-full md:w-auto px-4 py-1.5 rounded text-xs md:text-sm font-medium transition-all duration-150 flex items-center gap-2 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none focus:ring-0",
                 isMasterActive
                   ? "bg-primary/10 text-primary font-semibold"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  : "text-muted-foreground active:bg-sidebar-accent/80"
               )}
             >
               <MenuIcon className="size-4" />
@@ -419,7 +829,7 @@ export function MdiLayout() {
                   "justify-start md:justify-center px-4 py-1.5 rounded text-xs md:text-sm font-medium transition-all duration-150 flex items-center gap-2 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none focus:ring-0",
                   isTransactionActive
                     ? "bg-primary/10 text-primary font-semibold"
-                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    : "text-muted-foreground  active:bg-white/15"
                 )}
               >
                 <Banknote className="size-4" />
@@ -429,7 +839,7 @@ export function MdiLayout() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-full w-full rounded-lg p-1 bg-popover border border-border/60 shadow-none">
               {hasPermission('deposit', 'view') && (
-                <DropdownMenuItem onClick={() => { handleOpenDeposit(); setIsMobileMenuOpen(false); }} className="rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
+                <DropdownMenuItem onClick={() => { handleOpenDeposit(); setIsMobileMenuOpen(false); }} className=" rounded p-2 transition-colors focus:bg-muted/50 cursor-pointer flex items-center gap-2">
                   <ArrowDownToLine className="size-4 text-muted-foreground" />
                   <span>{dict.MENU_DEPOSIT}</span>
                 </DropdownMenuItem>
@@ -478,7 +888,7 @@ export function MdiLayout() {
                 "justify-start md:justify-center w-full md:w-auto px-4 py-1.5 rounded text-xs md:text-sm font-medium transition-all duration-150 flex items-center gap-2 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none focus:ring-0",
                 isReportsActive
                   ? "bg-primary/10 text-primary font-semibold"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  : "text-muted-foreground active:bg-white/15"
               )}
             >
               <Truck className="size-4" />
@@ -549,7 +959,7 @@ export function MdiLayout() {
                 "justify-start md:justify-center w-full md:w-auto px-4 py-1.5 rounded text-xs md:text-sm font-medium transition-all duration-150 flex items-center gap-2 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none focus:ring-0",
                 isSystemActive
                   ? "bg-primary/10 text-primary font-semibold"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  : "text-muted-foreground active:bg-white/15"
               )}
             >
               <UserCog className="size-4" />
@@ -617,11 +1027,66 @@ export function MdiLayout() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Notification Bell Dropdown */}
+          <DropdownMenu onOpenChange={(open) => { if (open) setHasUnread(false) }}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative size-9 rounded-full border border-border/60 hover:bg-muted/50 transition-colors flex items-center justify-center p-0">
+                <Bell className="size-5 text-muted-foreground" />
+                {hasUnread && (
+                  <span className="absolute top-1.5 right-1.5 flex h-2 w-2 rounded-full bg-destructive" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 max-h-[480px] overflow-y-auto rounded-lg p-1 bg-popover border border-border/60 shadow-lg z-50">
+              <DropdownMenuLabel className="font-semibold p-2.5 flex items-center justify-between text-sm">
+                <span>{lang === "id" ? "Riwayat Notifikasi" : "Notification History"}</span>
+                {notifications.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearNotifications} className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground">
+                    {lang === "id" ? "Bersihkan" : "Clear All"}
+                  </Button>
+                )}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="my-1 border-border/60" />
+              {notifications.length === 0 ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  {lang === "id" ? "Tidak ada notifikasi." : "No notifications yet."}
+                </div>
+              ) : (
+                notifications.map((item) => {
+                  const formatted = formatNotification(item)
+                  return (
+                    <div key={item.id} className="flex flex-col items-start gap-1 p-2.5 border-b border-border/40 last:border-b-0">
+                      <div className="flex items-center justify-between w-full">
+                        <span className={cn(
+                          "text-[10px] font-semibold px-1.5 py-0.5 rounded",
+                          getBadgeStyle(formatted.type)
+                        )}>
+                          {formatted.type.toUpperCase()}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {formatTime(item.timestamp)}
+                        </span>
+                      </div>
+                      <span className="text-xs font-semibold text-foreground leading-snug">
+                        {formatted.title}
+                      </span>
+                      {formatted.description && (
+                        <span className="text-[11px] text-muted-foreground leading-normal">
+                          {formatted.description}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {/* User Profile Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="bg-gradient-to-br from-secondary to-white size-9 rounded-full p-0 flex items-center justify-center border border-border/60 hover:bg-muted/60 transition-colors shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none focus:ring-0">
-                <User className="size-5 text-muted-foreground" />
+              <Button variant="ghost" className="bg-gradient-to-br from-secondary to-white size-9 rounded-full p-0 flex items-center justify-center border border-border">
+                <User className="size-5 text-secondary-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 rounded-lg p-1 bg-popover border border-border/60 shadow-none">

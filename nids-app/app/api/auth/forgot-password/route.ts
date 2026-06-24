@@ -50,7 +50,8 @@ export async function POST(request: Request) {
     sendEmail({
       to: email,
       subject: template.subject,
-      html: template.html
+      html: template.html,
+      category: "auth"
     }).then(() => {
       console.log(`Forgot password email dispatched to ${email}`)
     }).catch((err) => {

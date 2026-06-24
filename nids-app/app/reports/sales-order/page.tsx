@@ -36,6 +36,14 @@ export default function SalesOrderReportPage() {
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
+  const statusStyles: Record<string, string> = {
+    Fulfilled: "bg-green-100 text-green-700",
+    Partial: "bg-purple-100 text-purple-700",
+    Sent: "bg-amber-100 text-amber-700",
+    Cancelled: "bg-red-100 text-red-700",
+    Draft: "bg-zinc-100 text-zinc-700",
+  }
+
   const [orders, setOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -102,7 +110,7 @@ export default function SalesOrderReportPage() {
   }
 
   return (
-    <div className="page-container h-full flex flex-col overflow-hidden">
+    <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title">
           <ShoppingBag className="size-5 mr-2 inline-block text-primary" />
@@ -240,9 +248,7 @@ export default function SalesOrderReportPage() {
                 <TableCell>
                   <span className={cn(
                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                    o.status === 'Completed' ? "bg-green-100 text-green-700" :
-                      o.status === 'Cancelled' ? "bg-red-100 text-red-700" :
-                        o.status === 'Sent' ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-700"
+                    statusStyles[o.status || 'Draft']
                   )}>
                     {o.status || 'Draft'}
                   </span>

@@ -31,7 +31,8 @@ import {
   CirclePile,
   Wallet,
   Printer,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/number-input"
@@ -91,6 +92,12 @@ export default function DepositsPage() {
 
   const observerTarget = useRef(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const statusStyles: Record<string, string> = {
+    Pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+    Accepted: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+    Rejected: "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+  }
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -173,6 +180,8 @@ export default function DepositsPage() {
       setLoadingMore(false)
     }
   }, [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED])
+
+  const handleRefresh = () => { fetchData(true) }
 
   useEffect(() => {
     fetchData(true)
@@ -310,14 +319,20 @@ export default function DepositsPage() {
           .select("*, company:companies(id, name, details->contact_person), product:products(id, name, sku)")
           .eq("id", editingItem.id)
           .single();
-        
+
         if (!fetchError && updatedRow) {
           setDeposits(prev => prev.map(d => d.id === editingItem.id ? updatedRow : d));
         } else {
           fetchData(true);
         }
 
-        notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_DEPOSIT_SAVED)
+        const docLabel = `[${payload.deposit_number || formData.deposit_number}]`
+        notify.success(
+          dict.MSG_UPDATE_SUCCESS.replace("%data%", docLabel),
+          dict.MSG_SUCCESS_UPDATE_DESC.replace("%entity%", "deposit").replace("%company%", `[${selectedCompanyInfo?.name || ""}]`),
+          undefined,
+          true
+        )
       } else {
         // Generate document number if empty
         if (!payload.deposit_number) {
@@ -328,12 +343,19 @@ export default function DepositsPage() {
 
         const { error } = await supabase.from("deposits").insert([payload])
         if (error) throw error
-        notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_DEPOSIT_SAVED)
+        const docLabel = `[${payload.deposit_number || formData.deposit_number}]`
+        notify.success(
+          dict.MSG_DEPOSIT_SAVED.replace("%data%", docLabel),
+          dict.MSG_SUCCESS_SAVE_DESC.replace("%entity%", "deposit").replace("%company%", `[${selectedCompanyInfo?.name || ""}]`),
+          undefined,
+          true
+        )
         fetchData(true)
       }
       setIsOpen(false)
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      const docLabel = `[${formData.deposit_number}]`
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), err.message)
     } finally {
       setIsSaving(false)
     }
@@ -341,28 +363,44 @@ export default function DepositsPage() {
 
   const handleDelete = async (id: string) => {
     const item = deposits.find(d => d.id === id)
-    const label = item ? `[${item.deposit_number}]` : ""
+    if (!item) return
+    const docLabel = `[${item.deposit_number}]`
+    const companyName = item.company?.name || ""
     if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
       const { error } = await supabase.from("deposits").delete().eq("id", id)
       if (error) throw error
-      
+
       setDeposits(prev => prev.filter(d => d.id !== id))
-      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
+      notify.deleted(
+        dict.MSG_DEPOSIT_DELETED.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "deposit").replace("%company%", `[${companyName}]`),
+        undefined,
+        true
+      )
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), err.message)
     }
   }
 
   const updateStatus = async (id: string, status: string) => {
+    const item = deposits.find(d => d.id === id)
+    if (!item) return
+    const docLabel = `[${item.deposit_number}]`
+    const companyName = item.company?.name || ""
     try {
       const { error } = await supabase.from("deposits").update({ status }).eq("id", id)
       if (error) throw error
-      
+
       setDeposits(prev => prev.map(d => d.id === id ? { ...d, status } : d))
-      notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), dict.MSG_DEPOSIT_STATUS_UPDATED.replace("%data%", ""))
+      notify.success(
+        dict.MSG_DEPOSIT_STATUS_UPDATED.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace("%company%", `[${companyName}]`),
+        undefined,
+        true
+      )
     } catch (err: any) {
-      notify.error(dict.MSG_UPDATE_FAILED, err.message)
+      notify.error(dict.MSG_UPDATE_FAILED.replace("%data%", docLabel), err.message)
     }
   }
 
@@ -384,7 +422,7 @@ export default function DepositsPage() {
   }
 
   return (
-    <div className="page-container h-full flex flex-col overflow-hidden">
+    <div className="page-container">
       {/* Page Header */}
       <div className="page-header shrink-0">
         <h1 className="page-title">
@@ -392,209 +430,214 @@ export default function DepositsPage() {
           {dict.MENU_DEPOSIT}
         </h1>
 
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" onClick={() => handleOpenDialog()} disabled={!canInsert}>
-              <Plus data-icon="inline-start" />
-              {dict.BUTTON_NEW_DEPOSIT}
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>
-                <CirclePile className="size-5 mr-2 inline-block" />{editingItem ? dict.BUTTON_EDIT + " Setoran" : dict.BUTTON_NEW_DEPOSIT}
-              </DialogTitle>
-            </DialogHeader>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading || loadingMore} title="Refresh Data">
+            <RefreshCw className={cn("size-4", (loading || loadingMore) && "animate-spin")} />
+          </Button>
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" onClick={() => handleOpenDialog()} disabled={!canInsert}>
+                <Plus data-icon="inline-start" />
+                {dict.BUTTON_NEW_DEPOSIT}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>
+                  <CirclePile className="size-5 mr-2 inline-block" />{editingItem ? dict.BUTTON_EDIT + " Setoran" : dict.BUTTON_NEW_DEPOSIT}
+                </DialogTitle>
+              </DialogHeader>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-6 p-5 overflow-y-auto max-h-[70vh]">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="grid gap-2">
-                  <Label htmlFor="dnum">{dict.LABEL_DEPOSIT_NUMBER}</Label>
-                  <Input id="dnum" value={formData.deposit_number} onChange={e => setFormData({ ...formData, deposit_number: e.target.value })} disabled={editingItem && !hasPermission("deposit", "edit")} placeholder={dict.LABEL_AUTO_GENERATED} />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label>{dict.LABEL_COMPANY_NAME}</Label>
-                  <LiveSearch
-                    data={selectedCompanyInfo ? [selectedCompanyInfo] : []}
-                    fetchData={async (query) => {
-                      let q = supabase.from("companies").select("id, name, contact_person:details->contact_person").contains('type', ['Supplier']).limit(8)
-                      if (query) {
-                        const searchStr = constructMultiWordSearch(query, ['name', 'details->>contact_person'])
-                        if (searchStr) q = q.or(searchStr)
-                      }
-                      const { data } = await q
-                      return data || []
-                    }}
-                    value={formData.company_id}
-                    onSelect={(val, item) => {
-                      setFormData({ ...formData, company_id: val })
-                      setSelectedCompanyInfo(item)
-                    }}
-                    keyField="id"
-                    displayField="name"
-                    defaultDisplay={editingItem?.company_id === formData.company_id ? editingItem?.company?.name : ""}
-                    searchColumns={["name", "contact_person"]}
-                    visualColumns={[
-                      { key: "name", header: dict.LABEL_COMPANY_NAME, className: "w-3/5 font-medium", primary: true },
-                      { key: "contact_person", header: dict.LABEL_CONTACT_PERSON, className: "w-2/5" }
-                    ]}
-                    placeholder={dict.PLACEHOLDER_SEARCH}
-                    emptyMessage={dict.NO_DATA}
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label>{dict.LABEL_PRODUCT_NAME}</Label>
-                  <LiveSearch
-                    data={selectedProductInfo ? [selectedProductInfo] : []}
-                    fetchData={async (query) => {
-                      let q = supabase.from("products").select("id, sku, name").limit(8)
-                      if (query) {
-                        const searchStr = constructMultiWordSearch(query, ['sku', 'name'])
-                        if (searchStr) q = q.or(searchStr)
-                      }
-                      const { data } = await q
-                      return data || []
-                    }}
-                    value={formData.product_id}
-                    onSelect={(val, item) => {
-                      setFormData({ ...formData, product_id: val })
-                      setSelectedProductInfo(item)
-                    }}
-                    keyField="id"
-                    displayField="name"
-                    defaultDisplay={editingItem?.product_id === formData.product_id ? editingItem?.product?.name : ""}
-                    searchColumns={["sku", "name"]}
-                    visualColumns={[
-                      { key: "sku", header: "SKU", className: "w-1/3 font-mono", primary: true },
-                      { key: "name", header: dict.LABEL_PRODUCT_NAME, className: "w-2/3" }
-                    ]}
-                    placeholder={dict.PLACEHOLDER_SEARCH}
-                    emptyMessage={dict.NO_DATA}
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label className="flex items-center gap-2">{dict.LABEL_QUANTITY}</Label>
-                  <NumberInput value={formData.qty_liter} onChange={val => setFormData({ ...formData, qty_liter: val })} rightBadge="L" />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label className="flex items-center gap-2 text-muted-foreground">{dict.LABEL_UNIT_PRICE}</Label>
-                  <NumberInput value={formData.price_per_liter} onChange={val => setFormData({ ...formData, price_per_liter: val })} leftBadge={SITE_CONFIG.currencySymbol} rightBadge="/ L" />
-                </div>
-
-                <div className="col-span-1 md:col-span-2 space-y-4 border rounded-lg p-4 bg-muted/10 h-fit">
-                  <div className="flex justify-between text-sm font-mono text-foreground font-semibold mb-2 mr-2">
-                    <span>{dict.LABEL_SUBTOTAL || "Subtotal"}:</span>
-                    <span>{SITE_CONFIG.currencySymbol} {totals.subtotal.toLocaleString()}</span>
+              <form onSubmit={handleSubmit} className="flex flex-col gap-6 p-5 overflow-y-auto max-h-[70vh]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid gap-2">
+                    <Label htmlFor="dnum">{dict.LABEL_DEPOSIT_NUMBER}</Label>
+                    <Input id="dnum" value={formData.deposit_number} onChange={e => setFormData({ ...formData, deposit_number: e.target.value })} disabled={editingItem && !hasPermission("deposit", "edit")} placeholder={dict.LABEL_AUTO_GENERATED} />
                   </div>
 
-                  <div className="space-y-2 pt-2 border-t">
-                    <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider mb-2 block">{dict.LABEL_TAXES || "Taxes"}</Label>
-                    <div className="space-y-2">
-                      {formData.tax_details.map((tax, idx) => {
-                        const calculatedAmount = totals.appliedTaxes.find(t => t.name === tax.name)?.amount || 0;
-                        return (
-                          <div key={idx} className="flex items-center p-2 border rounded bg-background h-10 gap-4">
-                            <div className="w-24 shrink-0 font-medium">
-                              <Label htmlFor={`tax-${idx}`} className="cursor-pointer">{tax.name}</Label>
-                            </div>
+                  <div className="grid gap-2">
+                    <Label>{dict.LABEL_COMPANY_NAME}</Label>
+                    <LiveSearch
+                      data={selectedCompanyInfo ? [selectedCompanyInfo] : []}
+                      fetchData={async (query) => {
+                        let q = supabase.from("companies").select("id, name, contact_person:details->contact_person").contains('type', ['Supplier']).limit(8)
+                        if (query) {
+                          const searchStr = constructMultiWordSearch(query, ['name', 'details->>contact_person'])
+                          if (searchStr) q = q.or(searchStr)
+                        }
+                        const { data } = await q
+                        return data || []
+                      }}
+                      value={formData.company_id}
+                      onSelect={(val, item) => {
+                        setFormData({ ...formData, company_id: val })
+                        setSelectedCompanyInfo(item)
+                      }}
+                      keyField="id"
+                      displayField="name"
+                      defaultDisplay={editingItem?.company_id === formData.company_id ? editingItem?.company?.name : ""}
+                      searchColumns={["name", "contact_person"]}
+                      visualColumns={[
+                        { key: "name", header: dict.LABEL_COMPANY_NAME, className: "w-3/5 font-medium", primary: true },
+                        { key: "contact_person", header: dict.LABEL_CONTACT_PERSON, className: "w-2/5" }
+                      ]}
+                      placeholder={dict.PLACEHOLDER_SEARCH}
+                      emptyMessage={dict.NO_DATA}
+                    />
+                  </div>
 
-                            <div className="shrink-0 flex items-center justify-center w-12">
-                              <Switch id={`tax-${idx}`} checked={tax.enabled} onCheckedChange={(val) => {
-                                const newTaxes = [...formData.tax_details];
-                                newTaxes[idx].enabled = val;
-                                setFormData({ ...formData, tax_details: newTaxes })
-                              }} />
-                            </div>
+                  <div className="grid gap-2">
+                    <Label>{dict.LABEL_PRODUCT_NAME}</Label>
+                    <LiveSearch
+                      data={selectedProductInfo ? [selectedProductInfo] : []}
+                      fetchData={async (query) => {
+                        let q = supabase.from("products").select("id, sku, name").limit(8)
+                        if (query) {
+                          const searchStr = constructMultiWordSearch(query, ['sku', 'name'])
+                          if (searchStr) q = q.or(searchStr)
+                        }
+                        const { data } = await q
+                        return data || []
+                      }}
+                      value={formData.product_id}
+                      onSelect={(val, item) => {
+                        setFormData({ ...formData, product_id: val })
+                        setSelectedProductInfo(item)
+                      }}
+                      keyField="id"
+                      displayField="name"
+                      defaultDisplay={editingItem?.product_id === formData.product_id ? editingItem?.product?.name : ""}
+                      searchColumns={["sku", "name"]}
+                      visualColumns={[
+                        { key: "sku", header: "SKU", className: "w-1/3 font-mono", primary: true },
+                        { key: "name", header: dict.LABEL_PRODUCT_NAME, className: "w-2/3" }
+                      ]}
+                      placeholder={dict.PLACEHOLDER_SEARCH}
+                      emptyMessage={dict.NO_DATA}
+                    />
+                  </div>
 
-                            <div className="w-24 shrink-0 flex items-center gap-2">
-                              <div style={{ opacity: tax.enabled ? 1 : 0.3 }} className="transition-opacity w-full">
-                                <NumberInput
-                                  className="text-right font-mono text-xs"
-                                  containerClassName="h-6 bg-muted/50"
-                                  disabled
-                                  value={tax.rate}
-                                  onChange={() => { }}
-                                  rightBadge="%"
-                                />
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-2">{dict.LABEL_QUANTITY}</Label>
+                    <NumberInput value={formData.qty_liter} onChange={val => setFormData({ ...formData, qty_liter: val })} rightBadge="L" />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-2 text-muted-foreground">{dict.LABEL_UNIT_PRICE}</Label>
+                    <NumberInput value={formData.price_per_liter} onChange={val => setFormData({ ...formData, price_per_liter: val })} leftBadge={SITE_CONFIG.currencySymbol} rightBadge="/ L" />
+                  </div>
+
+                  <div className="col-span-1 md:col-span-2 space-y-4 border rounded-lg p-4 bg-muted/10 h-fit">
+                    <div className="flex justify-between text-sm font-mono text-foreground font-semibold mb-2 mr-2">
+                      <span>{dict.LABEL_SUBTOTAL || "Subtotal"}:</span>
+                      <span>{SITE_CONFIG.currencySymbol} {totals.subtotal.toLocaleString()}</span>
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t">
+                      <Label className="text-xs uppercase font-bold text-muted-foreground tracking-wider mb-2 block">{dict.LABEL_TAXES || "Taxes"}</Label>
+                      <div className="space-y-2">
+                        {formData.tax_details.map((tax, idx) => {
+                          const calculatedAmount = totals.appliedTaxes.find(t => t.name === tax.name)?.amount || 0;
+                          return (
+                            <div key={idx} className="flex items-center p-2 border rounded bg-background h-10 gap-4">
+                              <div className="w-24 shrink-0 font-medium">
+                                <Label htmlFor={`tax-${idx}`} className="cursor-pointer">{tax.name}</Label>
+                              </div>
+
+                              <div className="shrink-0 flex items-center justify-center w-12">
+                                <Switch id={`tax-${idx}`} checked={tax.enabled} onCheckedChange={(val) => {
+                                  const newTaxes = [...formData.tax_details];
+                                  newTaxes[idx].enabled = val;
+                                  setFormData({ ...formData, tax_details: newTaxes })
+                                }} />
+                              </div>
+
+                              <div className="w-24 shrink-0 flex items-center gap-2">
+                                <div style={{ opacity: tax.enabled ? 1 : 0.3 }} className="transition-opacity w-full">
+                                  <NumberInput
+                                    className="text-right font-mono text-xs"
+                                    containerClassName="h-6 bg-muted/50"
+                                    disabled
+                                    value={tax.rate}
+                                    onChange={() => { }}
+                                    rightBadge="%"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex-1 flex justify-end">
+                                <span className={cn(
+                                  "font-mono text-sm transition-opacity",
+                                  tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground"
+                                )}>
+                                  {SITE_CONFIG.currencySymbol} {calculatedAmount.toLocaleString()}
+                                </span>
                               </div>
                             </div>
+                          )
+                        })}
+                      </div>
+                    </div>
 
-                            <div className="flex-1 flex justify-end">
-                              <span className={cn(
-                                "font-mono text-sm transition-opacity",
-                                tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground"
-                              )}>
-                                {SITE_CONFIG.currencySymbol} {calculatedAmount.toLocaleString()}
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      })}
+                    <div className="flex justify-between text-sm font-bold border-t pt-4 font-mono mr-2">
+                      <span>{dict.LABEL_GRAND_TOTAL || "Grand Total"}:</span>
+                      <span className="text-primary">{SITE_CONFIG.currencySymbol} {totals.grandTotal.toLocaleString()}</span>
                     </div>
                   </div>
 
-                  <div className="flex justify-between text-sm font-bold border-t pt-4 font-mono mr-2">
-                    <span>{dict.LABEL_GRAND_TOTAL || "Grand Total"}:</span>
-                    <span className="text-primary">{SITE_CONFIG.currencySymbol} {totals.grandTotal.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div className="grid gap-2 md:col-span-2">
-                  <Label>{dict.LABEL_PAYMENT_METHOD}</Label>
-                  <div className="flex gap-2">
-                    <Input className="w-1/3" value={formData.payment_method} onChange={e => setFormData({ ...formData, payment_method: e.target.value })} placeholder="e.g. Transfer" />
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="flex-1 justify-between">
-                          {formData.payment_bank_account ? `${formData.payment_bank_account.bank_name} - ${formData.payment_bank_account.account_number}` : "Select Bank (Optional)"}
-                          <ChevronDown className="size-4 opacity-50" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-80">
-                        <DropdownMenuItem onClick={() => setFormData({ ...formData, payment_bank_account: null })}>
-                          None / Manual
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        {appBanks.map((bank, idx) => (
-                          <DropdownMenuItem key={idx} onClick={() => setFormData({ ...formData, payment_bank_account: bank })}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{bank.bank_name}</span>
-                              <span className="text-xs text-muted-foreground">{bank.account_number} ({bank.account_name})</span>
-                            </div>
+                  <div className="grid gap-2 md:col-span-2">
+                    <Label>{dict.LABEL_PAYMENT_METHOD}</Label>
+                    <div className="flex gap-2">
+                      <Input className="w-1/3" value={formData.payment_method} onChange={e => setFormData({ ...formData, payment_method: e.target.value })} placeholder="e.g. Transfer" />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" className="flex-1 justify-between">
+                            {formData.payment_bank_account ? `${formData.payment_bank_account.bank_name} - ${formData.payment_bank_account.account_number}` : "Select Bank (Optional)"}
+                            <ChevronDown className="size-4 opacity-50" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-80">
+                          <DropdownMenuItem onClick={() => setFormData({ ...formData, payment_bank_account: null })}>
+                            None / Manual
                           </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          <DropdownMenuSeparator />
+                          {appBanks.map((bank, idx) => (
+                            <DropdownMenuItem key={idx} onClick={() => setFormData({ ...formData, payment_bank_account: bank })}>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{bank.bank_name}</span>
+                                <span className="text-xs text-muted-foreground">{bank.account_number} ({bank.account_name})</span>
+                              </div>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="space-y-6">
-                <RichTextEditor
-                  label={dict.LABEL_NOTE}
-                  value={formData.note}
-                  onChange={val => setFormData({ ...formData, note: val || "" })}
-                  isEnabled={formData.is_note_enabled}
-                  onToggleEnabled={val => setFormData({ ...formData, is_note_enabled: val })}
-                  placeholder="..."
-                />
-              </div>
-            </form>
-            <DialogFooter className="px-5 pb-5 shrink-0">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-                {dict.BUTTON_CANCEL}
-              </Button>
-              <Button onClick={() => handleSave()} disabled={isSaving || (editingItem ? !canEdit : !canInsert)}>
-                {isSaving ? <ButtonLoader /> : <Save data-icon="inline-start" />} {dict.BUTTON_SAVE_DEPOSIT}
-              </Button>
-            </DialogFooter>
+                <div className="space-y-6">
+                  <RichTextEditor
+                    label={dict.LABEL_NOTE}
+                    value={formData.note}
+                    onChange={val => setFormData({ ...formData, note: val || "" })}
+                    isEnabled={formData.is_note_enabled}
+                    onToggleEnabled={val => setFormData({ ...formData, is_note_enabled: val })}
+                    placeholder="..."
+                  />
+                </div>
+              </form>
+              <DialogFooter className="px-5 pb-5 shrink-0">
+                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+                  {dict.BUTTON_CANCEL}
+                </Button>
+                <Button onClick={() => handleSave()} disabled={isSaving || (editingItem ? !canEdit : !canInsert)}>
+                  {isSaving ? <ButtonLoader /> : <Save data-icon="inline-start" />} {dict.BUTTON_SAVE_DEPOSIT}
+                </Button>
+              </DialogFooter>
 
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="action-bar shrink-0">
@@ -611,7 +654,7 @@ export default function DepositsPage() {
 
       <Card ref={containerRef} className="data-card flex-1 overflow-auto custom-scrollbar">
         <Table>
-          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
+          <TableHeader>
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_DEPOSIT_NUMBER}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
@@ -651,9 +694,7 @@ export default function DepositsPage() {
                 <TableCell>
                   <div className={cn(
                     "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase w-fit",
-                    d.status === "Accepted" ? "bg-green-100 text-green-700" :
-                      d.status === "Rejected" ? "bg-red-100 text-red-700" :
-                        "bg-amber-100 text-amber-700"
+                    statusStyles[d.status] || statusStyles.Pending
                   )}>
                     {d.status}
                   </div>
@@ -679,8 +720,9 @@ export default function DepositsPage() {
                           </DropdownMenuSubTrigger>
                           <DropdownMenuPortal>
                             <DropdownMenuSubContent>
-                              <DropdownMenuItem onClick={() => updateStatus(d.id, 'Accepted')} className="text-green-600" disabled={!canEdit}>Accepted</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(d.id, 'Rejected')} className="text-red-600" disabled={!canEdit}>Rejected</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(d.id, 'Pending')} className="text-amber-600 dark:text-amber-400 font-medium" disabled={!canEdit}>Pending</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(d.id, 'Accepted')} className="text-emerald-600 dark:text-emerald-400 font-medium" disabled={!canEdit}>Accepted</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(d.id, 'Rejected')} className="text-rose-600 dark:text-rose-400 font-medium" disabled={!canEdit}>Rejected</DropdownMenuItem>
                             </DropdownMenuSubContent>
                           </DropdownMenuPortal>
                         </DropdownMenuSub>

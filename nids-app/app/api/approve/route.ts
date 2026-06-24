@@ -82,7 +82,8 @@ export async function POST(request: Request) {
       sendEmail({
         to: email,
         subject: template.subject,
-        html: template.html
+        html: template.html,
+        category: "auth"
       }).catch((err) => console.error('Background Email Error:', err.message))
 
       return NextResponse.json({ success: true, auth_id: authId })
@@ -134,7 +135,8 @@ export async function POST(request: Request) {
       sendEmail({
         to: email,
         subject: deactivationTemplate.subject,
-        html: deactivationTemplate.html
+        html: deactivationTemplate.html,
+        category: "auth"
       }).then(() => {
         console.log(`Deactivation email sent backgrounded`)
       }).catch((err) => {

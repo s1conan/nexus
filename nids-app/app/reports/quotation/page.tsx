@@ -35,6 +35,14 @@ export default function QuotationReportPage() {
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
+  const statusStyles: Record<string, string> = {
+    Processed: "bg-green-100 text-green-700",
+    Accepted: "bg-blue-100 text-blue-700",
+    Rejected: "bg-red-100 text-red-700",
+    Sent: "bg-amber-100 text-amber-700",
+    Draft: "bg-zinc-100 text-zinc-700",
+  }
+
   const [quotations, setQuotations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -223,9 +231,7 @@ export default function QuotationReportPage() {
                 <TableCell>
                   <span className={cn(
                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                    q.status === 'Approved' ? "bg-green-100 text-green-700" :
-                    q.status === 'Rejected' ? "bg-red-100 text-red-700" :
-                    q.status === 'Sent' ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-700"
+                    statusStyles[q.status || 'Draft']
                   )}>
                     {q.status || 'Draft'}
                   </span>

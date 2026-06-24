@@ -25,7 +25,8 @@ import {
   Trash2,
   ChevronDown,
   Receipt,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -78,6 +79,14 @@ export default function InvoicePage() {
 
   const observerTarget = useRef(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const statusStyles: Record<string, string> = {
+    Draft: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
+    Sent: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+    Partial: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
+    Paid: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+    Cancelled: "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+  }
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -160,6 +169,8 @@ export default function InvoicePage() {
       setLoadingMore(false)
     }
   }, [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED])
+
+  const handleRefresh = () => { fetchData(true) }
 
   useEffect(() => {
     fetchData(true)
@@ -300,10 +311,26 @@ export default function InvoicePage() {
         fetchData(true)
       }
 
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SAVE_SUCCESS?.replace("%data%", dict.MENU_INVOICE) || "Invoice saved successfully.")
+      const docLabel = `[${payload.invoice_number || formData.invoice_number}]`
+      if (editingItem) {
+        notify.success(
+          dict.MSG_UPDATE_SUCCESS.replace("%data%", docLabel),
+          dict.MSG_SUCCESS_UPDATE_DESC.replace("%entity%", "invoice").replace("%company%", `[${selectedCompanyInfo?.name || ""}]`),
+          undefined,
+          true
+        )
+      } else {
+        notify.success(
+          dict.MSG_SAVE_SUCCESS.replace("%data%", docLabel),
+          dict.MSG_SUCCESS_SAVE_DESC.replace("%entity%", "invoice").replace("%company%", `[${selectedCompanyInfo?.name || ""}]`),
+          undefined,
+          true
+        )
+      }
       setIsOpen(false)
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      const docLabel = `[${formData.invoice_number}]`
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), err.message)
     } finally {
       setIsSaving(false)
     }
@@ -311,28 +338,44 @@ export default function InvoicePage() {
 
   const handleDelete = async (id: string) => {
     const item = invoices.find(i => i.id === id)
-    const label = item ? `[${item.invoice_number}]` : ""
+    if (!item) return
+    const docLabel = `[${item.invoice_number}]`
+    const companyName = item.company?.name || ""
     if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
       const { error } = await supabase.from("invoices").delete().eq("id", id)
       if (error) throw error
       
       setInvoices(prev => prev.filter(i => i.id !== id))
-      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
+      notify.deleted(
+        dict.MSG_DELETE_SUCCESS.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "invoice").replace("%company%", `[${companyName}]`),
+        undefined,
+        true
+      )
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), err.message)
     }
   }
 
   const updateStatus = async (id: string, status: string) => {
+    const item = invoices.find(i => i.id === id)
+    if (!item) return
+    const docLabel = `[${item.invoice_number}]`
+    const companyName = item.company?.name || ""
     try {
       const { error } = await supabase.from("invoices").update({ status }).eq("id", id)
       if (error) throw error
       
       setInvoices(prev => prev.map(i => i.id === id ? { ...i, status } : i))
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_STATUS_UPDATED || "Invoice status updated.")
+      notify.success(
+        dict.MSG_QUOTATION_STATUS_UPDATED.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace("%company%", `[${companyName}]`),
+        undefined,
+        true
+      )
     } catch (err: any) {
-      notify.error(dict.MSG_UPDATE_FAILED, err.message)
+      notify.error(dict.MSG_UPDATE_FAILED.replace("%data%", docLabel), err.message)
     }
   }
 
@@ -342,14 +385,18 @@ export default function InvoicePage() {
   }
 
   return (
-    <div className="page-container h-full flex flex-col overflow-hidden">
+    <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title">
           <Receipt className="size-5 mr-2 inline-block text-primary" />
           {dict.MENU_INVOICE || "Invoices"}
         </h1>
 
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading || loadingMore} title="Refresh Data">
+            <RefreshCw className={cn("size-4", (loading || loadingMore) && "animate-spin")} />
+          </Button>
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
             <Button size="sm" onClick={() => handleOpenDialog()} disabled={!canInsert}>
               <Plus data-icon="inline-start" />
@@ -535,6 +582,7 @@ export default function InvoicePage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="action-bar shrink-0">
@@ -577,12 +625,7 @@ export default function InvoicePage() {
                   <div className="text-xs text-green-600">{dict.LABEL_PAID || "Paid"}: {SITE_CONFIG.currencySymbol} {Number(i.paid_amount).toLocaleString()}</div>
                 </TableCell>
                 <TableCell>
-                  <span className={cn("px-2 py-0.5 rounded text-xs font-bold uppercase", 
-                    i.status === 'Paid' ? "bg-green-100 text-green-700" :
-                    i.status === 'Partial' ? "bg-blue-100 text-blue-700" :
-                    i.status === 'Sent' ? "bg-amber-100 text-amber-700" :
-                    i.status === 'Draft' ? "bg-slate-100 text-slate-700" : "bg-red-100 text-red-700"
-                  )}>
+                  <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold uppercase border", statusStyles[i.status] || statusStyles.Draft)}>
                     {i.status}
                   </span>
                 </TableCell>
@@ -596,9 +639,9 @@ export default function InvoicePage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => updateStatus(i.id, 'Draft')}>Draft</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => updateStatus(i.id, 'Sent')}>Sent</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => updateStatus(i.id, 'Cancelled')} className="text-destructive">Cancelled</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateStatus(i.id, 'Draft')} className="text-zinc-600 dark:text-zinc-400 font-medium">Draft</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateStatus(i.id, 'Sent')} className="text-amber-600 dark:text-amber-400 font-medium">Sent</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => updateStatus(i.id, 'Cancelled')} className="text-rose-600 dark:text-rose-400 font-medium">Cancelled</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(i)} disabled={!canEdit}>

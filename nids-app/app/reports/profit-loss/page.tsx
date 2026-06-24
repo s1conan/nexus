@@ -104,7 +104,7 @@ export default function ProfitLossReportPage() {
   }
 
   return (
-    <div className="page-container h-full flex flex-col overflow-hidden">
+    <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title">
           <Activity className="size-5 mr-2 inline-block text-primary" />

@@ -5,13 +5,13 @@ import { Node, mergeAttributes } from "@tiptap/core"
 import StarterKit from "@tiptap/starter-kit"
 import Placeholder from "@tiptap/extension-placeholder"
 import Underline from "@tiptap/extension-underline"
-import { 
-  Bold, 
-  Italic, 
-  Underline as UnderlineIcon, 
-  List, 
-  ListOrdered, 
-  ChevronUp, 
+import {
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+  List,
+  ListOrdered,
+  ChevronUp,
   ChevronDown,
   X,
   Plus,
@@ -33,7 +33,7 @@ const toStorage = (html: string) => {
   return html.replace(/<span[^>]*data-type="capsule"[^>]*data-variable="([^"]*)"[^>]*>.*?<\/span>/g, '{$1}')
 }
 
-const fromStorage = (val: string, variables: {id: string, label: string}[], variableValues: Record<string, string> = {}) => {
+const fromStorage = (val: string, variables: { id: string, label: string }[], variableValues: Record<string, string> = {}) => {
   if (!val) return val
   // Convert {VariableID} to capsule span with variable ID and current resolved display label
   return val.replace(/\{([^{}]+)\}/g, (match, variableId) => {
@@ -77,10 +77,10 @@ const Capsule = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes(HTMLAttributes, { 
-      'data-type': 'capsule', 
+    return ['span', mergeAttributes(HTMLAttributes, {
+      'data-type': 'capsule',
       'data-variable': HTMLAttributes.variable,
-      'data-label': HTMLAttributes.label 
+      'data-label': HTMLAttributes.label
     }), HTMLAttributes.label]
   },
 
@@ -112,14 +112,14 @@ const CapsuleComponent = ({ node, selected, deleteNode, editor, getPos }: { node
 
   const pos = getPos()
   const marks = typeof pos === 'number' ? editor.state.doc.nodeAt(pos)?.marks || [] : []
-  
+
   const isBold = marks.some(m => m.type.name === 'bold') || (editor.isActive('bold') && selected)
   const isItalic = marks.some(m => m.type.name === 'italic') || (editor.isActive('italic') && selected)
   const isUnderline = marks.some(m => m.type.name === 'underline') || (editor.isActive('underline') && selected)
 
   return (
     <NodeViewWrapper className="inline-block align-middle mx-0.5">
-      <Badge 
+      <Badge
         variant="secondary"
         className={cn(
           "gap-1 pr-1 py-0 h-6 cursor-default transition-all border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 select-none",
@@ -130,7 +130,7 @@ const CapsuleComponent = ({ node, selected, deleteNode, editor, getPos }: { node
         )}
       >
         <span className="truncate max-w-[200px]">{displayValue}</span>
-        <button 
+        <button
           onClick={(e) => {
             e.preventDefault()
             e.stopPropagation()
@@ -157,10 +157,10 @@ interface RichTextEditorProps {
   variableValues?: Record<string, string>
 }
 
-export function RichTextEditor({ 
-  value, 
-  onChange, 
-  placeholder = "Start typing...", 
+export function RichTextEditor({
+  value,
+  onChange,
+  placeholder = "Start typing...",
   isEnabled = true,
   onToggleEnabled,
   label,
@@ -248,15 +248,12 @@ export function RichTextEditor({
             {isShrunk ? <ChevronDown className="size-3" /> : <ChevronUp className="size-3" />}
           </Button>
         </div>
-        
+
         {onToggleEnabled && (
           <div className="flex items-center gap-2">
-            <Switch 
-              checked={isEnabled} 
-              onCheckedChange={(checked) => {
-                onToggleEnabled(checked)
-                if (!checked) onChange(null)
-              }} 
+            <Switch
+              checked={isEnabled}
+              onCheckedChange={onToggleEnabled}
               className="scale-75"
             />
           </div>
@@ -362,7 +359,7 @@ export function RichTextEditor({
             </div>
           </>
         )}
-        
+
         <div className={cn(
           "min-h-[2rem] prose prose-sm max-w-none focus:outline-none",
           isShrunk && "line-clamp-1 pointer-events-none opacity-60"

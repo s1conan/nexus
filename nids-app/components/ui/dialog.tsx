@@ -86,7 +86,7 @@ function DialogContent({
           onFocusOutside={(e) => e.preventDefault()}
           className={cn(
             isLocal ? "absolute" : "fixed",
-            "top-[calc(50%-20px)] has-[[data-slot=dialog-description]]:top-[calc(50%-12px)] left-1/2 z-50 flex flex-col max-h-[82vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "top-[calc(50%-1px)] left-1/2 z-50 flex flex-col max-h-[85vh] has-[[data-slot=dialog-description]]:max-h-[84vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
           )}
           {...props}

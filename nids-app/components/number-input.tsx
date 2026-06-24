@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 
 interface NumberInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   value: number;
-  onChange: (value: number) => void;
+  onChange?: (value: number) => void;
   badge?: React.ReactNode;
   badgePosition?: "left" | "right";
   leftBadge?: React.ReactNode;
@@ -106,7 +106,7 @@ export function NumberInput({
     const rawNumber = nextValue.replaceAll(separators.thousand, "").replace(separators.decimal, ".");
 
     if (nextValue === "") {
-      onChange(0);
+      onChange?.(0);
       setDisplayValue("");
       return;
     }
@@ -119,7 +119,7 @@ export function NumberInput({
     if (partialRegex.test(cleanValue)) {
       const parsed = parseFloat(rawNumber);
       if (!isNaN(parsed)) {
-        onChange(parsed);
+        onChange?.(parsed);
       }
 
       // Apply live formatting for thousand separators if there's no decimal separator currently
@@ -139,7 +139,8 @@ export function NumberInput({
   return (
     <div
       className={cn(
-        "h-9 flex w-full items-center rounded-md border border-input bg-transparent shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 overflow-hidden",
+        "h-9 flex w-full items-center rounded-md border border-input bg-transparent shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring dark:bg-input/30 overflow-hidden",
+        props.disabled && "cursor-not-allowed opacity-60",
         containerClassName
       )}
     >
@@ -161,8 +162,9 @@ export function NumberInput({
         value={displayValue}
         onChange={handleChange}
         onBlur={handleBlur}
+        disabled={props.disabled}
         className={cn(
-          "flex-1 min-w-0 bg-transparent px-3 py-1 text-sm outline-none text-right font-mono placeholder:text-muted-foreground/40",
+          "flex-1 min-w-0 bg-transparent px-3 py-1 text-sm outline-none text-right font-mono placeholder:text-muted-foreground/40 disabled:cursor-not-allowed",
           className
         )}
       />

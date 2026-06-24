@@ -36,6 +36,12 @@ export default function PaymentsReportPage() {
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
+  const statusStyles: Record<string, string> = {
+    Verified: "bg-green-100 text-green-700",
+    Rejected: "bg-red-100 text-red-700",
+    Pending: "bg-amber-100 text-amber-700",
+  }
+
   const [payments, setPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -225,8 +231,7 @@ export default function PaymentsReportPage() {
                 <TableCell>
                   <span className={cn(
                     "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                    p.status === 'Verified' ? "bg-green-100 text-green-700" :
-                    p.status === 'Rejected' ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"
+                    statusStyles[p.status || 'Pending']
                   )}>
                     {p.status || 'Pending'}
                   </span>

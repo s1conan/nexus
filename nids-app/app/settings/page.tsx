@@ -134,6 +134,8 @@ export default function SettingsPage() {
 
   const canView = hasPermission("settings", "view")
   const canEdit = hasPermission("settings", "edit")
+  const canDelete = hasPermission("settings", "delete")
+  const canInsert = hasPermission("settings", "insert")
 
   // Fetch all settings data
   const loadData = useCallback(async () => {
@@ -279,9 +281,14 @@ export default function SettingsPage() {
       ]
       const { error } = await supabase.from("app_settings").upsert(updates, { onConflict: 'category,name' })
       if (error) throw error
-      notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", "") || "Saved successfully")
+      notify.success(
+        dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${companyInfo.name}]`),
+        dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace("%entity%", `company settings [${companyInfo.name}]`),
+        undefined,
+        true
+      )
     } catch (error: any) {
-      notify.error(dict.MSG_SAVE_FAILED, error.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", `[${companyInfo.name}]`), error.message)
     } finally {
       setSavingCompany(false)
     }
@@ -295,13 +302,27 @@ export default function SettingsPage() {
       let updatedBanks: BankAccount[] = currentBank.id
         ? bankAccounts.map(b => b.id === currentBank.id ? { ...b, ...currentBank } as BankAccount : b)
         : [...bankAccounts, { ...currentBank, id: Math.random().toString(36).substring(2, 9) } as BankAccount]
-      const { error } = await supabase.from("app_settings").upsert({ category: "company", name: "bank", value: updatedBanks })
+      const { error } = await supabase.from("app_settings").update({ value: updatedBanks }).eq("category", "company").eq("name", "bank")
       if (error) throw error
       setBankAccounts(updatedBanks)
       setIsBankDialogOpen(false)
-      notify.success(dict.MSG_SAVE_SUCCESS)
+      if (currentBank.id) {
+        notify.success(
+          dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${currentBank.bank_name}]`),
+          dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace("%entity%", `bank account [${currentBank.bank_name}]`),
+          undefined,
+          true
+        )
+      } else {
+        notify.success(
+          dict.MSG_SAVE_SUCCESS.replace("%data%", `[${currentBank.bank_name}]`),
+          dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace("%entity%", `bank account [${currentBank.bank_name}]`),
+          undefined,
+          true
+        )
+      }
     } catch (error: any) {
-      notify.error(dict.MSG_SAVE_FAILED, error.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", `[${currentBank.bank_name}]`), error.message)
     } finally {
       setSavingBank(false)
     }
@@ -315,12 +336,17 @@ export default function SettingsPage() {
     try {
       setDeletingBankId(id)
       const updatedBanks = bankAccounts.filter(b => b.id !== id)
-      const { error } = await supabase.from("app_settings").upsert({ category: "company", name: "bank", value: updatedBanks })
+      const { error } = await supabase.from("app_settings").update({ value: updatedBanks }).eq("category", "company").eq("name", "bank")
       if (error) throw error
       setBankAccounts(updatedBanks)
-      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
+      notify.deleted(
+        dict.MSG_DELETE_SUCCESS.replace("%data%", label),
+        dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY.replace("%entity%", `bank account ${label}`),
+        undefined,
+        true
+      )
     } catch (error: any) {
-      notify.error("Deletion failed", error.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", label), error.message)
     } finally {
       setDeletingBankId(null)
     }
@@ -336,9 +362,14 @@ export default function SettingsPage() {
       const updates = parameters.map(p => ({ category: p.category, name: p.key, value: paramValues[p.key] }))
       const { error } = await supabase.from("app_settings").upsert(updates, { onConflict: 'category,name' })
       if (error) throw error
-      notify.success(dict.MSG_SAVE_SUCCESS)
+      notify.success(
+        dict.MSG_UPDATE_SUCCESS.replace("%data%", `[Parameters]`),
+        dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace("%entity%", "parameters"),
+        undefined,
+        true
+      )
     } catch (error: any) {
-      notify.error(dict.MSG_SAVE_FAILED, error.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", `[Parameters]`), error.message)
     } finally {
       setSavingParams(false)
     }
@@ -353,8 +384,14 @@ export default function SettingsPage() {
       if (error) throw error
       setIsParamDialogOpen(false)
       loadData()
+      notify.success(
+        dict.MSG_SAVE_SUCCESS.replace("%data%", `[${newParam.key}]`),
+        dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace("%entity%", `tax parameter [${newParam.key}]`),
+        undefined,
+        true
+      )
     } catch (error: any) {
-      notify.error(dict.MSG_SAVE_FAILED, error.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", `[${newParam.key}]`), error.message)
     } finally {
       setSavingParamDialog(false)
     }
@@ -367,9 +404,14 @@ export default function SettingsPage() {
       const { error } = await supabase.from("app_settings").delete().eq("category", "tax").eq("name", key)
       if (error) throw error
       setParameters(prev => prev.filter(p => p.key !== key))
-      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", `[${key}]`))
+      notify.deleted(
+        dict.MSG_DELETE_SUCCESS.replace("%data%", `[${key}]`),
+        dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY.replace("%entity%", `tax parameter [${key}]`),
+        undefined,
+        true
+      )
     } catch (error: any) {
-      notify.error("Deletion failed", error.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", `[${key}]`), error.message)
     }
   }
 
@@ -381,9 +423,14 @@ export default function SettingsPage() {
       const updates = Object.entries(emailCCs).map(([k, v]) => ({ category: "email", name: k, value: v }))
       const { error } = await supabase.from("app_settings").upsert(updates, { onConflict: 'category,name' })
       if (error) throw error
-      notify.success(dict.MSG_SAVE_SUCCESS)
+      notify.success(
+        dict.MSG_UPDATE_SUCCESS.replace("%data%", `[Email CC]`),
+        dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace("%entity%", "Email CC settings"),
+        undefined,
+        true
+      )
     } catch (error: any) {
-      notify.error(dict.MSG_SAVE_FAILED, error.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", `[Email CC]`), error.message)
     } finally {
       setSavingEmailCCs(false)
     }
@@ -397,9 +444,14 @@ export default function SettingsPage() {
       const updates = Object.entries(numberingFormats).map(([k, v]) => ({ category: "numbering", name: k, value: v }))
       const { error } = await supabase.from("app_settings").upsert(updates, { onConflict: 'category,name' })
       if (error) throw error
-      notify.success(dict.MSG_SAVE_SUCCESS)
+      notify.success(
+        dict.MSG_UPDATE_SUCCESS.replace("%data%", `[Numbering Format]`),
+        dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace("%entity%", "numbering format settings"),
+        undefined,
+        true
+      )
     } catch (error: any) {
-      notify.error(dict.MSG_SAVE_FAILED, error.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", `[Numbering Format]`), error.message)
     } finally {
       setSavingNumbering(false)
     }
@@ -488,12 +540,21 @@ export default function SettingsPage() {
 
         {activeTab === "banks" && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center"><h3 className="text-sm font-semibold">{dict.SETTINGS_SEC_BANKS}</h3>{canEdit && <Button size="sm" onClick={() => { setCurrentBank({}); setIsBankDialogOpen(true); }}><Plus className="size-4 mr-2" /> Add</Button>}</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex justify-between items-center"><h3 className="text-sm font-semibold">{dict.SETTINGS_SEC_BANKS}</h3>{canEdit && <Button size="sm" disabled={!canInsert} onClick={() => { setCurrentBank({}); setIsBankDialogOpen(true); }}><Plus className="size-4 mr-2" /> Add</Button>}</div>
+            <div className="flex flex-wrap gap-4 m-0.5">
               {bankAccounts.map(bank => (
-                <Card key={bank.id} className="p-4 flex justify-between items-center">
-                  <div><div className="font-bold">{bank.bank_name}</div><div className="font-mono">{bank.account_number}</div><div className="text-xs text-muted-foreground">{bank.account_name}</div></div>
-                  {canEdit && <div className="flex gap-2"><Button variant="ghost" size="icon" onClick={() => { setCurrentBank(bank); setIsBankDialogOpen(true); }}><Pencil className="size-4" /></Button><Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteBank(bank.id)}><Trash2 className="size-4" /></Button></div>}
+                <Card key={bank.id} className="p-3 gap-1 flex flex-col justify-between flex-1 min-w-[180px] max-w-[350px]">
+                  <div className="flex flex-row gap-4">
+                    <div className="font-bold">{bank.bank_name}</div>
+                    <div className="">( {bank.branch} )</div>
+                  </div>
+                  <div className="flex flex-row gap-2 items-end">
+                    <div className="font-mono flex-1">{bank.account_number}</div><Button variant="ghost" size="icon" disabled={!canEdit} onClick={() => { setCurrentBank(bank); setIsBankDialogOpen(true); }}><Pencil className="size-4" /></Button>
+                  </div>
+                  <div className="flex flex-row gap-2 items-end">
+                    <div className="text-sm text-muted-foreground flex-1">{bank.account_name}</div>
+                    <Button variant="ghost" size="icon" disabled={!canDelete} className="text-destructive" onClick={() => handleDeleteBank(bank.id)}><Trash2 className="size-4" /></Button>
+                  </div>
                 </Card>
               ))}
             </div>
@@ -563,9 +624,9 @@ export default function SettingsPage() {
       </div>
 
       <Dialog open={isBankDialogOpen} onOpenChange={setIsBankDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[400px]">
           <DialogHeader><DialogTitle>Bank Account</DialogTitle></DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 p-4">
             <div className="grid gap-2"><Label>Bank Name</Label><Input value={currentBank.bank_name || ""} onChange={e => setCurrentBank({ ...currentBank, bank_name: e.target.value })} /></div>
             <div className="grid gap-2"><Label>Account Number</Label><Input value={currentBank.account_number || ""} onChange={e => setCurrentBank({ ...currentBank, account_number: e.target.value })} /></div>
             <div className="grid gap-2"><Label>Account Holder</Label><Input value={currentBank.account_name || ""} onChange={e => setCurrentBank({ ...currentBank, account_name: e.target.value })} /></div>

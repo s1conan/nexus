@@ -78,7 +78,7 @@ import {
   SelectValue
 } from "@/components/ui/select"
 import { format } from "date-fns"
-import { generateStandardQuotationPDF } from "@/lib/pdf-generator-react"
+import { generateStandardQuotationPDF } from "@/lib/pdf-generator"
 import { ButtonLoader } from "@/components/button-loader"
 import { NumberInput } from "@/components/number-input"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -135,10 +135,11 @@ export default function QuotationsPage() {
   const containerRef = useRef<HTMLDivElement>(null)
 
   const statusStyles: Record<string, string> = {
-    Draft: "bg-blue-100 text-blue-700",
-    Sent: "bg-amber-100 text-amber-700",
-    Accepted: "bg-green-100 text-green-700",
-    Rejected: "bg-red-100 text-red-700",
+    Draft: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
+    Sent: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+    Accepted: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
+    Rejected: "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+    Processed: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
   };
 
   // Form State
@@ -441,8 +442,41 @@ export default function QuotationsPage() {
     try {
       const payload = { ...formData }
       if (editingItem) {
-        // If edited, revert status to Draft
-        payload.status = "Draft";
+        if (editingItem.status === "Processed") {
+          notify.error("Error", "Cannot edit quotation with status Processed.")
+          setIsSaving(false)
+          return
+        }
+
+        // Check if any data fields have changed compared to original editingItem
+        const hasDataChanged =
+          payload.quotation_number !== editingItem.quotation_number ||
+          payload.company_id !== (editingItem.company_id || "") ||
+          payload.delivery_address !== (editingItem.delivery_address || "") ||
+          payload.product_id !== (editingItem.product_id || "") ||
+          Number(payload.base_price) !== Number(editingItem.base_price || 0) ||
+          Number(payload.delivery_price) !== Number(editingItem.delivery_price || 0) ||
+          payload.quotation_date !== editingItem.quotation_date ||
+          payload.expiry_date !== editingItem.expiry_date ||
+          Number(payload.expiry_days) !== Number(editingItem.expiry_days || 0) ||
+          Number(payload.minimum_order) !== Number(editingItem.minimum_order || 0) ||
+          Number(payload.shrinkage_tolerance) !== Number(editingItem.shrinkage_tolerance ?? 0) ||
+          payload.content !== (editingItem.content || "") ||
+          payload.is_content_enabled !== (editingItem.is_content_enabled ?? true) ||
+          payload.note !== (editingItem.note || "") ||
+          payload.is_note_enabled !== (editingItem.is_note_enabled ?? true) ||
+          payload.terms_conditions !== (editingItem.terms_conditions || "") ||
+          payload.is_terms_enabled !== (editingItem.is_terms_enabled ?? true) ||
+          payload.closing_remarks !== (editingItem.closing_remarks || "") ||
+          payload.is_closing_enabled !== (editingItem.is_closing_enabled ?? true) ||
+          JSON.stringify(payload.discounts) !== JSON.stringify(editingItem.discounts || []) ||
+          JSON.stringify(payload.bank_accounts?.map((b: any) => b.account_number)) !== JSON.stringify((editingItem.bank_accounts || []).map((b: any) => b.account_number)) ||
+          JSON.stringify(payload.tax_details?.map((t: any) => ({ name: t.name, rate: t.rate, enabled: t.enabled }))) !==
+          JSON.stringify((editingItem.tax_details || []).map((t: any) => ({ name: t.name, rate: t.rate, enabled: t.enabled })));
+
+        if (hasDataChanged) {
+          payload.status = "Draft";
+        }
 
         await supabase.from("quotations").update({ bank_accounts: null, discounts: null }).eq("id", editingItem.id);
         const { error } = await supabase.from("quotations").update(payload).eq("id", editingItem.id)
@@ -462,7 +496,13 @@ export default function QuotationsPage() {
           fetchData(true);
         }
 
-        notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), dict.MSG_QUOTATION_SAVED.replace("%data%", `[${formData.quotation_number}]`))
+        const docLabel = `[${payload.quotation_number || formData.quotation_number}]`
+        notify.success(
+          dict.MSG_UPDATE_SUCCESS.replace("%data%", docLabel),
+          dict.MSG_SUCCESS_UPDATE_DESC.replace("%entity%", "quotation").replace("%company%", `[${selectedCompanyInfo?.name || ""}]`),
+          undefined,
+          true
+        )
         fetchStats()
       } else {
         // Generate document number if empty
@@ -474,12 +514,19 @@ export default function QuotationsPage() {
 
         const { error } = await supabase.from("quotations").insert([payload])
         if (error) throw error;
-        notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), dict.MSG_QUOTATION_SAVED.replace("%data%", `[${payload.quotation_number}]`))
+        const docLabel = `[${payload.quotation_number || formData.quotation_number}]`
+        notify.success(
+          dict.MSG_QUOTATION_SAVED.replace("%data%", docLabel),
+          dict.MSG_SUCCESS_SAVE_DESC.replace("%entity%", "quotation").replace("%company%", `[${selectedCompanyInfo?.name || ""}]`),
+          undefined,
+          true
+        )
         fetchData(true)
       }
       setIsOpen(false)
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      const docLabel = `[${formData.quotation_number}]`
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), err.message)
     } finally {
       setIsSaving(false)
     }
@@ -487,30 +534,54 @@ export default function QuotationsPage() {
 
   const handleDelete = async (id: string) => {
     const item = quotations.find(q => q.id === id)
-    const label = item ? `[${item.quotation_number}]` : ""
+    if (item && item.status === "Processed") {
+      notify.error("Error", "Cannot delete a Processed quotation.")
+      return
+    }
+    if (!item) return
+    const docLabel = `[${item.quotation_number}]`
+    const companyName = item.company?.name || ""
     if (!confirm(dict.MSG_DELETE_CONFIRM)) return
     try {
       const { error } = await supabase.from("quotations").delete().eq("id", id)
       if (error) throw error
 
       setQuotations(prev => prev.filter(q => q.id !== id))
-      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", label))
+      notify.deleted(
+        dict.MSG_QUOTATION_DELETED.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "quotation").replace("%company%", `[${companyName}]`),
+        undefined,
+        true
+      )
       fetchStats()
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), err.message)
     }
   }
 
   const updateStatus = async (id: string, status: string) => {
+    const item = quotations.find(q => q.id === id)
+    if (item && item.status === "Processed") {
+      notify.error("Error", "Cannot change status of a Processed quotation.")
+      return
+    }
+    if (!item) return
+    const docLabel = `[${item.quotation_number}]`
+    const companyName = item.company?.name || ""
     try {
       const { error } = await supabase.from("quotations").update({ status }).eq("id", id)
       if (error) throw error
 
       setQuotations(prev => prev.map(q => q.id === id ? { ...q, status } : q))
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_QUOTATION_STATUS_UPDATED)
+      notify.success(
+        dict.MSG_QUOTATION_STATUS_UPDATED.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace("%company%", `[${companyName}]`),
+        undefined,
+        true
+      )
       fetchStats()
     } catch (err: any) {
-      notify.error(dict.MSG_UPDATE_FAILED, err.message)
+      notify.error(dict.MSG_UPDATE_FAILED.replace("%data%", docLabel), err.message)
     }
   }
 
@@ -544,6 +615,12 @@ export default function QuotationsPage() {
     link.href = doc.pdf
     link.download = `Quotation_${doc.title}.pdf`
     link.click()
+    notify.success(
+      dict.MSG_PRINT_SUCCESS,
+      dict.MSG_PRINT_SUCCESS_DESC.replace("%data%", `[${doc.title}]`),
+      undefined,
+      false
+    )
   }
 
   const handleSendEmail = async (doc: any) => {
@@ -554,6 +631,71 @@ export default function QuotationsPage() {
       const pdfDataUri = await generateStandardQuotationPDF(companyInfo, q, { save: false, output: "datauri" })
       if (!pdfDataUri) throw new Error("Failed to generate PDF for attachment.");
       const attachments = [{ filename: `Quotation_${doc.title}.pdf`, content: (pdfDataUri as string).split(',')[1] }];
+
+      // Build email HTML
+      const customerName = q.contact_person || q.company?.name || "Valued Customer";
+      const quoteDate = q.quotation_date ? new Date(q.quotation_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : "-";
+      const expiryDate = q.expiry_date ? new Date(q.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : "-";
+      const productName = q.product?.name || q.product_name || "-";
+      const productSku = q.product?.sku || q.product_sku || "-";
+      const minOrder = q.minimum_order || q.min_order || 0;
+
+      // Strip HTML tags from content for plain text display in email
+      const contentText = q.content ? q.content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() : "";
+
+      // Replace variables in note
+      const processedNote = q.note ? q.note
+        .replace(/\{quotation_date\}/g, quoteDate)
+        .replace(/\{expiry_date\}/g, expiryDate)
+        .replace(/\{delivery_address\}/g, q.delivery_address || "-")
+        .replace(/\{contact_person\}/g, customerName) : "";
+
+      const emailHtml = `<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff;">
+        <div style="background: #00955c; padding: 32px 40px; text-align: center;">
+          <h1 style="color: #ffffff; font-size: 28px; margin: 0 0 4px 0; font-weight: 700; letter-spacing: -0.5px;">PT Anugerah Buana Sriwijaya</h1>
+          <p style="color: rgba(255,255,255,0.9); font-size: 14px; margin: 0;">Industrial Fuel Distributor</p>
+        </div>
+        <div style="background: #f8fafc; padding: 20px 40px; border-bottom: 1px solid #e2e8f0; text-align: center;">
+          <span style="display: inline-block; background: #00955c; color: white; padding: 8px 24px; border-radius: 20px; font-size: 14px; font-weight: 600; letter-spacing: 0.5px;">QUOTATION</span>
+        </div>
+        <div style="padding: 40px;">
+          <p style="color: #1e293b; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">Dear <strong style="color: #00955c;">${customerName}</strong>,</p>
+          <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 0 0 20px 0;">Thank you for your interest in our products and services. Please find below the details of our quotation for your consideration.</p>
+          <div style="background: #f8fafc; border-radius: 8px; padding: 24px; margin: 24px 0; border-left: 4px solid #00955c;">
+            <h3 style="color: #1e293b; font-size: 16px; margin: 0 0 16px 0; font-weight: 600;">Quotation Details</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px; width: 35%;">Quotation No.</td>
+                <td style="padding: 8px 0; color: #1e293b; font-size: 14px; font-weight: 600;">${q.quotation_number || "-"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Date</td>
+                <td style="padding: 8px 0; color: #1e293b; font-size: 14px;">${quoteDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Valid Until</td>
+                <td style="padding: 8px 0; color: #1e293b; font-size: 14px;">${expiryDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Product</td>
+                <td style="padding: 8px 0; color: #1e293b; font-size: 14px;">${productName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Min. Order</td>
+                <td style="padding: 8px 0; color: #1e293b; font-size: 14px;">${minOrder.toLocaleString('id-ID')} L</td>
+              </tr>
+            </table>
+          </div>
+          ${processedNote ? `<div style="background: #fef9c3; border-radius: 8px; padding: 16px; margin: 24px 0;"><p style="color: #854d0e; font-size: 14px; margin: 0; white-space: pre-wrap;">${processedNote}</p></div>` : ''}
+          <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 24px 0;">For full details including terms & conditions and payment information, please refer to the attached quotation document.</p>
+          <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 24px 0 32px 0;">Should you have any questions or require further clarification, please do not hesitate to contact us. We look forward to the opportunity of serving you.</p>
+          <p style="color: #1e293b; font-size: 15px; line-height: 1.6; margin: 0;">Best regards,<br><strong style="font-size: 16px;">PT Anugerah Buana Sriwijaya</strong><br><span style="color: #64748b; font-size: 14px;">Sales Team</span></p>
+        </div>
+        <div style="background: #f8fafc; padding: 24px 40px; border-top: 1px solid #e2e8f0;">
+          <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0; line-height: 1.6;">This is an automated message from PT Anugerah Buana Sriwijaya.<br>Please do not reply directly to this email.<br><br>&copy; ${new Date().getFullYear()} PT Anugerah Buana Sriwijaya. All rights reserved.</p>
+        </div>
+      </div>`;
+
       const res = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -561,13 +703,18 @@ export default function QuotationsPage() {
           to: doc.customerEmail,
           cc: ccList,
           subject: `Quotation ${doc.title} - PT Anugerah Buana Sriwijaya`,
-          html: `<div>Quotation ${doc.title} attached.</div>`,
+          html: emailHtml,
           attachments,
         })
       })
       const result = await res.json()
       if (result.success) {
-        notify.success(dict.MSG_STATUS_UPDATED.replace("%data%", ""), "Email sent successfully.")
+        notify.success(
+          dict.MSG_EMAIL_SENT_SUCCESS,
+          dict.MSG_EMAIL_SENT_SUCCESS_DESC.replace("%data%", `[${doc.title}]`),
+          undefined,
+          true
+        )
         // Automatically set status to Sent
         updateStatus(q.id, 'Sent')
       } else throw new Error(result.error)
@@ -652,7 +799,7 @@ export default function QuotationsPage() {
 
   // Calculation logic for Quotation Unit Price
   const totals = useMemo(() => {
-    const subtotal = formData.base_price + formData.delivery_price;
+    const subtotal = formData.base_price;
     let taxTotal = 0;
     const appliedTaxes = formData.tax_details.map(t => {
       if (!t.enabled) return { ...t, amount: 0 };
@@ -660,7 +807,7 @@ export default function QuotationsPage() {
       taxTotal += amt;
       return { ...t, amount: amt };
     });
-    const grandTotal = subtotal + taxTotal;
+    const grandTotal = subtotal + taxTotal + formData.delivery_price;
     return { subtotal, taxTotal, grandTotal, appliedTaxes };
   }, [formData.base_price, formData.delivery_price, formData.tax_details])
 
@@ -677,7 +824,7 @@ export default function QuotationsPage() {
   }
 
   return (
-    <div className="page-container overflow-hidden">
+    <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title flex items-center gap-2">
           <ClipboardList className="size-5 text-primary" />
@@ -689,7 +836,7 @@ export default function QuotationsPage() {
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" onClick={() => handleOpenDialog()} className="h-9" disabled={!canInsert}>
+              <Button size="sm" onClick={() => handleOpenDialog()} disabled={!canInsert}>
                 <Plus data-icon="inline-start" />
                 {dict.BUTTON_NEW_QUOTATION}
               </Button>
@@ -744,17 +891,17 @@ export default function QuotationsPage() {
                               <SelectItem key={idx} value={addr.address}>
                                 <div className="flex flex-col items-start text-sm">
                                   <span className="font-semibold">{addr.label}</span>
-                                  <span className="text-muted-foreground line-clamp-1">{addr.address}</span>
+                                  <span className="text-xs text-muted-foreground line-clamp-1">{addr.address}</span>
                                 </div>
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       ) : (
-                        <Input value={formData.delivery_address} onChange={e => setFormData({ ...formData, delivery_address: e.target.value })} placeholder={dict.PLACEHOLDER_ENTER_ADDRESS} />
+                        <Input value={formData.delivery_address} className="h-13" onChange={e => setFormData({ ...formData, delivery_address: e.target.value })} placeholder={dict.PLACEHOLDER_ENTER_ADDRESS} />
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_SKU}</Label>
                         <LiveSearch
@@ -772,8 +919,8 @@ export default function QuotationsPage() {
                           defaultDisplay={selectedProductInfo ? (selectedProductInfo.sku && selectedProductInfo.name ? `${selectedProductInfo.sku} - ${selectedProductInfo.name}` : selectedProductInfo.name || selectedProductInfo.sku || "") : ""}
                           searchColumns={["sku", "name"]}
                           visualColumns={[
-                            { key: "sku", header: dict.LABEL_SKU, className: "w-15 font-mono", primary: true },
-                            { key: "name", header: dict.LABEL_PRODUCT_NAME, className: "text-left" }
+                            { key: "sku", header: dict.LABEL_SKU, className: "w-1/3 font-mono", primary: true },
+                            { key: "name", header: dict.LABEL_PRODUCT_NAME, className: "w-2/3 text-left" }
                           ]}
                           placeholder={dict.PLACEHOLDER_SEARCH}
                           emptyMessage={dict.NO_DATA}
@@ -815,9 +962,7 @@ export default function QuotationsPage() {
                       </div>
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_PRICE_PER_L} ({dict.LABEL_SUBTOTAL})</Label>
-                        <div className="h-10 flex items-center px-3 border rounded bg-muted/50 font-mono font-bold text-primary">
-                          {SITE_CONFIG.currencySymbol} {totals.subtotal.toLocaleString()}
-                        </div>
+                        <NumberInput id="subtotal" value={Math.round(totals.subtotal)} disabled leftBadge={SITE_CONFIG.currencySymbol} rightBadge="/L" />
                       </div>
                     </div>
 
@@ -828,20 +973,27 @@ export default function QuotationsPage() {
                         {formData.tax_details.map((tax, idx) => {
                           const calculatedAmount = totals.appliedTaxes.find(t => t.name === tax.name)?.amount || 0;
                           return (
-                            <div key={idx} className="flex items-center p-2 border rounded bg-background h-12 gap-4">
-                              <div className="w-24 shrink-0 font-medium">
-                                <Label htmlFor={`tax-${idx}`} className="cursor-pointer">{tax.name}</Label>
+                            <div key={idx} className="grid grid-cols-12 items-center p-2 border rounded bg-background min-h-12 gap-2">
+                              <div className="col-span-3 font-medium truncate">
+                                <Label htmlFor={`tax-${idx}`} className="cursor-pointer text-xs block truncate">{tax.name}</Label>
                               </div>
 
-                              <div className="shrink-0 flex items-center justify-center w-12">
-                                <Switch id={`tax-${idx}`} checked={tax.enabled} onCheckedChange={(val) => {
+                              <div className="col-span-2 flex items-center justify-center">
+                                <Switch id={`tax-${idx}`} checked={tax.enabled} onCheckedChange={async (val) => {
                                   const newTaxes = [...formData.tax_details];
+                                  if (val) {
+                                    const { data: taxSettings } = await supabase.from("app_settings").select("*").eq("category", "tax").eq("name", tax.name).single();
+                                    if (taxSettings) {
+                                      newTaxes[idx].rate = taxSettings.value;
+                                      setGlobalTaxes(prev => prev.map(gt => gt.name === tax.name ? { ...gt, value: taxSettings.value } : gt));
+                                    }
+                                  }
                                   newTaxes[idx].enabled = val;
                                   setFormData({ ...formData, tax_details: newTaxes })
                                 }} />
                               </div>
 
-                              <div className="w-28 shrink-0">
+                              <div className="col-span-4">
                                 <div style={{ opacity: tax.enabled ? 1 : 0.3 }} className="transition-opacity w-full">
                                   <NumberInput
                                     className="text-right font-mono text-xs"
@@ -854,12 +1006,12 @@ export default function QuotationsPage() {
                                 </div>
                               </div>
 
-                              <div className="flex-1 flex justify-end">
+                              <div className="col-span-3 flex justify-end">
                                 <span className={cn(
-                                  "font-mono font-medium text-sm transition-opacity",
+                                  "font-mono font-medium text-xs transition-opacity text-right truncate",
                                   tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground"
                                 )}>
-                                  {SITE_CONFIG.currencySymbol} {calculatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {SITE_CONFIG.currencySymbol} {Math.round(calculatedAmount).toLocaleString()}
                                 </span>
                               </div>
                             </div>
@@ -867,9 +1019,9 @@ export default function QuotationsPage() {
                         })}
                       </div>
 
-                      <div className="flex justify-between items-center text-lg font-bold border-t pt-4 font-mono">
-                        <span>{dict.LABEL_GRAND_TOTAL || "Grand Total"} ({dict.LABEL_PRICE_PER_L}):</span>
-                        <span className="text-primary text-xl">{SITE_CONFIG.currencySymbol} {totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <div className="flex justify-between items-center text-lg font-bold border-t pt-2 font-mono">
+                        <span>{dict.LABEL_GRAND_TOTAL || "Grand Total"}:</span>
+                        <span className="text-primary">{SITE_CONFIG.currencySymbol} {Math.round(totals.grandTotal).toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -942,7 +1094,7 @@ export default function QuotationsPage() {
 
       <Card ref={containerRef} className="data-card flex-1 overflow-auto custom-scrollbar">
         <Table>
-          <TableHeader className="sticky top-0 z-10">
+          <TableHeader>
             <TableRow>
               <TableHead>{dict.LABEL_QUOTATION_NUMBER}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
@@ -972,19 +1124,29 @@ export default function QuotationsPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(q)} disabled={!canEdit}><Pencil className="size-4" /></Button>
+                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(q)} disabled={!canEdit || q.status === 'Processed'}><Pencil className="size-4" /></Button>
                     <Button variant="table_action" size="sm" onClick={() => handlePrint(q)} disabled={!canPrint}><Printer className="size-4" /></Button>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild><Button variant="secondary" size="icon" className="size-8"><ChevronDown className="size-4" /></Button></DropdownMenuTrigger>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="size-8"
+                          disabled={q.status === 'Processed' || (!canEdit && !canDelete)}
+                        >
+                          <ChevronDown className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger><CheckCircle2 className="size-4 mr-2" /> Status</DropdownMenuSubTrigger>
                           <DropdownMenuPortal>
                             <DropdownMenuSubContent>
-                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Draft')} className="text-blue-600 font-medium">Draft</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Sent')} className="text-amber-600 font-medium">Sent</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Accepted')} className="text-green-600 font-medium">Accepted</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Rejected')} className="text-red-600 font-medium">Rejected</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Draft')} disabled={!canEdit || !canDelete} className="text-zinc-600 dark:text-zinc-400 font-medium">Draft</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Sent')} disabled={!canEdit || !canDelete} className="text-amber-600 dark:text-amber-400 font-medium">Sent</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Accepted')} disabled={!canEdit} className="text-emerald-600 dark:text-emerald-400 font-medium">Accepted</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Rejected')} disabled={!canEdit} className="text-rose-600 dark:text-rose-400 font-medium">Rejected</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(q.id, 'Processed')} disabled={!canEdit || !canDelete} className="text-blue-600 dark:text-blue-400 font-medium">Processed</DropdownMenuItem>
                             </DropdownMenuSubContent>
                           </DropdownMenuPortal>
                         </DropdownMenuSub>

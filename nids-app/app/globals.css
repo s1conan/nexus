@@ -66,57 +66,73 @@
 }
 
 .dark {
-    --background: oklch(0 0 0);
-    --foreground: oklch(1.0000 0 0);
-    --card: oklch(0.3211 0 0);
-    --card-foreground: oklch(1.0000 0 0);
-    --popover: oklch(0.3211 0 0);
-    --popover-foreground: oklch(1.0000 0 0);
-    --primary: oklch(0.7044 0.1872 23.1858);
-    --primary-foreground: oklch(0 0 0);
-    --secondary: oklch(0.9691 0.2005 109.6228);
-    --secondary-foreground: oklch(0 0 0);
-    --muted: oklch(0.2178 0 0);
-    --muted-foreground: oklch(0.8452 0 0);
-    --accent: oklch(0.6755 0.1765 252.2592);
-    --accent-foreground: oklch(0 0 0);
-    --destructive: oklch(1.0000 0 0);
-    --destructive-foreground: oklch(0 0 0);
-    --border: oklch(1.0000 0 0);
-    --input: oklch(1.0000 0 0);
-    --ring: oklch(0.7044 0.1872 23.1858);
-    --chart-1: oklch(0.7044 0.1872 23.1858);
-    --chart-2: oklch(0.9691 0.2005 109.6228);
-    --chart-3: oklch(0.6755 0.1765 252.2592);
-    --chart-4: oklch(0.7395 0.2268 142.8504);
-    --chart-5: oklch(0.6131 0.2458 328.0714);
-    --sidebar: oklch(0 0 0);
-    --sidebar-foreground: oklch(1.0000 0 0);
-    --sidebar-primary: oklch(0.7044 0.1872 23.1858);
-    --sidebar-primary-foreground: oklch(0 0 0);
-    --sidebar-accent: oklch(0.6755 0.1765 252.2592);
-    --sidebar-accent-foreground: oklch(0 0 0);
-    --sidebar-border: oklch(1.0000 0 0);
-    --sidebar-ring: oklch(0.7044 0.1872 23.1858);
+    --background: #0f1720;
+    --foreground: #e6ded3;
+    --card: #0e2230;
+    --card-foreground: #e6ded3;
+    --popover: #122731;
+    --popover-foreground: #e6ded3;
+    --primary: #f59e0b;
+    --primary-foreground: #081216;
+    --secondary: #008cbb;
+    --secondary-foreground: #e6ded3;
+    --muted: #12202a;
+    --muted-foreground: #97a3ad;
+    --accent: #ffb857;
+    --accent-foreground: #081216;
+    --destructive: #d64545;
+    --destructive-foreground: #ffffff;
+    --border: rgba(100, 100, 100, 1);
+    --input: #0f2934;
+    --ring: rgba(245, 158, 11, 0.3);
+    --chart-1: #f59e0b;
+    --chart-2: #2b7aa0;
+    --chart-3: #8fb0c4;
+    --chart-4: #ff9ea3;
+    --chart-5: #6fbf8f;
+    --sidebar: #071218;
+    --sidebar-foreground: #e6ded3;
+    --sidebar-primary: #f59e0b;
+    --sidebar-primary-foreground: #081216;
+    --sidebar-accent: #2b7aa0;
+    --sidebar-accent-foreground: #e6ded3;
+    --sidebar-border: rgba(255, 255, 255, 0.06);
+    --sidebar-ring: rgba(245, 158, 11, 0.3);
     --radius: 0.45rem;
-    --shadow-2xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-xs: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-    --shadow-sm: 0 2px 5px 0 rgba(0, 0, 0, 0.15), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow: 0 4px 10px 0 rgba(0, 0, 0, 0.2), 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-    --shadow-md: 0 8px 16px -2px rgba(0, 0, 0, 0.25), 0 2px 6px -1px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.3), 0 4px 12px -2px rgba(0, 0, 0, 0.15);
-    --shadow-xl: 0 20px 32px -8px rgba(0, 0, 0, 0.4), 0 8px 16px -4px rgba(0, 0, 0, 0.2);
-    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    --shadow-2xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-xs: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 2px 5px 0 rgba(0, 0, 0, 0.5), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow: 0 4px 10px 0 rgba(0, 0, 0, 0.6), 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 8px 16px -2px rgba(0, 0, 0, 0.65), 0 2px 6px -1px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.7), 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 20px 32px -8px rgba(0, 0, 0, 0.75), 0 8px 16px -4px rgba(0, 0, 0, 0.6);
+    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
 
-    /* Semantic Status Colors (Dark) */
-    --success: oklch(87.332% 0.24724 148.604);
-    --success-foreground: oklch(100% 0.00011 271.152);
-    --error: oklch(0.658 0.225 24.965);
-    --error-foreground: oklch(100% 0.00011 271.152);
-    --warning: oklch(89.073% 0.18324 96.195);
-    --warning-foreground: oklch(100% 0.00011 271.152);
-    --info: oklch(0.785 0.158 250.287);
-    --info-foreground: oklch(100% 0.00011 271.152);
+    --success: #3eb97f;
+    --success-foreground: #ffffff;
+    --error: #e55252;
+    --error-foreground: #ffffff;
+    --warning: #e5a827;
+    --warning-foreground: #1a1000;
+    --info: #4d9fc4;
+    --info-foreground: #ffffff;
+}
+
+/* Small UI tweaks to match the sample dashboard */
+.login-background {
+    background-color: var(--background);
+    background-image: radial-gradient(rgba(255, 255, 255, 0.04) 0.5px, transparent 0.5px);
+    background-size: 18px 18px;
+}
+
+.data-card {
+    border: 1px solid var(--border);
+    background: var(--card);
+}
+
+.sidebar-rail {
+    background: var(--sidebar);
+    border-left: 1px solid var(--sidebar-border);
 }
 
 @theme inline {
@@ -132,12 +148,12 @@
     --color-secondary-foreground: var(--secondary-foreground);
     --color-muted: var(--muted);
     --color-muted-foreground: var(--muted-foreground);
-    --color-danger: var(--danger);
-    --color-danger-foreground: var(--danger-foreground);
     --color-accent: var(--accent);
     --color-accent-foreground: var(--accent-foreground);
     --color-destructive: var(--destructive);
     --color-destructive-foreground: var(--destructive-foreground);
+    --color-danger: var(--danger);
+    --color-danger-foreground: var(--danger-foreground);
     --color-border: var(--border);
     --color-input: var(--input);
     --color-ring: var(--ring);
@@ -154,6 +170,14 @@
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
+    --color-error: var(--error);
+    --color-error-foreground: var(--error-foreground);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
+    --color-info: var(--info);
+    --color-info-foreground: var(--info-foreground);
 
     --font-sans: var(--font-sans);
     --font-mono: var(--font-mono);
@@ -172,15 +196,6 @@
     --shadow-lg: var(--shadow-lg);
     --shadow-xl: var(--shadow-xl);
     --shadow-2xl: var(--shadow-2xl);
-
-    --color-success: var(--success);
-    --color-success-foreground: var(--success-foreground);
-    --color-error: var(--error);
-    --color-error-foreground: var(--error-foreground);
-    --color-warning: var(--warning);
-    --color-warning-foreground: var(--warning-foreground);
-    --color-info: var(--info);
-    --color-info-foreground: var(--info-foreground);
 
     --text-shadow-stroke:
         -1px -1px 0 var(--tw-text-shadow-color, #fff),
@@ -283,9 +298,15 @@
 
     .login-background {
         background-color: var(--background);
-        background-image: radial-gradient(var(--primary) 0.5px, transparent 0.5px);
+        background-image: radial-gradient(rgba(255, 255, 255, 0.04) 0.5px, transparent 0.5px);
         background-size: 24px 24px;
         @apply min-h-screen w-full flex items-center justify-center p-4 md:p-8 relative;
+    }
+
+    .data-card {
+        border: 1px solid var(--border);
+        background: var(--card);
+        @apply p-2 rounded-xl shadow-sm text-card-foreground min-h-[60vh];
     }
 
     .login-card {
@@ -319,28 +340,28 @@
         @apply size-8 rounded-full bg-secondary/70 backdrop-blur-md border border-white hover:bg-secondary/90 transition-all active:scale-95 flex items-center justify-center text-[10px] font-bold text-secondary-foreground shadow-sm;
     }
 
-    /* Reliable Glassmorphism Themes */
+    /* Glassmorphism Status Toasts */
     .success-toast {
-        background: color-mix(in oklch, var(--success), transparent 80%) !important;
+        background: rgba(62, 185, 127, 0.15) !important;
         color: var(--success-foreground) !important;
-        border-color: color-mix(in oklch, var(--success), transparent 70%) !important;
+        border-color: rgba(62, 185, 127, 0.25) !important;
     }
 
     .error-toast {
-        background: color-mix(in oklch, var(--error), transparent 80%) !important;
+        background: rgba(229, 82, 82, 0.15) !important;
         color: var(--error-foreground) !important;
-        border-color: color-mix(in oklch, var(--error), transparent 70%) !important;
+        border-color: rgba(229, 82, 82, 0.25) !important;
     }
 
     .warning-toast {
-        background: color-mix(in oklch, var(--warning), transparent 80%) !important;
+        background: rgba(229, 168, 39, 0.15) !important;
         color: var(--warning-foreground) !important;
-        border-color: color-mix(in oklch, var(--warning), transparent 70%) !important;
+        border-color: rgba(229, 168, 39, 0.25) !important;
     }
 
     .info-toast {
-        background: color-mix(in oklch, var(--info), transparent 80%) !important;
+        background: rgba(77, 159, 196, 0.15) !important;
         color: var(--info-foreground) !important;
-        border-color: color-mix(in oklch, var(--info), transparent 70%) !important;
+        border-color: rgba(77, 159, 196, 0.25) !important;
     }
 }

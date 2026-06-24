@@ -33,11 +33,18 @@ export default async function RootLayout({
   try {
     const supabase = await createServerSideClient()
 
-    // Add a simple timeout race to prevent server hanging on slow DB
+    // Add a simple timeout race to prevent server hanging on slow DB.
+    // Keep the timer reference so we can clear it once the race settles,
+    // otherwise the timeout still fires and rejects an orphaned promise.
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
     const { data: { user } } = await Promise.race([
       supabase.auth.getUser(),
-      new Promise<any>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000))
-    ])
+      new Promise<any>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("Timeout")), 3000)
+      })
+    ]).finally(() => {
+      if (timeoutId) clearTimeout(timeoutId)
+    })
 
     if (user) {
       initialUser = user

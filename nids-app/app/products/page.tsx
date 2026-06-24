@@ -182,17 +182,30 @@ export default function ProductsPage() {
         const { data, error } = await supabase.from("products").update(payload).eq("id", editingProduct.id).select().single()
         if (error) throw error
         setProducts(prev => prev.map(p => p.id === editingProduct.id ? data : p))
-        notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", ""), dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`))
+        notify.success(
+          dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`),
+          dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace("%entity%", `product [${formData.name}]`),
+          undefined,
+          true
+        )
       } else {
         const { data, error } = await supabase.from("products").insert([payload]).select().single()
         if (error) throw error
         setProducts(prev => [data, ...prev])
-        notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", ""), dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`))
+        notify.success(
+          dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`),
+          dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace("%entity%", `product [${formData.name}]`),
+          undefined,
+          true
+        )
       }
       setIsOpen(false)
     } catch (err: any) {
       console.error("Products: Save error:", err)
-      notify.error(dict.MSG_SAVE_FAILED, err.message || "An unexpected error occurred")
+      notify.error(
+        dict.MSG_SAVE_FAILED.replace("%data%", `[${formData.name}]`),
+        err.message || "An unexpected error occurred"
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -209,10 +222,18 @@ export default function ProductsPage() {
     try {
       const { error } = await supabase.from("products").delete().eq("id", deleteConfirm.id)
       if (error) throw error
-      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`))
+      notify.deleted(
+        dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`),
+        dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY.replace("%entity%", `product [${deleteConfirm.name}]`),
+        undefined,
+        true
+      )
       setProducts(prev => prev.filter(p => p.id !== deleteConfirm.id))
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      notify.error(
+        dict.MSG_SAVE_FAILED.replace("%data%", `[${deleteConfirm.name}]`),
+        err.message
+      )
     } finally {
       setDeleteConfirm(null)
     }
@@ -231,7 +252,7 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="page-container overflow-hidden">
+    <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title">
           <Package className="size-5 mr-2 inline-block text-primary" />

@@ -351,7 +351,12 @@ export default function CompaniesPage() {
         if (error) throw error
 
         setCompanies(prev => prev.map(c => c.id === editingCompany.id ? data : c))
-        notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", ""), dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`))
+        notify.success(
+          dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`),
+          dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace("%entity%", `company [${formData.name}]`),
+          undefined,
+          true
+        )
       } else {
         const { data, error } = await supabase
           .from("companies")
@@ -362,14 +367,22 @@ export default function CompaniesPage() {
         if (error) throw error
 
         setCompanies(prev => [data, ...prev])
-        notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", ""), dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`))
+        notify.success(
+          dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`),
+          dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace("%entity%", `company [${formData.name}]`),
+          undefined,
+          true
+        )
       }
       fetchStats()
       setIsOpen(false)
     }
     catch (err) {
       console.error("Submit Company Error:", err)
-      notify.error(dict.MSG_SAVE_FAILED, (err as Error).message)
+      notify.error(
+        dict.MSG_SAVE_FAILED.replace("%data%", `[${formData.name}]`),
+        (err as Error).message
+      )
     }
     finally {
       setIsSubmitting(false);
@@ -387,11 +400,19 @@ export default function CompaniesPage() {
     try {
       const { error } = await supabase.from("companies").delete().eq("id", deleteConfirm.id)
       if (error) throw error
-      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`))
+      notify.deleted(
+        dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`),
+        dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY.replace("%entity%", `company [${deleteConfirm.name}]`),
+        undefined,
+        true
+      )
       setCompanies(prev => prev.filter(c => c.id !== deleteConfirm.id))
       fetchStats()
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      notify.error(
+        dict.MSG_SAVE_FAILED.replace("%data%", `[${deleteConfirm.name}]`),
+        err.message
+      )
     } finally {
       setDeleteConfirm(null)
     }
@@ -410,10 +431,10 @@ export default function CompaniesPage() {
   }
 
   return (
-    <div className="page-container overflow-hidden">
+    <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title">
-          <Building2 className="size-5 mr-2 inline-block text-primary" />
+          <Building2 className="size-6 mr-2 inline-block text-primary" />
           {dict.TITLE_COMPANIES}
         </h1>
 
@@ -710,7 +731,7 @@ export default function CompaniesPage() {
         </Select>
       </div>
 
-      <Card ref={containerRef} className="data-card flex-1 overflow-auto custom-scrollbar">
+      <Card ref={containerRef} className="data-card flex-1 overflow-y-auto custom-scrollbar">
         <Table>
           <TableHeader>
             <TableRow>

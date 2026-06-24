@@ -1,0 +1,8 @@
+- [x] Audit and update Quotations (`app/quotations/page.tsx`)
+- [x] Audit and update Sales Orders (`app/sales-order/page.tsx`) and remove `Fullfilled` typo
+- [x] Update Delivery Orders (`app/delivery-order/page.tsx`) status styles and add Draft status dropdown
+- [x] Update Deposits (`app/deposit/page.tsx`) status styles and add Pending status dropdown
+- [x] Update Invoices (`app/invoice/page.tsx`) status styles
+- [x] Update Payments (`app/payments/page.tsx`) status styles
+- [x] Run compilation check `npx tsc --noEmit` and verify build
+- [x] Write walkthrough summary

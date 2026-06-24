@@ -253,17 +253,30 @@ export default function VehiclesPage() {
         const { data, error } = await supabase.from("vehicles").update(payload).eq("id", editingItem.id).select().single()
         if (error) throw error
         setVehicles(prev => prev.map(v => v.id === editingItem.id ? data : v))
-        notify.success(dict.MSG_UPDATE_SUCCESS.replace("%data%", ""), dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.license_number}]`))
+        notify.success(
+          dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.license_number}]`),
+          dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace("%entity%", `vehicle [${formData.license_number}]`),
+          undefined,
+          true
+        )
       } else {
         const { data, error } = await supabase.from("vehicles").insert([payload]).select().single()
         if (error) throw error
         setVehicles(prev => [data, ...prev])
-        notify.success(dict.MSG_SAVE_SUCCESS.replace("%data%", ""), dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.license_number}]`))
+        notify.success(
+          dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.license_number}]`),
+          dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace("%entity%", `vehicle [${formData.license_number}]`),
+          undefined,
+          true
+        )
       }
       fetchStats()
       setIsOpen(false)
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      notify.error(
+        dict.MSG_SAVE_FAILED.replace("%data%", `[${formData.license_number}]`),
+        err.message
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -280,11 +293,19 @@ export default function VehiclesPage() {
     try {
       const { error } = await supabase.from("vehicles").delete().eq("id", deleteConfirm.id)
       if (error) throw error
-      notify.deleted(dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`))
+      notify.deleted(
+        dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`),
+        dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY.replace("%entity%", `vehicle [${deleteConfirm.name}]`),
+        undefined,
+        true
+      )
       setVehicles(prev => prev.filter(v => v.id !== deleteConfirm.id))
       fetchStats()
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      notify.error(
+        dict.MSG_SAVE_FAILED.replace("%data%", `[${deleteConfirm.name}]`),
+        err.message
+      )
     } finally {
       setDeleteConfirm(null)
     }
@@ -318,7 +339,7 @@ export default function VehiclesPage() {
   }
 
   return (
-    <div className="page-container overflow-hidden">
+    <div className="page-container">
       {/* Page Header */}
       <div className="page-header shrink-0">
         <h1 className="page-title">

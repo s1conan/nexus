@@ -21,7 +21,6 @@ import {
   Search,
   Pencil,
   Save,
-  X,
   Printer,
   Trash2,
   ChevronDown,
@@ -29,7 +28,8 @@ import {
   Calendar,
   Truck,
   AlertCircle,
-  ShoppingBag
+  ShoppingBag,
+  RefreshCw
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -54,6 +54,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { cn, constructMultiWordSearch } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
+import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 import { notify } from "@/lib/notifications"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { LiveSearch } from "@/components/live-search"
@@ -68,6 +69,10 @@ import {
 } from "@/components/ui/select"
 import { ButtonLoader } from "@/components/button-loader"
 import { NumberInput } from "@/components/number-input"
+import { generateStandardSalesOrderPDF } from "@/lib/pdf-generator"
+import dynamic from "next/dynamic"
+
+const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
 const PAGE_SIZE = 50
 
@@ -99,6 +104,7 @@ export default function SalesOrdersPage() {
   // Form State
   const [formData, setFormData] = useState(() => ({
     so_number: "", // Backend column is still so_number
+    po_number: "",
     company_id: "",
     quotation_id: "",
     product_id: "",
@@ -120,14 +126,28 @@ export default function SalesOrdersPage() {
   const [selectedProductInfo, setSelectedProductInfo] = useState<any>(null)
   const [selectedQuotationInfo, setSelectedQuotationInfo] = useState<any>(null)
   const [availableDiscounts, setAvailableDiscounts] = useState<any[]>([])
+  const [companyInfo, setCompanyInfo] = useState<any>(null)
+  const [previewDoc, setPreviewDoc] = useState<any>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string, so_number: string } | null>(null)
+
+  const statusStyles: Record<string, string> = {
+    Default: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
+    Draft: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
+    Sent: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+    Approved: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
+    Rejected: "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+    Partial: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
+    Fulfilled: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+  }
 
   // Calculation logic
   const totals = useMemo(() => {
-    const subtotal = formData.quantity * formData.unit_price
+    const baseTotal = formData.quantity * formData.unit_price
     const deliveryTotal = formData.quantity * formData.delivery_price_per_litre
-    const discountAmount = subtotal * ((formData.discount || 0) / 100)
-    const afterDiscount = subtotal - discountAmount
-    const taxableAmount = Math.max(0, afterDiscount + deliveryTotal)
+    const discountAmount = baseTotal * ((formData.discount || 0) / 100)
+    const afterDiscount = baseTotal - discountAmount
+    const subtotal = Math.max(0, afterDiscount + deliveryTotal)
+    const taxableAmount = subtotal
 
     let taxTotal = 0;
     const appliedTaxes = formData.tax_details.map(t => {
@@ -171,7 +191,8 @@ export default function SalesOrdersPage() {
         // Also take delivery address if available from quotation
         delivery_address: quote.delivery_address || prev.delivery_address,
         discount: 0,
-        term_of_payment: ""
+        term_of_payment: "",
+        po_number: prev.po_number
       }))
       // Also update dependent info
       setSelectedCompanyInfo(quote.company)
@@ -179,7 +200,9 @@ export default function SalesOrdersPage() {
     } else {
       setSelectedQuotationInfo(null)
       setAvailableDiscounts([])
-      setFormData(prev => ({ ...prev, quotation_id: "" }))
+      setSelectedCompanyInfo(null)
+      setSelectedProductInfo(null)
+      setFormData(prev => ({ ...prev, quotation_id: "", company_id: "", product_id: "", quantity: 0, unit_price: 0, delivery_price_per_litre: 0, delivery_address: "", discount: 0, term_of_payment: "", po_number: "" }))
     }
   }
 
@@ -196,19 +219,25 @@ export default function SalesOrdersPage() {
       const currentOffset = isInitial ? 0 : offset
 
       if (isInitial) {
-        const [qRes, tRes] = await Promise.all([
+        const [qRes, tRes, cRes] = await Promise.all([
           supabase.from("quotations").select("*, company:companies(id, name, details), product:products(id, sku, name)").eq("status", "Accepted"),
-          supabase.from("app_settings").select("*").eq("category", "tax")
+          supabase.from("app_settings").select("*").eq("category", "tax"),
+          supabase.from("app_settings").select("*").eq("category", "company")
         ])
         if (qRes.error) throw qRes.error
         if (tRes.error) throw tRes.error
         setQuotations(qRes.data || [])
         setGlobalTaxes(tRes.data || [])
+        if (cRes.data) {
+          const info: any = {}
+          cRes.data.forEach((r: any) => { info[r.name] = r.value })
+          setCompanyInfo(info)
+        }
       }
 
       let query = supabase
         .from("sales_orders")
-        .select("*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts)")
+        .select("*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, company:companies!quotations_company_id_fkey(id, name))")
         .order("created_at", { ascending: false })
         .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -239,6 +268,8 @@ export default function SalesOrdersPage() {
       setLoadingMore(false)
     }
   }, [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED])
+
+  const handleRefresh = () => { fetchData(true) }
 
   useEffect(() => {
     fetchData(true)
@@ -277,8 +308,42 @@ export default function SalesOrdersPage() {
   const canDelete = hasPermission("sales-order", "delete")
   const canPrint = hasPermission("sales-order", "print")
 
-  const handlePrint = (o: any) => {
-    notify.info("Print function is not implemented yet")
+  const handlePrint = async (o: any) => {
+    if (!companyInfo) {
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", o ? `[${o.so_number}]` : ""), "Company information not loaded yet.")
+      return
+    }
+    try {
+      const dataUri = await generateStandardSalesOrderPDF(companyInfo, o, { save: false, output: "datauri" })
+      const contacts = o.company?.details?.contact_persons?.length
+        ? o.company.details.contact_persons
+        : [{ name: o.company?.details?.contact_person || "-", email: o.company?.details?.email || o.company?.email || "" }]
+      setPreviewDoc({
+        id: o.id,
+        title: o.so_number,
+        description: ` ${o.company?.name || "-"}`,
+        images: [],
+        pdf: dataUri,
+        customerEmail: contacts[0]?.email || "",
+        contacts: contacts,
+        raw: o
+      })
+    } catch (err: any) {
+      notify.error("Failed to generate PDF", err.message)
+    }
+  }
+
+  const handleDownload = (doc: any) => {
+    const link = document.createElement('a')
+    link.href = doc.pdf
+    link.download = `SO_${doc.title}.pdf`
+    link.click()
+    notify.success(
+      dict.MSG_PRINT_SUCCESS,
+      dict.MSG_PRINT_SUCCESS_DESC.replace("%data%", `[${doc.title}]`),
+      undefined,
+      false
+    )
   }
 
   if (!canView && !loading && !authLoading) {
@@ -319,6 +384,7 @@ export default function SalesOrdersPage() {
 
       setFormData({
         so_number: item.so_number,
+        po_number: item.po_number || "",
         company_id: item.company_id || "",
         quotation_id: item.quotation_id || "",
         product_id: item.product_id || "",
@@ -345,6 +411,7 @@ export default function SalesOrdersPage() {
 
       setFormData({
         so_number: "", // Will be auto-generated on save if empty
+        po_number: "",
         company_id: "",
         quotation_id: "",
         product_id: "",
@@ -368,9 +435,21 @@ export default function SalesOrdersPage() {
   // Actions
   const handleSave = async () => {
     setIsSaving(true)
+    // Convert empty string UUID foreign keys to null
+    const payload = {
+      ...formData,
+      quotation_id: formData.quotation_id || null,
+      company_id: formData.company_id || null,
+      product_id: formData.product_id || null,
+    }
     try {
-      const payload = { ...formData }
       if (editingItem) {
+        if (editingItem.status === "Partial" || editingItem.status === "Fulfilled") {
+          notify.error("Error", "Cannot edit sales order with status Partial or Fulfilled.")
+          setIsSaving(false)
+          return
+        }
+
         // Handle Quotation Reversion if changed
         if (editingItem.quotation_id && editingItem.quotation_id !== payload.quotation_id) {
           await supabase.from("quotations").update({ status: 'Accepted' }).eq("id", editingItem.quotation_id)
@@ -381,13 +460,37 @@ export default function SalesOrdersPage() {
           await supabase.from("quotations").update({ status: 'Processed' }).eq("id", payload.quotation_id)
         }
 
+        // Check if any data fields have changed compared to original editingItem
+        const hasDataChanged =
+          payload.so_number !== editingItem.so_number ||
+          payload.po_number !== (editingItem.po_number || "") ||
+          payload.company_id !== (editingItem.company_id || "") ||
+          payload.quotation_id !== (editingItem.quotation_id || "") ||
+          payload.product_id !== (editingItem.product_id || "") ||
+          payload.so_date !== editingItem.so_date ||
+          payload.delivery_date !== editingItem.delivery_date ||
+          Number(payload.quantity) !== Number(editingItem.quantity || 0) ||
+          Number(payload.unit_price) !== Number(editingItem.unit_price || 0) ||
+          payload.term_of_payment !== (editingItem.term_of_payment || "") ||
+          payload.delivery_address !== (editingItem.delivery_address || "") ||
+          Number(payload.discount) !== Number(editingItem.discount || 0) ||
+          Number(payload.delivery_price_per_litre) !== Number(editingItem.delivery_price_per_litre || 0) ||
+          payload.note !== (editingItem.note || "") ||
+          payload.is_note_enabled !== (editingItem.is_note_enabled ?? true) ||
+          JSON.stringify(payload.tax_details?.map((t: any) => ({ name: t.name, rate: t.rate, enabled: t.enabled }))) !==
+          JSON.stringify((editingItem.tax_details || []).map((t: any) => ({ name: t.name, rate: t.rate, enabled: t.enabled })));
+
+        if (hasDataChanged) {
+          payload.status = "Draft"
+        }
+
         const { error } = await supabase.from("sales_orders").update(payload).eq("id", editingItem.id)
         if (error) throw error
 
         // Fetch updated row to keep local state in sync with relations
         const { data: updatedRow, error: fetchError } = await supabase
           .from("sales_orders")
-          .select("*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts)")
+          .select("*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, company:companies!quotations_company_id_fkey(id, name))")
           .eq("id", editingItem.id)
           .single();
 
@@ -397,7 +500,13 @@ export default function SalesOrdersPage() {
           fetchData(true);
         }
 
-        notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SO_SAVED)
+        const docLabel = `[${payload.so_number || formData.so_number}]`
+        notify.success(
+          dict.MSG_UPDATE_SUCCESS.replace("%data%", docLabel),
+          dict.MSG_SUCCESS_UPDATE_DESC.replace("%entity%", "sales order").replace("%company%", `[${selectedCompanyInfo?.name || ""}]`),
+          undefined,
+          true
+        )
       } else {
         // Generate document number if empty
         if (!payload.so_number) {
@@ -414,12 +523,19 @@ export default function SalesOrdersPage() {
           await supabase.from("quotations").update({ status: 'Processed' }).eq("id", payload.quotation_id)
         }
 
-        notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SO_SAVED)
+        const docLabel = `[${payload.so_number || formData.so_number}]`
+        notify.success(
+          dict.MSG_SO_SAVED.replace("%data%", docLabel),
+          dict.MSG_SUCCESS_SAVE_DESC.replace("%entity%", "sales order").replace("%company%", `[${selectedCompanyInfo?.name || ""}]`),
+          undefined,
+          true
+        )
         fetchData(true)
       }
       setIsOpen(false)
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      const docLabel = `[${formData.so_number}]`
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), err.message)
     } finally {
       setIsSaving(false)
     }
@@ -427,8 +543,19 @@ export default function SalesOrdersPage() {
 
   const handleDelete = async (id: string) => {
     const item = orders.find(p => p.id === id)
-    const label = item ? `[${item.so_number}]` : ""
-    if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
+    if (item && (item.status === "Partial" || item.status === "Fulfilled")) {
+      notify.error("Error", "Cannot delete a Partial or Fulfilled sales order.")
+      return
+    }
+    setDeleteConfirm({ id, so_number: item?.so_number || "" })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return
+    const id = deleteConfirm.id
+    const item = orders.find(p => p.id === id)
+    const docLabel = `[${deleteConfirm.so_number}]`
+    const companyName = item?.company?.name || ""
     try {
       // Revert quotation status if linked
       if (item?.quotation_id) {
@@ -439,21 +566,40 @@ export default function SalesOrdersPage() {
       if (error) throw error
 
       setOrders(prev => prev.filter(o => o.id !== id))
-      notify.deleted(dict.MSG_SO_DELETED.replace("%data%", label))
+      notify.deleted(
+        dict.MSG_SO_DELETED.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "sales order").replace("%company%", `[${companyName}]`),
+        undefined,
+        true
+      )
     } catch (err: any) {
-      notify.error(dict.MSG_SAVE_FAILED, err.message)
+      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), err.message)
+    } finally {
+      setDeleteConfirm(null)
     }
   }
 
   const updateStatus = async (id: string, status: string) => {
+    const item = orders.find(o => o.id === id)
+    if (item && (item.status === "Partial" || item.status === "Fulfilled")) {
+      notify.error("Error", "Cannot change status of a Partial or Fulfilled sales order.")
+      return
+    }
+    const docLabel = `[${item.so_number}]`
+    const companyName = item.company?.name || ""
     try {
       const { error } = await supabase.from("sales_orders").update({ status }).eq("id", id)
       if (error) throw error
 
       setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o))
-      notify.success(dict.MSG_STATUS_UPDATED, dict.MSG_SO_STATUS_UPDATED)
+      notify.success(
+        dict.MSG_SO_STATUS_UPDATED.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace("%company%", `[${companyName}]`),
+        undefined,
+        true
+      )
     } catch (err: any) {
-      notify.error(dict.MSG_UPDATE_FAILED, err.message)
+      notify.error(dict.MSG_UPDATE_FAILED.replace("%data%", docLabel), err.message)
     }
   }
 
@@ -465,7 +611,7 @@ export default function SalesOrdersPage() {
   const isFromQuotation = !!formData.quotation_id
 
   return (
-    <div className="page-container h-full flex flex-col overflow-hidden">
+    <div className="page-container">
       {/* Page Header */}
       <div className="page-header shrink-0">
         <h1 className="page-title">
@@ -473,290 +619,277 @@ export default function SalesOrdersPage() {
           {dict.MENU_SALES_ORDER}
         </h1>
 
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" onClick={() => handleOpenDialog()} disabled={!canInsert}>
-              <Plus data-icon="inline-start" />
-              {dict.BUTTON_NEW_SO}
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto p-0 gap-0">
-            <DialogHeader className="p-5 border-b sticky top-0 bg-background z-10">
-              <DialogTitle>
-                <ShoppingBag className="size-5 mr-2 inline-block" />{editingItem ? dict.BUTTON_EDIT + " SO" : dict.BUTTON_NEW_SO}
-              </DialogTitle>
-            </DialogHeader>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading || loadingMore} title="Refresh Data">
+            <RefreshCw className={cn("size-4", (loading || loadingMore) && "animate-spin")} />
+          </Button>
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" onClick={() => handleOpenDialog()} disabled={!canInsert}>
+                <Plus data-icon="inline-start" />
+                {dict.BUTTON_NEW_SO}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-5xl">
+              <DialogHeader>
+                <DialogTitle>
+                  <ShoppingBag className="size-5 mr-2 inline-block" />{editingItem ? dict.BUTTON_EDIT + " SO" : dict.BUTTON_NEW_SO}
+                </DialogTitle>
+              </DialogHeader>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-6 p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="sonum">{dict.LABEL_SO_NUMBER}</Label>
-                    <Input id="sonum" value={formData.so_number} onChange={e => setFormData({ ...formData, so_number: e.target.value })} disabled={editingItem && !hasPermission("sales-order", "edit")} placeholder={dict.LABEL_AUTO_GENERATED} />
-                  </div>
+              <form onSubmit={handleSubmit} className="flex flex-col gap-6 p-5 overflow-y-auto max-h-[70vh]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="sonum">{dict.LABEL_SO_NUMBER}</Label>
+                      <Input id="sonum" value={formData.so_number} onChange={e => setFormData({ ...formData, so_number: e.target.value })} disabled={editingItem && !hasPermission("sales-order", "edit")} placeholder={dict.LABEL_AUTO_GENERATED} />
+                    </div>
 
-                  <div className="grid gap-2">
-                    <Label>{dict.LABEL_QUOTATION_NUMBER} ({dict.LABEL_OPTIONAL})</Label>
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <LiveSearch
-                          key={`quotation-search-${formData.company_id}`}
-                          data={selectedQuotationInfo ? [selectedQuotationInfo] : []}
-                          fetchData={async (query) => {
-                            let q = supabase.from("quotations").select("*, company:companies(id, name, details), product:products(id, sku, name)").eq("status", "Accepted")
+                    <div className="grid gap-2">
+                      <Label htmlFor="ponum">PO Number</Label>
+                      <Input id="ponum" value={formData.po_number} onChange={e => setFormData({ ...formData, po_number: e.target.value })} disabled={editingItem && !hasPermission("sales-order", "edit")} placeholder="Enter customer PO number" />
+                    </div>
 
-                            if (formData.company_id) {
-                              q = q.eq("company_id", formData.company_id)
-                            }
-
-                            if (query) {
-                              const searchStr = constructMultiWordSearch(query, ['quotation_number'])
-                              if (searchStr) q = q.or(searchStr)
-                            }
-                            const { data } = await q
-                            return data || []
-                          }}
-                          value={formData.quotation_id}
-                          onSelect={handleQuotationSelect}
-                          keyField="id"
-                          displayField="quotation_number"
-                          defaultDisplay={selectedQuotationInfo?.quotation_number || ""}
-                          searchColumns={["quotation_number"]}
-                          visualColumns={[
-                            { key: "quotation_number", header: dict.LABEL_QUOTATION_NUMBER, className: "w-2/5 font-medium", primary: true }
-                          ]}
-                          placeholder={dict.PLACEHOLDER_SELECT_QUOTATION}
-                          emptyMessage={dict.NO_DATA}
-                        />
+                    <div className="grid gap-2">
+                      <Label>{dict.LABEL_QUOTATION_NUMBER} ({dict.LABEL_OPTIONAL})</Label>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <LiveSearch
+                            key="quotation-search"
+                            data={selectedQuotationInfo ? [selectedQuotationInfo] : []}
+                            fetchData={async (query) => {
+                              let q = supabase.from("quotations").select("*, company:companies(id, name, details), product:products(id, sku, name)").eq("status", "Accepted")
+                              if (query) {
+                                const { data: companies } = await supabase.from("companies").select("id").ilike("name", `%${query}%`)
+                                const companyIds = (companies || []).map((c: any) => c.id)
+                                const orConditions = [`quotation_number.ilike.%${query}%`]
+                                if (companyIds.length > 0) orConditions.push(`company_id.in.(${companyIds.join(',')})`)
+                                q = q.or(orConditions.join(','))
+                              }
+                              const { data } = await q
+                              return data || []
+                            }}
+                            value={formData.quotation_id}
+                            onSelect={handleQuotationSelect}
+                            keyField="id"
+                            displayField={q => `${q.quotation_number} - ${q.company?.name || ""}`}
+                            defaultDisplay={selectedQuotationInfo ? `${selectedQuotationInfo.quotation_number} - ${selectedQuotationInfo.company?.name || ""}` : ""}
+                            searchColumns={["quotation_number", "company.name"]}
+                            visualColumns={[
+                              { key: "quotation_number", header: dict.LABEL_QUOTATION_NUMBER, className: "w-50 font-medium", primary: true },
+                              { key: "company.name", header: dict.LABEL_COMPANY_NAME, className: "w-30" }
+                            ]}
+                            placeholder={dict.PLACEHOLDER_SEARCH}
+                            emptyMessage={dict.NO_DATA}
+                          />
+                        </div>
                       </div>
-                      {isFromQuotation && (
-                        <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => handleQuotationSelect("")}>
-                          <X className="size-4" />
-                        </Button>
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label>{dict.LABEL_COMPANY_NAME}</Label>
+                      <LiveSearch
+                        data={selectedCompanyInfo ? [selectedCompanyInfo] : []}
+                        disabled={true}
+                        fetchData={async () => []}
+                        value={formData.company_id}
+                        onSelect={() => {}}
+                        keyField="id"
+                        displayField="name"
+                        defaultDisplay={selectedCompanyInfo?.name || ""}
+                        searchColumns={[]}
+                        visualColumns={[]}
+                        placeholder={dict.PLACEHOLDER_SEARCH}
+                        emptyMessage={dict.NO_DATA}
+                      />
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label>{dict.LABEL_SKU}</Label>
+                      <LiveSearch
+                        data={selectedProductInfo ? [selectedProductInfo] : []}
+                        disabled={isFromQuotation}
+                        fetchData={async (query) => {
+                          let q = supabase.from("products").select("id, sku, name").limit(8)
+                          if (query) {
+                            const searchStr = constructMultiWordSearch(query, ['sku', 'name'])
+                            if (searchStr) q = q.or(searchStr)
+                          }
+                          const { data } = await q
+                          return data || []
+                        }}
+                        value={formData.product_id}
+                        onSelect={(val, item) => {
+                          setFormData({ ...formData, product_id: val })
+                          setSelectedProductInfo(item)
+                        }}
+                        keyField="id"
+                        displayField={p => `${p.sku} - ${p.name}`}
+                        defaultDisplay={selectedProductInfo ? (selectedProductInfo.sku && selectedProductInfo.name ? `${selectedProductInfo.sku} - ${selectedProductInfo.name}` : selectedProductInfo.name || selectedProductInfo.sku || "") : ""}
+                        searchColumns={["sku", "name"]}
+                        visualColumns={[
+                          { key: "sku", header: dict.LABEL_SKU, className: "w-1/3 font-mono" },
+                          { key: "name", header: dict.LABEL_PRODUCT_NAME, className: "w-2/3", primary: true }
+                        ]}
+                        placeholder={dict.PLACEHOLDER_SEARCH}
+                        emptyMessage={dict.NO_DATA}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label className="flex items-center gap-2"><Calendar className="size-4" /> {dict.LABEL_SO_DATE}</Label>
+                        <Input type="date" value={formData.so_date} onChange={e => setFormData({ ...formData, so_date: e.target.value })} />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label className="flex items-center gap-2"><Truck className="size-4" /> {dict.LABEL_DELIVERY_DATE}</Label>
+                        <Input type="date" value={formData.delivery_date} onChange={e => setFormData({ ...formData, delivery_date: e.target.value })} />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2 w-full">
+                      <Label>{dict.LABEL_DELIVERY_ADDRESS}</Label>
+                      {companyAddresses.length > 0 ? (
+                        <Select value={formData.delivery_address} onValueChange={val => setFormData({ ...formData, delivery_address: val })} disabled={isFromQuotation}>
+                          <SelectTrigger className="w-full h-13">
+                            <SelectValue placeholder={dict.PLACEHOLDER_SELECT_ADDRESS} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {companyAddresses.map((addr, idx) => (
+                              <SelectItem key={idx} value={addr.address}>
+                                <div className="flex flex-col items-start text-sm">
+                                  <span className="font-semibold">{addr.label}</span>
+                                  <span className="text-xs text-muted-foreground line-clamp-1">{addr.address}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input value={formData.delivery_address} onChange={e => setFormData({ ...formData, delivery_address: e.target.value })} disabled={isFromQuotation} placeholder={dict.PLACEHOLDER_ENTER_ADDRESS} className="w-full" />
                       )}
                     </div>
                   </div>
 
-                  <div className="grid gap-2">
-                    <Label>{dict.LABEL_COMPANY_NAME}</Label>
-                    <LiveSearch
-                      data={selectedCompanyInfo ? [selectedCompanyInfo] : []}
-                      disabled={isFromQuotation}
-                      fetchData={async (query) => {
-                        let q = supabase.from("companies").select("id, name, type, details").or('type.cs.{Supplier},type.cs.{Customer}').limit(8)
-                        if (query) {
-                          const searchStr = constructMultiWordSearch(query, ['name', 'details->>contact_person'])
-                          if (searchStr) q = q.or(searchStr)
-                        }
-                        const { data } = await q
-                        return (data || []).map((c: any) => ({
-                          ...c,
-                          contact_person: c.details?.contact_person || ""
-                        }))
-                      }}
-                      value={formData.company_id}
-                      onSelect={(val, item) => {
-                        setFormData({ ...formData, company_id: val })
-                        setSelectedCompanyInfo(item)
-                      }}
-                      keyField="id"
-                      displayField="name"
-                      defaultDisplay={selectedCompanyInfo?.name || ""}
-                      searchColumns={["name", "contact_person"]}
-                      visualColumns={[
-                        { key: "name", header: dict.LABEL_COMPANY_NAME, className: "w-3/5 font-medium", primary: true },
-                        { key: "contact_person", header: dict.LABEL_CONTACT_PERSON, className: "w-2/5" }
-                      ]}
-                      placeholder={dict.PLACEHOLDER_SEARCH}
-                      emptyMessage={dict.NO_DATA}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label>{dict.LABEL_SKU}</Label>
-                    <LiveSearch
-                      data={selectedProductInfo ? [selectedProductInfo] : []}
-                      disabled={isFromQuotation}
-                      fetchData={async (query) => {
-                        let q = supabase.from("products").select("id, sku, name").limit(8)
-                        if (query) {
-                          const searchStr = constructMultiWordSearch(query, ['sku', 'name'])
-                          if (searchStr) q = q.or(searchStr)
-                        }
-                        const { data } = await q
-                        return data || []
-                      }}
-                      value={formData.product_id}
-                      onSelect={(val, item) => {
-                        setFormData({ ...formData, product_id: val })
-                        setSelectedProductInfo(item)
-                      }}
-                      keyField="id"
-                      displayField={p => `${p.sku} - ${p.name}`}
-                      defaultDisplay={selectedProductInfo ? (selectedProductInfo.sku && selectedProductInfo.name ? `${selectedProductInfo.sku} - ${selectedProductInfo.name}` : selectedProductInfo.name || selectedProductInfo.sku || "") : ""}
-                      searchColumns={["sku", "name"]}
-                      visualColumns={[
-                        { key: "sku", header: dict.LABEL_SKU, className: "w-1/3 font-mono" },
-                        { key: "name", header: dict.LABEL_PRODUCT_NAME, className: "w-2/3", primary: true }
-                      ]}
-                      placeholder={dict.PLACEHOLDER_SEARCH}
-                      emptyMessage={dict.NO_DATA}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label className="flex items-center gap-2"><Calendar className="size-4" /> {dict.LABEL_SO_DATE}</Label>
-                      <Input type="date" value={formData.so_date} onChange={e => setFormData({ ...formData, so_date: e.target.value })} />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label className="flex items-center gap-2"><Truck className="size-4" /> {dict.LABEL_DELIVERY_DATE}</Label>
-                      <Input type="date" value={formData.delivery_date} onChange={e => setFormData({ ...formData, delivery_date: e.target.value })} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="space-y-4 border rounded-lg p-4 bg-primary/5 h-full flex flex-col justify-between">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="qty">{dict.LABEL_QUANTITY}</Label>
-                        <NumberInput id="qty" value={formData.quantity} onChange={val => setFormData({ ...formData, quantity: val })} />
+                  <div className="space-y-6">
+                    <div className="space-y-4 border rounded-lg p-4 bg-primary/5 h-full flex flex-col justify-between">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="qty">{dict.LABEL_QUANTITY}</Label>
+                          <NumberInput id="qty" value={formData.quantity} onChange={val => setFormData({ ...formData, quantity: val })} rightBadge="L" />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="uprice">{dict.LABEL_UNIT_PRICE}</Label>
+                          <NumberInput id="uprice" value={formData.unit_price} onChange={val => setFormData({ ...formData, unit_price: val })} leftBadge={SITE_CONFIG.currencySymbol} disabled={isFromQuotation} />
+                        </div>
                       </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="uprice">{dict.LABEL_UNIT_PRICE}</Label>
-                        <NumberInput id="uprice" value={formData.unit_price} onChange={val => setFormData({ ...formData, unit_price: val })} leftBadge={SITE_CONFIG.currencySymbol} disabled={isFromQuotation} />
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="top">{dict.LABEL_TERM_OF_PAYMENT}</Label>
-                        {isFromQuotation && availableDiscounts.length > 0 ? (
-                          <Select
-                            value={formData.term_of_payment}
-                            onValueChange={val => {
-                              const disc = availableDiscounts.find(d => d.label === val)
-                              setFormData({ ...formData, term_of_payment: val, discount: disc ? disc.value : 0 })
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={dict.PLACEHOLDER_SELECT_TERM} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableDiscounts.map((d, idx) => (
-                                <SelectItem key={idx} value={d.label}>
-                                  {d.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <Input id="top" value={formData.term_of_payment} onChange={e => setFormData({ ...formData, term_of_payment: e.target.value })} placeholder={dict.PLACEHOLDER_TOP} />
-                        )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="top">{dict.LABEL_TERM_OF_PAYMENT}</Label>
+                          {isFromQuotation && availableDiscounts.length > 0 ? (
+                            <Select
+                              value={formData.term_of_payment}
+                              onValueChange={val => {
+                                const disc = availableDiscounts.find(d => d.label === val)
+                                setFormData({ ...formData, term_of_payment: val, discount: disc ? disc.value : 0 })
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={dict.PLACEHOLDER_SELECT_TERM} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableDiscounts.map((d, idx) => (
+                                  <SelectItem key={idx} value={d.label}>
+                                    {d.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input id="top" value={formData.term_of_payment} onChange={e => setFormData({ ...formData, term_of_payment: e.target.value })} placeholder={dict.PLACEHOLDER_TOP} />
+                          )}
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="discount">{dict.LABEL_DISCOUNTS}</Label>
+                          <NumberInput id="discount" value={formData.discount} onChange={val => setFormData({ ...formData, discount: val })} rightBadge="%" disabled={isFromQuotation} />
+                        </div>
                       </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="discount">{dict.LABEL_DISCOUNTS}</Label>
-                        <NumberInput id="discount" value={formData.discount} onChange={val => setFormData({ ...formData, discount: val })} rightBadge="%" disabled={isFromQuotation} />
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="deliv_price">{dict.LABEL_TRANSPORT_COST}</Label>
-                        <NumberInput id="deliv_price" value={formData.delivery_price_per_litre} onChange={val => setFormData({ ...formData, delivery_price_per_litre: val })} leftBadge={SITE_CONFIG.currencySymbol} rightBadge="/ L" disabled={isFromQuotation} />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="deliv_price">{dict.LABEL_TRANSPORT_COST}</Label>
+                          <NumberInput id="deliv_price" value={formData.delivery_price_per_litre} onChange={val => setFormData({ ...formData, delivery_price_per_litre: val })} leftBadge={SITE_CONFIG.currencySymbol} rightBadge="/ L" disabled={isFromQuotation} />
+                        </div>
+                        <div className="grid gap-2 flex flex-col justify-end">
+                          <Label className="mb-2">{dict.LABEL_SUBTOTAL}</Label>
+                          <div className="flex flex-row justify-between font-mono font-bold text-sm"><div>{SITE_CONFIG.currencySymbol}</div><div>{Math.round(totals.subtotal).toLocaleString()}</div></div>
+                        </div>
                       </div>
-                      <div className="flex flex-col justify-end">
-                        <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">{dict.LABEL_SUBTOTAL}</div>
-                        <div className="font-mono font-bold text-sm">{SITE_CONFIG.currencySymbol} {totals.subtotal.toLocaleString()}</div>
-                      </div>
-                    </div>
 
-                    <div className="space-y-3 pt-4 border-t">
-                      <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 block">{dict.LABEL_TAXES || "Taxes"}</Label>
-                      <div className="space-y-2">
-                        {formData.tax_details.map((tax, idx) => {
-                          const calculatedAmount = totals.appliedTaxes.find(t => t.name === tax.name)?.amount || 0;
-                          return (
-                            <div key={idx} className="flex items-center p-2 border rounded bg-background h-10 gap-3">
-                              <div className="w-20 shrink-0 font-medium truncate">
-                                <Label htmlFor={`tax-${idx}`} className="cursor-pointer text-[10px]">{tax.name}</Label>
-                              </div>
-                              <div className="shrink-0 flex items-center justify-center w-8">
-                                <Switch id={`tax-${idx}`} checked={tax.enabled} onCheckedChange={(val) => {
-                                  const newTaxes = [...formData.tax_details];
-                                  newTaxes[idx].enabled = val;
-                                  setFormData({ ...formData, tax_details: newTaxes })
-                                }} disabled={isFromQuotation} />
-                              </div>
-                              <div className="w-20 shrink-0">
-                                <div style={{ opacity: tax.enabled ? 1 : 0.3 }} className="transition-opacity w-full">
-                                  <NumberInput className="text-right font-mono text-[10px]" containerClassName="h-7 bg-muted/50" disabled value={tax.rate} onChange={() => { }} rightBadge="%" />
+                      <div className="space-y-3 pt-4 border-t">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 block">{dict.LABEL_TAXES || "Taxes"}</Label>
+                        <div className="space-y-2">
+                          {formData.tax_details.map((tax, idx) => {
+                            const calculatedAmount = totals.appliedTaxes.find(t => t.name === tax.name)?.amount || 0;
+                            return (
+                              <div key={idx} className="grid grid-cols-12 items-center p-2 border rounded bg-background min-h-10 gap-2">
+                                <div className="col-span-3 font-medium truncate">
+                                  <Label htmlFor={`tax-${idx}`} className="cursor-pointer text-xs block truncate">{tax.name}</Label>
+                                </div>
+                                <div className="col-span-2 flex items-center justify-center">
+                                  <Switch id={`tax-${idx}`} checked={tax.enabled} onCheckedChange={(val) => {
+                                    const newTaxes = [...formData.tax_details];
+                                    newTaxes[idx].enabled = val;
+                                    setFormData({ ...formData, tax_details: newTaxes })
+                                  }} disabled={isFromQuotation} />
+                                </div>
+                                <div className="col-span-4">
+                                  <div style={{ opacity: tax.enabled ? 1 : 0.3 }} className="transition-opacity w-full">
+                                    <NumberInput className="text-right font-mono text-xs" containerClassName="h-7 bg-muted/50" disabled value={tax.rate} onChange={() => { }} rightBadge="%" />
+                                  </div>
+                                </div>
+                                <div className="col-span-3 flex justify-end">
+                                  <span className={cn("font-mono font-medium text-xs transition-opacity text-right truncate", tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground")}>
+                                    {SITE_CONFIG.currencySymbol}{Math.round(calculatedAmount).toLocaleString()}
+                                  </span>
                                 </div>
                               </div>
-                              <div className="flex-1 flex justify-end">
-                                <span className={cn("font-mono font-medium text-[10px] transition-opacity", tax.enabled ? "opacity-100 text-foreground" : "opacity-30 text-muted-foreground")}>
-                                  {SITE_CONFIG.currencySymbol}{calculatedAmount.toLocaleString()}
-                                </span>
-                              </div>
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-2 border-t pt-4">
-                      <div className="flex justify-between text-lg font-bold font-mono">
-                        <span>{dict.LABEL_GRAND_TOTAL}:</span>
-                        <span className="text-primary">{SITE_CONFIG.currencySymbol} {totals.grandTotal.toLocaleString()}</span>
+                      <div className="space-y-2 border-t pt-2">
+                        <div className="flex justify-between text-lg font-bold font-mono">
+                          <span>{dict.LABEL_GRAND_TOTAL}:</span>
+                          <span className="text-primary">{SITE_CONFIG.currencySymbol} {Math.round(totals.grandTotal).toLocaleString()}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid gap-2 w-full">
-                <Label>{dict.LABEL_DELIVERY_ADDRESS}</Label>
-                {companyAddresses.length > 0 ? (
-                  <Select value={formData.delivery_address} onValueChange={val => setFormData({ ...formData, delivery_address: val })} disabled={isFromQuotation}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={dict.PLACEHOLDER_SELECT_ADDRESS} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {companyAddresses.map((addr, idx) => (
-                        <SelectItem key={idx} value={addr.address}>
-                          <div className="flex flex-col items-start">
-                            <span className="font-medium text-xs">{addr.label}</span>
-                            <span className="text-[10px] text-muted-foreground line-clamp-1">{addr.address}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input value={formData.delivery_address} onChange={e => setFormData({ ...formData, delivery_address: e.target.value })} disabled={isFromQuotation} placeholder={dict.PLACEHOLDER_ENTER_ADDRESS} className="w-full" />
-                )}
-              </div>
-
-              <div className="w-full">
-                <RichTextEditor
-                  label={dict.LABEL_NOTE}
-                  value={formData.note}
-                  onChange={val => setFormData(prev => ({ ...prev, note: val || "" }))}
-                  isEnabled={formData.is_note_enabled}
-                  onToggleEnabled={val => setFormData(prev => ({ ...prev, is_note_enabled: val }))}
-                  placeholder={dict.PLACEHOLDER_EDITOR}
-                />
-              </div>
-            </form>
-            <DialogFooter className="p-5 border-t shrink-0 sticky bottom-0 bg-background">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>{dict.BUTTON_CANCEL}</Button>
-              <Button onClick={() => handleSave()} disabled={isSaving || (editingItem ? !canEdit : !canInsert)}>
-                {isSaving ? <ButtonLoader /> : <Save data-icon="inline-start" />} {dict.BUTTON_SAVE_SO}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                <div className="w-full">
+                  <RichTextEditor
+                    label={dict.LABEL_NOTE}
+                    value={formData.note}
+                    onChange={val => setFormData(prev => ({ ...prev, note: val || "" }))}
+                    isEnabled={formData.is_note_enabled}
+                    onToggleEnabled={val => setFormData(prev => ({ ...prev, is_note_enabled: val }))}
+                    placeholder={dict.PLACEHOLDER_EDITOR}
+                  />
+                </div>
+              </form>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>{dict.BUTTON_CANCEL}</Button>
+                <Button onClick={() => handleSave()} disabled={isSaving || (editingItem ? !canEdit : !canInsert)}>
+                  {isSaving ? <ButtonLoader /> : <Save data-icon="inline-start" />} {dict.BUTTON_SAVE_SO}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Action Bar / Filters */}
@@ -775,9 +908,9 @@ export default function SalesOrdersPage() {
       {/* Data Area */}
       <Card ref={containerRef} className="data-card flex-1 overflow-auto custom-scrollbar">
         <Table>
-          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
+          <TableHeader>
             <TableRow>
-              <TableHead className="px-7">{dict.LABEL_NAME} (No.)</TableHead>
+              <TableHead className="px-7">{dict.LABEL_SO_NUMBER}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
               <TableHead>{dict.LABEL_SO_DATE}</TableHead>
               <TableHead>{dict.LABEL_QUANTITY}</TableHead>
@@ -800,18 +933,15 @@ export default function SalesOrdersPage() {
                 <TableCell className="text-sm">{o.quantity}</TableCell>
                 <TableCell>
                   <div className={cn(
-                    "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase w-fit",
-                    o.status === "Approved" ? "bg-green-100 text-green-700" :
-                      o.status === "Rejected" ? "bg-red-100 text-red-700" :
-                        o.status === "Sent" ? "bg-blue-100 text-blue-700" :
-                          "bg-amber-100 text-amber-700"
+                    "px-2 py-0.5 rounded-full text-[10px] text-center font-bold uppercase w-fit",
+                    statusStyles[o.status] || statusStyles.Default
                   )}>
                     {o.status}
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(o)} disabled={!canEdit}>
+                    <Button variant="table_action" size="sm" onClick={() => handleOpenDialog(o)} disabled={!canEdit || o.status === "Partial" || o.status === "Fulfilled"}>
                       <Pencil className="size-4" />
                     </Button>
                     <Button variant="table_action" size="sm" onClick={() => handlePrint(o)} disabled={!canPrint}>
@@ -819,7 +949,12 @@ export default function SalesOrdersPage() {
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="secondary" size="icon" className="size-8">
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="size-8"
+                          disabled={o.status === "Partial" || o.status === "Fulfilled" || (!canEdit && !canDelete)}
+                        >
                           <ChevronDown className="size-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -830,8 +965,9 @@ export default function SalesOrdersPage() {
                           </DropdownMenuSubTrigger>
                           <DropdownMenuPortal>
                             <DropdownMenuSubContent>
-                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Approved')} className="text-green-600" disabled={!canEdit}>Approved</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Rejected')} className="text-red-700" disabled={!canEdit}>Rejected</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Draft')} className="text-zinc-600 dark:text-zinc-400 font-medium" disabled={!canEdit}>Draft</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Approved')} className="text-emerald-600 dark:text-emerald-400 font-medium" disabled={!canEdit}>Approved</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateStatus(o.id, 'Rejected')} className="text-rose-600 dark:text-rose-400 font-medium" disabled={!canEdit}>Rejected</DropdownMenuItem>
                             </DropdownMenuSubContent>
                           </DropdownMenuPortal>
                         </DropdownMenuSub>
@@ -868,6 +1004,37 @@ export default function SalesOrdersPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {previewDoc && (
+        <Gallery
+          docs={[previewDoc]}
+          initialIndex={0}
+          labels={{
+            previewDocument: "Preview Sales Order",
+            clickToPreview: "Click to preview",
+            previousPage: "Previous",
+            nextPage: "Next",
+            pageLabel: "Page",
+            closePreview: "Close",
+            download: "Download PDF",
+            sendEmail: "Send to Customer",
+            confirmEmail: "Are you sure you want to send this sales order to"
+          }}
+          onDownload={handleDownload}
+          onClose={() => setPreviewDoc(null)}
+        />
+      )}
+      <DeleteConfirmationDialog
+        isOpen={deleteConfirm !== null}
+        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+        title={dict.TITLE_DELETE || "Confirm Delete"}
+        description={dict.MSG_DELETE_CONFIRM?.split("%data%")[0] || "Are you sure you want to delete this item? This action cannot be undone."}
+        dataName={deleteConfirm?.so_number}
+        confirmText={dict.BUTTON_DELETE || "Delete"}
+        cancelText={dict.BUTTON_CANCEL || "Cancel"}
+        variant="destructive"
+      />
     </div>
   )
 }

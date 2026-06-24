@@ -35,13 +35,13 @@ export function SummaryCard({
   const iconBgClass = colorMap[color].split(' ')[2]
 
   return (
-    <Card className={cn("py-2 md:py-2 px-3 gap-1 md:gap-3 flex md:flex-row items-center justify-between border-l-4 shadow-none bg-white/50", borderClass, className)}>
+    <Card className={cn("py-2 md:py-2 px-3 gap-1 md:gap-3 flex md:flex-row items-center justify-between border-l-4 shadow-none bg-muted", borderClass, className)}>
       <div className={cn("size-5 md:size-6 rounded-full flex items-center justify-center shrink-0", iconBgClass, iconColorClass)}>
         <Icon className="size-3 md:size-4" />
       </div>
-      <p className="text-[8px] md:text-[10px] text-muted-foreground uppercase font-bold tracking-wider truncate">{label}</p>
+      <p className="text-[8px] md:text-[10px] uppercase font-bold tracking-wider truncate">{label}</p>
       <p className="text-[10px] md:text-[12px] text-center font-black truncate leading-tight">{value}</p>
-      {description && <p className="text-[9px] text-muted-foreground truncate opacity-80">{description}</p>}
+      {description && <p className="text-[9px] truncate opacity-80">{description}</p>}
     </Card>
   )
 }

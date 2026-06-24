@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
+import { notify } from "@/lib/notifications";
 import { pdfjs, Document, Page } from 'react-pdf';
 
 // Configure PDF.js worker
@@ -206,7 +207,7 @@ export default function Gallery({ docs, initialIndex, labels, onDownload, onSend
         } else {
             // Fallback to original behavior if no contacts array is provided
             if (!activeDoc.customerEmail) {
-                alert("Customer email not found.");
+                notify.error("Customer email not found.");
                 return;
             }
             if (confirm(`${labels.confirmEmail} ${activeDoc.customerEmail}?`)) {
