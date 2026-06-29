@@ -1,6 +1,14 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from "react"
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+  useCallback,
+  useMemo,
+} from "react"
 import { SITE_CONTENT, Language, SITE_CONFIG } from "@/lib/site-content"
 
 type DictionaryContextType = {
@@ -10,22 +18,24 @@ type DictionaryContextType = {
   config: typeof SITE_CONFIG
 }
 
-const DictionaryContext = createContext<DictionaryContextType | undefined>(undefined)
+const DictionaryContext = createContext<DictionaryContextType | undefined>(
+  undefined
+)
 
-export function DictionaryProvider({ 
-  children, 
-  initialLang = 'en' 
-}: { 
-  children: ReactNode,
+export function DictionaryProvider({
+  children,
+  initialLang = "en",
+}: {
+  children: ReactNode
   initialLang?: Language
 }) {
   const [lang, setLang] = useState<Language>(initialLang)
 
   // Load language from localStorage on mount (for persistent user preference)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       const savedLang = localStorage.getItem("nids_pref_lang") as Language
-      if (savedLang && (savedLang === 'en' || savedLang === 'id')) {
+      if (savedLang && (savedLang === "en" || savedLang === "id")) {
         setLang(savedLang)
       }
     }
@@ -33,24 +43,27 @@ export function DictionaryProvider({
 
   const setLanguage = useCallback((newLang: Language) => {
     setLang(newLang)
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       localStorage.setItem("nids_pref_lang", newLang)
     }
   }, [])
 
   // Update HTML lang attribute
   useEffect(() => {
-    if (typeof document !== 'undefined') {
+    if (typeof document !== "undefined") {
       document.documentElement.lang = lang
     }
   }, [lang])
 
-  const value = useMemo(() => ({
-    dict: SITE_CONTENT[lang],
-    lang,
-    setLanguage,
-    config: SITE_CONFIG
-  }), [lang, setLanguage])
+  const value = useMemo(
+    () => ({
+      dict: SITE_CONTENT[lang],
+      lang,
+      setLanguage,
+      config: SITE_CONFIG,
+    }),
+    [lang, setLanguage]
+  )
 
   return (
     <DictionaryContext.Provider value={value}>

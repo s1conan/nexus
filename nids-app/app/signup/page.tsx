@@ -25,14 +25,18 @@ export default function SignupPage() {
   const [success, setSuccess] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>
+  ) => {
     e.preventDefault()
     setIsSubmitting(true)
     setError("")
 
     // 1. Basic Frontend Validation
     if (!email.includes("@")) {
-      setError(dict.ERROR_INVALID_EMAIL || "Please enter a valid email address.")
+      setError(
+        dict.ERROR_INVALID_EMAIL || "Please enter a valid email address."
+      )
       setIsSubmitting(false)
       return
     }
@@ -41,23 +45,23 @@ export default function SignupPage() {
       // 2. Intelligent Phone Formatting
       const trimmed = phone.trim()
       let formattedPhone = ""
-      
-      if (trimmed.startsWith('+')) {
+
+      if (trimmed.startsWith("+")) {
         // If it already has a +, just keep digits after it
-        formattedPhone = '+' + trimmed.replace(/\D/g, '')
+        formattedPhone = "+" + trimmed.replace(/\D/g, "")
       } else {
-        let digits = trimmed.replace(/\D/g, '')
-        if (digits.startsWith('0')) {
-          formattedPhone = '+62' + digits.substring(1)
-        } else if (digits.startsWith('62')) {
-          formattedPhone = '+' + digits
+        let digits = trimmed.replace(/\D/g, "")
+        if (digits.startsWith("0")) {
+          formattedPhone = "+62" + digits.substring(1)
+        } else if (digits.startsWith("62")) {
+          formattedPhone = "+" + digits
         } else if (digits.length > 0) {
-          formattedPhone = '+62' + digits
+          formattedPhone = "+62" + digits
         }
       }
 
       // 3. Insert into profiles
-      const { error: insertError } = await supabase.from('profiles').insert({
+      const { error: insertError } = await supabase.from("profiles").insert({
         username: username.toLowerCase().trim(),
         email: email.toLowerCase().trim(),
         full_name: fullName.trim(),
@@ -69,18 +73,37 @@ export default function SignupPage() {
         const msg = insertError.message.toLowerCase()
         const detail = (insertError as any).details?.toLowerCase() || ""
 
-        if (insertError.code === '23505' || msg.includes("duplicate") || msg.includes("already exists")) {
+        if (
+          insertError.code === "23505" ||
+          msg.includes("duplicate") ||
+          msg.includes("already exists")
+        ) {
           if (msg.includes("email") || detail.includes("email")) {
-            setError(dict.ERROR_EMAIL_EXISTS || "This email address is already in use.")
+            setError(
+              dict.ERROR_EMAIL_EXISTS || "This email address is already in use."
+            )
           } else if (msg.includes("username") || detail.includes("username")) {
-            setError(dict.ERROR_USERNAME_EXISTS || "This username is already taken.")
+            setError(
+              dict.ERROR_USERNAME_EXISTS || "This username is already taken."
+            )
           } else if (msg.includes("phone") || detail.includes("phone")) {
-            setError(dict.ERROR_PHONE_EXISTS || "This phone number is already registered.")
+            setError(
+              dict.ERROR_PHONE_EXISTS ||
+                "This phone number is already registered."
+            )
           } else {
-            setError(dict.ERROR_INFO_EXISTS || "An account with this information already exists.")
+            setError(
+              dict.ERROR_INFO_EXISTS ||
+                "An account with this information already exists."
+            )
           }
-        } else if (msg.includes("row-level security") || msg.includes("permission denied")) {
-          setError(dict.ERROR_REG_RESTRICTED || "Registration is currently restricted.")
+        } else if (
+          msg.includes("row-level security") ||
+          msg.includes("permission denied")
+        ) {
+          setError(
+            dict.ERROR_REG_RESTRICTED || "Registration is currently restricted."
+          )
         } else {
           setError(dict.ERROR_SUBMIT_FAILED || "Unable to submit request.")
         }
@@ -99,8 +122,10 @@ export default function SignupPage() {
     return (
       <div className="login-background">
         <div className="login-card p-8 text-center">
-          <h1 className="text-2xl font-bold mb-4">{dict.SIGNUP_SUCCESS_TITLE}</h1>
-          <p className="text-muted-foreground mb-8 text-pretty">
+          <h1 className="mb-4 text-2xl font-bold">
+            {dict.SIGNUP_SUCCESS_TITLE}
+          </h1>
+          <p className="mb-8 text-pretty text-muted-foreground">
             {dict.SIGNUP_SUCCESS_MSG}
           </p>
           <Button asChild className="w-full">
@@ -116,7 +141,7 @@ export default function SignupPage() {
       <div className="login-card relative">
         <div className="lang-toggle-wrapper">
           <button
-            onClick={() => setLanguage(lang === 'en' ? 'id' : 'en')}
+            onClick={() => setLanguage(lang === "en" ? "id" : "en")}
             className="lang-toggle-btn"
             title={dict.TOOLTIP_LANG}
           >
@@ -136,17 +161,22 @@ export default function SignupPage() {
           <div className="banner-blur-mask" />
 
           <div className="absolute inset-x-0 bottom-0 z-20 p-8 pb-4">
-            <Link href="/" className="inline-flex items-center text-xs text-foreground/80 hover:text-white transition-colors mb-2">
+            <Link
+              href="/"
+              className="mb-2 inline-flex items-center text-xs text-foreground/80 transition-colors hover:text-white"
+            >
               <ArrowLeft className="mr-1 size-3" />
               {dict.LINK_BACK_LOGIN}
             </Link>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground/80">{dict.SIGNUP_TITLE}</h1>
-            <p className="text-foreground/80 mt-1 text-pretty text-xs">
-              {dict.SIGNUP_SUBTITLE.replace('Nexus', config.brandName)}
+            <h1 className="text-3xl font-bold tracking-tight text-foreground/80">
+              {dict.SIGNUP_TITLE}
+            </h1>
+            <p className="mt-1 text-xs text-pretty text-foreground/80">
+              {dict.SIGNUP_SUBTITLE.replace("Nexus", config.brandName)}
             </p>
-            <div className="min-h-[60px] flex flex-col justify-start mt-2">
+            <div className="mt-2 flex min-h-[60px] flex-col justify-start">
               {error && (
-                <div className="p-3 text-sm text-destructive bg-background/60 backdrop-blur-md border border-destructive/50 rounded-md animate-in fade-in zoom-in-95 duration-200">
+                <div className="animate-in rounded-md border border-destructive/50 bg-background/60 p-3 text-sm text-destructive backdrop-blur-md duration-200 zoom-in-95 fade-in">
                   {error}
                 </div>
               )}
@@ -159,8 +189,8 @@ export default function SignupPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="fullName">{dict.LABEL_FULL_NAME}</Label>
-                <div className="relative group">
-                  <User className="absolute left-3 top-3 size-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                <div className="group relative">
+                  <User className="absolute top-3 left-3 size-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
                   <Input
                     id="fullName"
                     placeholder="John Doe"
@@ -188,8 +218,8 @@ export default function SignupPage() {
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email">{dict.LABEL_EMAIL}</Label>
-              <div className="relative group">
-                <Mail className="absolute left-3 top-3 size-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+              <div className="group relative">
+                <Mail className="absolute top-3 left-3 size-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
                 <Input
                   id="email"
                   type="email"
@@ -204,8 +234,8 @@ export default function SignupPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="phone">{dict.LABEL_PHONE}</Label>
-              <div className="relative group">
-                <Phone className="absolute left-3 top-3 size-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+              <div className="group relative">
+                <Phone className="absolute top-3 left-3 size-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
                 <Input
                   id="phone"
                   type="tel"
@@ -219,17 +249,24 @@ export default function SignupPage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full h-11 mt-2" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <ButtonLoader />
-              ) : null}
-              {isSubmitting ? (dict.BUTTON_SIGNUP_LOADING || "Sending Request...") : (dict.BUTTON_SIGNUP || "Request Access")}
+            <Button
+              type="submit"
+              className="mt-2 h-11 w-full"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? <ButtonLoader /> : null}
+              {isSubmitting
+                ? dict.BUTTON_SIGNUP_LOADING || "Sending Request..."
+                : dict.BUTTON_SIGNUP || "Request Access"}
             </Button>
           </form>
 
           <div className="mt-8 text-center text-sm text-muted-foreground">
             {dict.TEXT_HAS_ACCOUNT}{" "}
-            <Link href="/" className="font-semibold text-primary underline-offset-4 hover:underline">
+            <Link
+              href="/"
+              className="font-semibold text-primary underline-offset-4 hover:underline"
+            >
               {dict.LINK_LOGIN}
             </Link>
           </div>

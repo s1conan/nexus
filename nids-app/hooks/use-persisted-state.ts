@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react"
 export function usePersistedState<T>(key: string, initialState: T) {
   // Use a ref to track if we've initialized from localStorage
   const isInitialized = useRef(false)
-  
+
   const [state, setState] = useState<T>(initialState)
 
   // Load from localStorage on mount
@@ -24,7 +24,7 @@ export function usePersistedState<T>(key: string, initialState: T) {
   // Save to localStorage whenever state changes
   useEffect(() => {
     if (!isInitialized.current) return
-    
+
     if (state === undefined || state === null) {
       localStorage.removeItem(key)
     } else {

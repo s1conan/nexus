@@ -12,7 +12,7 @@ import {
   Calendar,
   Filter,
   DollarSign,
-  Activity
+  Activity,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -30,8 +30,12 @@ export default function ProfitLossReportPage() {
   const [loading, setLoading] = useState(true)
 
   // Date Filters
-  const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"))
-  const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), "yyyy-MM-dd"))
+  const [startDate, setStartDate] = useState(
+    format(startOfMonth(new Date()), "yyyy-MM-dd")
+  )
+  const [endDate, setEndDate] = useState(
+    format(endOfMonth(new Date()), "yyyy-MM-dd")
+  )
 
   // Data States
   const [revenue, setRevenue] = useState<number>(0)
@@ -51,8 +55,12 @@ export default function ProfitLossReportPage() {
 
       if (invError) throw invError
 
-      const totalRevenue = invoices?.reduce((sum: number, inv: any) => sum + (Number(inv.subtotal) || 0), 0) || 0
-      
+      const totalRevenue =
+        invoices?.reduce(
+          (sum: number, inv: any) => sum + (Number(inv.subtotal) || 0),
+          0
+        ) || 0
+
       // 2. Fetch COGS (Sum of OUT inventory ledger in period)
       // Since inventory_ledger created_at is TIMESTAMPTZ, we'll filter by that
       const endDatePlusOne = new Date(endDate)
@@ -68,12 +76,16 @@ export default function ProfitLossReportPage() {
 
       if (ledError) throw ledError
 
-      const totalCogs = ledger?.reduce((sum: number, item: any) => sum + ((Number(item.quantity) || 0) * (Number(item.unit_cost) || 0)), 0) || 0
+      const totalCogs =
+        ledger?.reduce(
+          (sum: number, item: any) =>
+            sum + (Number(item.quantity) || 0) * (Number(item.unit_cost) || 0),
+          0
+        ) || 0
 
       setRevenue(totalRevenue)
       setCogs(totalCogs)
       setInvoiceCount(invoices?.length || 0)
-
     } catch (err: any) {
       notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
     } finally {
@@ -93,11 +105,13 @@ export default function ProfitLossReportPage() {
 
   if (!canViewReport && !loading) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
-        <div className="text-center space-y-2">
-          <AlertCircle className="size-8 text-destructive mx-auto" />
+      <div className="flex h-[50vh] items-center justify-center">
+        <div className="space-y-2 text-center">
+          <AlertCircle className="mx-auto size-8 text-destructive" />
           <h2 className="text-lg font-semibold">{dict.MSG_ACCESS_DENIED}</h2>
-          <p className="text-sm text-muted-foreground">{dict.MSG_NO_PERMISSION}</p>
+          <p className="text-sm text-muted-foreground">
+            {dict.MSG_NO_PERMISSION}
+          </p>
         </div>
       </div>
     )
@@ -107,16 +121,18 @@ export default function ProfitLossReportPage() {
     <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title">
-          <Activity className="size-5 mr-2 inline-block text-primary" />
+          <Activity className="mr-2 inline-block size-5 text-primary" />
           {dict.MENU_REPORTS_PROFIT_LOSS || "Profit & Loss Statement"}
         </h1>
       </div>
 
-      <div className="action-bar items-end gap-4 shrink-0 mb-6">
-        <div className="grid gap-1.5 w-48">
-          <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">{dict.LABEL_FROM_DATE || "From"}</label>
+      <div className="action-bar mb-6 shrink-0 items-end gap-4">
+        <div className="grid w-48 gap-1.5">
+          <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
+            {dict.LABEL_FROM_DATE || "From"}
+          </label>
           <div className="relative">
-            <Calendar className="absolute left-2.5 top-2.5 size-4 text-muted-foreground z-10" />
+            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground" />
             <Input
               type="date"
               className="pl-8"
@@ -126,10 +142,12 @@ export default function ProfitLossReportPage() {
           </div>
         </div>
 
-        <div className="grid gap-1.5 w-48">
-          <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">{dict.LABEL_TO_DATE || "To"}</label>
+        <div className="grid w-48 gap-1.5">
+          <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
+            {dict.LABEL_TO_DATE || "To"}
+          </label>
           <div className="relative">
-            <Calendar className="absolute left-2.5 top-2.5 size-4 text-muted-foreground z-10" />
+            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground" />
             <Input
               type="date"
               className="pl-8"
@@ -140,103 +158,205 @@ export default function ProfitLossReportPage() {
         </div>
 
         <Button variant="outline" onClick={fetchReport} className="h-10">
-          <Filter className="size-4 mr-2" />
+          <Filter className="mr-2 size-4" />
           {dict.BUTTON_REFRESH || "Refresh"}
         </Button>
       </div>
 
       {loading ? (
-        <div className="flex-1 flex justify-center items-center">
+        <div className="flex flex-1 items-center justify-center">
           <SectionLoader />
         </div>
       ) : (
-        <div className="flex-1 overflow-auto custom-scrollbar">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 max-w-5xl">
+        <div className="custom-scrollbar flex-1 overflow-auto">
+          <div className="mb-8 grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-3">
             {/* Revenue Card */}
-            <Card className="p-6 flex flex-col justify-center border-l-4 border-l-emerald-500 shadow-sm">
-              <div className="flex justify-between items-start mb-4">
-                <div className="size-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700">
+            <Card className="flex flex-col justify-center border-l-4 border-l-emerald-500 p-6 shadow-sm">
+              <div className="mb-4 flex items-start justify-between">
+                <div className="flex size-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
                   <DollarSign className="size-6" />
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Transactions</p>
+                  <p className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+                    Transactions
+                  </p>
                   <p className="text-lg font-bold">{invoiceCount} Invoices</p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground uppercase font-bold tracking-wider mb-1">Total Revenue</p>
-              <p className="text-3xl font-black text-emerald-700 truncate">{SITE_CONFIG.currencySymbol} {revenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
+              <p className="mb-1 text-sm font-bold tracking-wider text-muted-foreground uppercase">
+                Total Revenue
+              </p>
+              <p className="truncate text-3xl font-black text-emerald-700">
+                {SITE_CONFIG.currencySymbol}{" "}
+                {revenue.toLocaleString(undefined, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
+              </p>
             </Card>
 
             {/* COGS Card */}
-            <Card className="p-6 flex flex-col justify-center border-l-4 border-l-amber-500 shadow-sm">
-              <div className="flex justify-between items-start mb-4">
-                <div className="size-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-700">
+            <Card className="flex flex-col justify-center border-l-4 border-l-amber-500 p-6 shadow-sm">
+              <div className="mb-4 flex items-start justify-between">
+                <div className="flex size-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
                   <TrendingDown className="size-6" />
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground uppercase font-bold tracking-wider mb-1">Cost of Goods Sold (HPP)</p>
-              <p className="text-3xl font-black text-amber-700 truncate">{SITE_CONFIG.currencySymbol} {cogs.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
+              <p className="mb-1 text-sm font-bold tracking-wider text-muted-foreground uppercase">
+                Cost of Goods Sold (HPP)
+              </p>
+              <p className="truncate text-3xl font-black text-amber-700">
+                {SITE_CONFIG.currencySymbol}{" "}
+                {cogs.toLocaleString(undefined, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
+              </p>
             </Card>
 
             {/* Gross Profit Card */}
-            <Card className={cn("p-6 flex flex-col justify-center border-l-4 shadow-sm", grossProfit >= 0 ? "border-l-primary" : "border-l-destructive")}>
-              <div className="flex justify-between items-start mb-4">
-                <div className={cn("size-12 rounded-full flex items-center justify-center", grossProfit >= 0 ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive")}>
-                  {grossProfit >= 0 ? <TrendingUp className="size-6" /> : <TrendingDown className="size-6" />}
+            <Card
+              className={cn(
+                "flex flex-col justify-center border-l-4 p-6 shadow-sm",
+                grossProfit >= 0 ? "border-l-primary" : "border-l-destructive"
+              )}
+            >
+              <div className="mb-4 flex items-start justify-between">
+                <div
+                  className={cn(
+                    "flex size-12 items-center justify-center rounded-full",
+                    grossProfit >= 0
+                      ? "bg-primary/10 text-primary"
+                      : "bg-destructive/10 text-destructive"
+                  )}
+                >
+                  {grossProfit >= 0 ? (
+                    <TrendingUp className="size-6" />
+                  ) : (
+                    <TrendingDown className="size-6" />
+                  )}
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Margin</p>
-                  <p className={cn("text-lg font-bold", grossProfit >= 0 ? "text-primary" : "text-destructive")}>{grossMargin.toFixed(2)}%</p>
+                  <p className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+                    Margin
+                  </p>
+                  <p
+                    className={cn(
+                      "text-lg font-bold",
+                      grossProfit >= 0 ? "text-primary" : "text-destructive"
+                    )}
+                  >
+                    {grossMargin.toFixed(2)}%
+                  </p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground uppercase font-bold tracking-wider mb-1">Gross Profit</p>
-              <p className={cn("text-3xl font-black truncate", grossProfit >= 0 ? "text-primary" : "text-destructive")}>
-                {SITE_CONFIG.currencySymbol} {grossProfit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              <p className="mb-1 text-sm font-bold tracking-wider text-muted-foreground uppercase">
+                Gross Profit
+              </p>
+              <p
+                className={cn(
+                  "truncate text-3xl font-black",
+                  grossProfit >= 0 ? "text-primary" : "text-destructive"
+                )}
+              >
+                {SITE_CONFIG.currencySymbol}{" "}
+                {grossProfit.toLocaleString(undefined, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
               </p>
             </Card>
           </div>
 
           {/* Detailed Statement view */}
           <Card className="max-w-5xl overflow-hidden">
-            <div className="p-6 border-b bg-muted/20">
-              <h2 className="text-lg font-bold uppercase tracking-wider">{dict.MENU_REPORTS_PROFIT_LOSS || "Profit & Loss Statement"}</h2>
-              <p className="text-sm text-muted-foreground">For the period {format(new Date(startDate), "dd MMM yyyy")} to {format(new Date(endDate), "dd MMM yyyy")}</p>
+            <div className="border-b bg-muted/20 p-6">
+              <h2 className="text-lg font-bold tracking-wider uppercase">
+                {dict.MENU_REPORTS_PROFIT_LOSS || "Profit & Loss Statement"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                For the period {format(new Date(startDate), "dd MMM yyyy")} to{" "}
+                {format(new Date(endDate), "dd MMM yyyy")}
+              </p>
             </div>
-            
+
             <div className="p-0">
               <table className="w-full text-sm">
                 <tbody>
                   {/* Revenue Section */}
                   <tr className="bg-muted/10">
-                    <td className="p-4 font-bold text-lg" colSpan={2}>Income</td>
+                    <td className="p-4 text-lg font-bold" colSpan={2}>
+                      Income
+                    </td>
                   </tr>
                   <tr className="border-b">
                     <td className="p-4 pl-8">Sales Revenue (Invoices)</td>
-                    <td className="p-4 text-right font-mono font-medium">{SITE_CONFIG.currencySymbol} {revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="p-4 text-right font-mono font-medium">
+                      {SITE_CONFIG.currencySymbol}{" "}
+                      {revenue.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
                   </tr>
                   <tr className="border-b-2 border-primary/20 bg-primary/5">
                     <td className="p-4 pl-8 font-bold">Total Income</td>
-                    <td className="p-4 text-right font-mono font-bold text-emerald-700">{SITE_CONFIG.currencySymbol} {revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="p-4 text-right font-mono font-bold text-emerald-700">
+                      {SITE_CONFIG.currencySymbol}{" "}
+                      {revenue.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
                   </tr>
 
                   {/* COGS Section */}
                   <tr className="bg-muted/10">
-                    <td className="p-4 font-bold text-lg" colSpan={2}>Cost of Goods Sold (COGS)</td>
+                    <td className="p-4 text-lg font-bold" colSpan={2}>
+                      Cost of Goods Sold (COGS)
+                    </td>
                   </tr>
                   <tr className="border-b">
                     <td className="p-4 pl-8">Inventory Outbound Cost (HPP)</td>
-                    <td className="p-4 text-right font-mono font-medium">{SITE_CONFIG.currencySymbol} {cogs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="p-4 text-right font-mono font-medium">
+                      {SITE_CONFIG.currencySymbol}{" "}
+                      {cogs.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
                   </tr>
                   <tr className="border-b-2 border-amber-500/20 bg-amber-500/5">
                     <td className="p-4 pl-8 font-bold">Total COGS</td>
-                    <td className="p-4 text-right font-mono font-bold text-amber-700">{SITE_CONFIG.currencySymbol} {cogs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="p-4 text-right font-mono font-bold text-amber-700">
+                      {SITE_CONFIG.currencySymbol}{" "}
+                      {cogs.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
                   </tr>
 
                   {/* Profit Section */}
-                  <tr className={cn(grossProfit >= 0 ? "bg-primary/10" : "bg-destructive/10")}>
-                    <td className="p-6 font-black text-xl uppercase tracking-wider">Gross Profit</td>
-                    <td className={cn("p-6 text-right font-mono font-black text-xl", grossProfit >= 0 ? "text-primary" : "text-destructive")}>
-                      {SITE_CONFIG.currencySymbol} {grossProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <tr
+                    className={cn(
+                      grossProfit >= 0 ? "bg-primary/10" : "bg-destructive/10"
+                    )}
+                  >
+                    <td className="p-6 text-xl font-black tracking-wider uppercase">
+                      Gross Profit
+                    </td>
+                    <td
+                      className={cn(
+                        "p-6 text-right font-mono text-xl font-black",
+                        grossProfit >= 0 ? "text-primary" : "text-destructive"
+                      )}
+                    >
+                      {SITE_CONFIG.currencySymbol}{" "}
+                      {grossProfit.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </td>
                   </tr>
                 </tbody>

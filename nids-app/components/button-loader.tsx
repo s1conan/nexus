@@ -12,7 +12,5 @@ interface ButtonLoaderProps {
  * Inherits the current text color.
  */
 export function ButtonLoader({ className }: ButtonLoaderProps) {
-  return (
-    <Loader2 className={cn("size-4 animate-spin", className)} />
-  )
+  return <Loader2 className={cn("size-4 animate-spin", className)} />
 }

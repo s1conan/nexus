@@ -10,7 +10,7 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow
+  TableRow,
 } from "@/components/ui/table"
 import { Card } from "@/components/ui/card"
 import {
@@ -21,13 +21,19 @@ import {
   Package,
   Calendar,
   Filter,
-  DollarSign
+  DollarSign,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
-import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns"
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  isWithinInterval,
+  parseISO,
+} from "date-fns"
 import { Button } from "@/components/ui/button"
 import { SITE_CONFIG } from "@/lib/site-content"
 
@@ -49,15 +55,21 @@ export default function SalesOrderReportPage() {
   const [searchQuery, setSearchQuery] = useState("")
 
   // Date Filters
-  const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"))
-  const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), "yyyy-MM-dd"))
+  const [startDate, setStartDate] = useState(
+    format(startOfMonth(new Date()), "yyyy-MM-dd")
+  )
+  const [endDate, setEndDate] = useState(
+    format(endOfMonth(new Date()), "yyyy-MM-dd")
+  )
 
   async function fetchOrders() {
     setLoading(true)
     try {
       const { data, error } = await supabase
         .from("sales_orders") // table name remains same
-        .select("*, supplier:companies(id, name), product:products(id, name, sku)")
+        .select(
+          "*, supplier:companies(id, name), product:products(id, name, sku)"
+        )
         .order("so_date", { ascending: false })
 
       if (error) throw error
@@ -74,24 +86,34 @@ export default function SalesOrderReportPage() {
   }, [])
 
   const filteredOrders = useMemo(() => {
-    return orders.filter(o => {
+    return orders.filter((o) => {
       const dateMatch = isWithinInterval(parseISO(o.so_date), {
         start: parseISO(startDate),
-        end: parseISO(endDate)
+        end: parseISO(endDate),
       })
 
       const searchMatch =
         o.so_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (o.supplier?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (o.product?.name || "").toLowerCase().includes(searchQuery.toLowerCase())
+        (o.supplier?.name || "")
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
+        (o.product?.name || "")
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())
 
       return dateMatch && searchMatch
     })
   }, [orders, searchQuery, startDate, endDate])
 
   const stats = useMemo(() => {
-    const totalAmount = filteredOrders.reduce((sum, o) => sum + (o.quantity * o.unit_price || 0), 0)
-    const totalQty = filteredOrders.reduce((sum, o) => sum + (o.quantity || 0), 0)
+    const totalAmount = filteredOrders.reduce(
+      (sum, o) => sum + (o.quantity * o.unit_price || 0),
+      0
+    )
+    const totalQty = filteredOrders.reduce(
+      (sum, o) => sum + (o.quantity || 0),
+      0
+    )
     return { totalAmount, totalQty, count: filteredOrders.length }
   }, [filteredOrders])
 
@@ -99,11 +121,13 @@ export default function SalesOrderReportPage() {
 
   if (!canViewReport && !loading && !authLoading) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
-        <div className="text-center space-y-2">
-          <AlertCircle className="size-8 text-destructive mx-auto" />
+      <div className="flex h-[50vh] items-center justify-center">
+        <div className="space-y-2 text-center">
+          <AlertCircle className="mx-auto size-8 text-destructive" />
           <h2 className="text-lg font-semibold">{dict.MSG_ACCESS_DENIED}</h2>
-          <p className="text-sm text-muted-foreground">{dict.MSG_NO_PERMISSION}</p>
+          <p className="text-sm text-muted-foreground">
+            {dict.MSG_NO_PERMISSION}
+          </p>
         </div>
       </div>
     )
@@ -113,51 +137,71 @@ export default function SalesOrderReportPage() {
     <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title">
-          <ShoppingBag className="size-5 mr-2 inline-block text-primary" />
+          <ShoppingBag className="mr-2 inline-block size-5 text-primary" />
           {dict.MENU_REPORTS_SO}
         </h1>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 shrink-0">
-        <Card className="p-4 flex items-center gap-4 border-l-4 border-l-primary">
-          <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+      <div className="mb-6 grid shrink-0 grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="flex items-center gap-4 border-l-4 border-l-primary p-4">
+          <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
             <DollarSign className="size-5" />
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{dict.LABEL_TOTAL_AMOUNT || "Total Amount"}</p>
-            <p className="text-xl font-black">{SITE_CONFIG.currencySymbol} {stats.totalAmount.toLocaleString()}</p>
-            <p className="text-[10px] text-muted-foreground">{stats.count} {dict.MENU_SALES_ORDER}</p>
+            <p className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+              {dict.LABEL_TOTAL_AMOUNT || "Total Amount"}
+            </p>
+            <p className="text-xl font-black">
+              {SITE_CONFIG.currencySymbol} {stats.totalAmount.toLocaleString()}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {stats.count} {dict.MENU_SALES_ORDER}
+            </p>
           </div>
         </Card>
 
-        <Card className="p-4 flex items-center gap-4 border-l-4 border-l-amber-500">
-          <div className="size-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700">
+        <Card className="flex items-center gap-4 border-l-4 border-l-amber-500 p-4">
+          <div className="flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
             <Package className="size-5" />
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{dict.LABEL_QUANTITY || "Quantity"}</p>
-            <p className="text-xl font-black">{stats.totalQty.toLocaleString()} L</p>
-            <p className="text-[10px] text-muted-foreground">Total volume ordered</p>
+            <p className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+              {dict.LABEL_QUANTITY || "Quantity"}
+            </p>
+            <p className="text-xl font-black">
+              {stats.totalQty.toLocaleString()} L
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Total volume ordered
+            </p>
           </div>
         </Card>
 
-        <Card className="p-4 flex items-center gap-4 border-l-4 border-l-blue-500">
-          <div className="size-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700">
+        <Card className="flex items-center gap-4 border-l-4 border-l-blue-500 p-4">
+          <div className="flex size-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
             <TrendingUp className="size-5" />
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{dict.LABEL_STATUS || "Status"}</p>
-            <p className="text-xl font-black">{dict.LABEL_ACTIVE || "Active"}</p>
-            <p className="text-[10px] text-muted-foreground">Active sales summary</p>
+            <p className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+              {dict.LABEL_STATUS || "Status"}
+            </p>
+            <p className="text-xl font-black">
+              {dict.LABEL_ACTIVE || "Active"}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Active sales summary
+            </p>
           </div>
         </Card>
       </div>
 
-      <div className="action-bar items-end gap-4 shrink-0">
-        <div className="grid gap-1.5 flex-1 max-w-sm">
-          <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">{dict.PLACEHOLDER_SEARCH || "Search"}</label>
+      <div className="action-bar shrink-0 items-end gap-4">
+        <div className="grid max-w-sm flex-1 gap-1.5">
+          <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
+            {dict.PLACEHOLDER_SEARCH || "Search"}
+          </label>
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+            <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
             <Input
               placeholder={`${dict.LABEL_SO_NUMBER}, ${dict.LABEL_COMPANY_NAME}...`}
               className="pl-8"
@@ -167,10 +211,12 @@ export default function SalesOrderReportPage() {
           </div>
         </div>
 
-        <div className="grid gap-1.5 w-40">
-          <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">{dict.LABEL_FROM_DATE || "From"}</label>
+        <div className="grid w-40 gap-1.5">
+          <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
+            {dict.LABEL_FROM_DATE || "From"}
+          </label>
           <div className="relative">
-            <Calendar className="absolute left-2.5 top-2.5 size-4 text-muted-foreground z-10" />
+            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground" />
             <Input
               type="date"
               className="pl-8"
@@ -180,10 +226,12 @@ export default function SalesOrderReportPage() {
           </div>
         </div>
 
-        <div className="grid gap-1.5 w-40">
-          <label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">{dict.LABEL_TO_DATE || "To"}</label>
+        <div className="grid w-40 gap-1.5">
+          <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
+            {dict.LABEL_TO_DATE || "To"}
+          </label>
           <div className="relative">
-            <Calendar className="absolute left-2.5 top-2.5 size-4 text-muted-foreground z-10" />
+            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground" />
             <Input
               type="date"
               className="pl-8"
@@ -194,12 +242,12 @@ export default function SalesOrderReportPage() {
         </div>
 
         <Button variant="outline" onClick={fetchOrders} className="h-10">
-          <Filter className="size-4 mr-2" />
+          <Filter className="mr-2 size-4" />
           {dict.BUTTON_REFRESH || "Refresh"}
         </Button>
       </div>
 
-      <Card className="data-card flex-1 overflow-auto custom-scrollbar">
+      <Card className="data-card custom-scrollbar flex-1 overflow-auto">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
             <TableRow>
@@ -207,54 +255,74 @@ export default function SalesOrderReportPage() {
               <TableHead>{dict.LABEL_SO_DATE}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
               <TableHead>{dict.LABEL_PRODUCT_NAME}</TableHead>
-              <TableHead className="text-right">{dict.LABEL_QUANTITY}</TableHead>
-              <TableHead className="text-right">{dict.LABEL_GRAND_TOTAL}</TableHead>
+              <TableHead className="text-right">
+                {dict.LABEL_QUANTITY}
+              </TableHead>
+              <TableHead className="text-right">
+                {dict.LABEL_GRAND_TOTAL}
+              </TableHead>
               <TableHead>{dict.LABEL_STATUS}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="p-0"><SectionLoader /></TableCell>
+                <TableCell colSpan={7} className="p-0">
+                  <SectionLoader />
+                </TableCell>
               </TableRow>
             ) : filteredOrders.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                <TableCell
+                  colSpan={7}
+                  className="py-10 text-center text-muted-foreground"
+                >
                   {dict.NO_DATA}
                 </TableCell>
               </TableRow>
-            ) : filteredOrders.map((o) => (
-              <TableRow key={o.id}>
-                <TableCell className="px-7">
-                  <span className="font-bold text-sm font-mono">{o.so_number}</span>
-                </TableCell>
-                <TableCell className="text-sm">
-                  {format(parseISO(o.so_date), "dd MMM yyyy")}
-                </TableCell>
-                <TableCell>
-                  <span className="font-medium text-sm">{o.supplier?.name}</span>
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {o.product?.name}
-                </TableCell>
-                <TableCell className="text-right font-bold text-sm">
-                  {o.quantity?.toLocaleString()} L
-                </TableCell>
-                <TableCell className="text-right">
-                  <span className="font-black text-sm text-primary">
-                    {SITE_CONFIG.currencySymbol} {Number(o.total_amount || (o.quantity * o.unit_price)).toLocaleString()}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <span className={cn(
-                    "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                    statusStyles[o.status || 'Draft']
-                  )}>
-                    {o.status || 'Draft'}
-                  </span>
-                </TableCell>
-              </TableRow>
-            ))}
+            ) : (
+              filteredOrders.map((o) => (
+                <TableRow key={o.id}>
+                  <TableCell className="px-7">
+                    <span className="font-mono text-sm font-bold">
+                      {o.so_number}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {format(parseISO(o.so_date), "dd MMM yyyy")}
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm font-medium">
+                      {o.supplier?.name}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {o.product?.name}
+                  </TableCell>
+                  <TableCell className="text-right text-sm font-bold">
+                    {o.quantity?.toLocaleString()} L
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <span className="text-sm font-black text-primary">
+                      {SITE_CONFIG.currencySymbol}{" "}
+                      {Number(
+                        o.total_amount || o.quantity * o.unit_price
+                      ).toLocaleString()}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={cn(
+                        "rounded px-2 py-0.5 text-[10px] font-bold uppercase",
+                        statusStyles[o.status || "Draft"]
+                      )}
+                    >
+                      {o.status || "Draft"}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </Card>

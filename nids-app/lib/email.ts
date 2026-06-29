@@ -1,4 +1,4 @@
-import { Resend } from 'resend'
+import { Resend } from "resend"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -10,19 +10,30 @@ interface SendEmailOptions {
   from?: string
   category?: "auth" | "ordinary"
   attachments?: {
-    filename: string;
-    content: string; // Base64 encoded string
-  }[];
+    filename: string
+    content: string // Base64 encoded string
+  }[]
 }
 
 /**
  * Shared utility for sending emails via Resend.
  * This can be used in server-side routes or background jobs.
  */
-export async function sendEmail({ to, cc, subject, html, from, category, attachments }: SendEmailOptions) {
-  const defaultFrom = category === "auth"
-    ? process.env.RESEND_FROM_EMAIL_AUTH || process.env.RESEND_FROM_EMAIL || 'Nexus <onboarding@resend.dev>'
-    : from || process.env.RESEND_FROM_EMAIL || 'Nexus <onboarding@resend.dev>'
+export async function sendEmail({
+  to,
+  cc,
+  subject,
+  html,
+  from,
+  category,
+  attachments,
+}: SendEmailOptions) {
+  const defaultFrom =
+    category === "auth"
+      ? process.env.RESEND_FROM_EMAIL_AUTH ||
+        process.env.RESEND_FROM_EMAIL ||
+        "Nexus <onboarding@resend.dev>"
+      : from || process.env.RESEND_FROM_EMAIL || "Nexus <onboarding@resend.dev>"
   try {
     const { data, error } = await resend.emails.send({
       from: from || defaultFrom,
@@ -34,13 +45,13 @@ export async function sendEmail({ to, cc, subject, html, from, category, attachm
     })
 
     if (error) {
-      console.error('Email Service Error:', error)
+      console.error("Email Service Error:", error)
       throw new Error(error.message)
     }
 
     return { success: true, id: data?.id }
   } catch (err: any) {
-    console.error('Email Service Unexpected Error:', err)
+    console.error("Email Service Unexpected Error:", err)
     throw err
   }
 }
@@ -50,11 +61,11 @@ export async function sendEmail({ to, cc, subject, html, from, category, attachm
  */
 export const emailTemplates = {
   invitation: (fullName: string, inviteLink: string) => ({
-    subject: 'Welcome to Nexus - Complete Your Account',
+    subject: "Welcome to Nexus - Complete Your Account",
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; background: linear-gradient(180deg,rgba(0, 209, 129, 1) 0%, rgba(255, 255, 255, 1) 25%);">
         <h1 style="color: #0f172a; font-size: 24px; margin-bottom: 16px;">Welcome to Nexus</h1>
-		<h3>Hello ${fullName || 'there'},</h3>
+		<h3>Hello ${fullName || "there"},</h3>
         <p style="color: #475569; font-size: 16px; line-height: 24px">
           Your account for Nexus has been approved! To get started, please click the button below to set your password.
 		</p>
@@ -77,15 +88,15 @@ export const emailTemplates = {
           &copy; ${new Date().getFullYear()} Nexus. All rights reserved.
         </p>
       </div>
-    `
+    `,
   }),
 
   forgotPassword: (fullName: string, resetLink: string) => ({
-    subject: 'Password Reset Request - Nexus',
+    subject: "Password Reset Request - Nexus",
     html: `
 	  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;background: linear-gradient(180deg,rgba(235, 192, 0, 1) 0%, rgba(255, 255, 255, 1) 25%);">
         <h1 style="color: #0f172a; font-size: 24px; margin-bottom: 16px;">Reset Your Password</h1>
-		<h3>Hello ${fullName || 'there'},</h3>
+		<h3>Hello ${fullName || "there"},</h3>
         <p style="color: #475569; font-size: 16px; line-height: 24px">
           We received a request to reset the password for your Nexus account. Click the button below to choose a new password.
 		  <p style="color: #94a3b8; font-size: 14px; line-height: 20px;">
@@ -115,15 +126,15 @@ export const emailTemplates = {
           &copy; ${new Date().getFullYear()} Nexus. All rights reserved.
         </p>
       </div>
-    `
+    `,
   }),
 
   deactivation: (fullName: string) => ({
-    subject: 'Account Deactivated - Nexus',
+    subject: "Account Deactivated - Nexus",
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;background: linear-gradient(180deg,rgba(209, 0, 80, 1) 0%, rgba(255, 255, 255, 1) 25%);">
         <h1 style="color: #0f172a; font-size: 24px; margin-bottom: 16px;">Account Deactivated</h1>
-		<h3>Hello ${fullName || 'there'},</h3>
+		<h3>Hello ${fullName || "there"},</h3>
 		<p style="color: #475569; font-size: 16px; line-height: 24px;">
           We would like to inform you that your account for Nexus has been deactivated. You will no longer be able to log in or access Nexus.
 		</p>
@@ -142,16 +153,20 @@ export const emailTemplates = {
           &copy; ${new Date().getFullYear()} Nexus. All rights reserved.
         </p>
       </div>
-    `
+    `,
   }),
 
   // Placeholder for future use
   invoice: (orderId: string, amount: string) => ({
     subject: `Invoice for Order #${orderId}`,
-    html: `<h1>Invoice</h1><p>Amount: ${amount}</p>`
+    html: `<h1>Invoice</h1><p>Amount: ${amount}</p>`,
   }),
 
-  quotation: (companyName: string, quotationNumber: string, content: string) => ({
+  quotation: (
+    companyName: string,
+    quotationNumber: string,
+    content: string
+  ) => ({
     subject: `Quotation ${quotationNumber} from PT Anugerah Buana Sriwijaya`,
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
@@ -173,6 +188,6 @@ export const emailTemplates = {
           &copy; ${new Date().getFullYear()} PT Anugerah Buana Sriwijaya. All rights reserved.
         </p>
       </div>
-    `
-  })
+    `,
+  }),
 }

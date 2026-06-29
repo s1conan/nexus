@@ -1,22 +1,29 @@
-import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { NextResponse } from "next/server"
+import { supabaseAdmin } from "@/lib/supabase-admin"
 
 export async function POST(request: Request) {
   try {
     const { uuid, number, type } = await request.json()
 
     if (!uuid || !number || !type) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 }
+      )
     }
 
-    const sanitize = (str: string) => str.replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
+    const sanitize = (str: string) =>
+      str.replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
     const sanitizedInput = sanitize(number)
 
     // Configuration for different document types
-    const config: Record<string, { table: string, select: string, numberField: string }> = {
-      'quotation': {
-        table: 'quotations',
-        numberField: 'quotation_number',
+    const config: Record<
+      string,
+      { table: string; select: string; numberField: string }
+    > = {
+      quotation: {
+        table: "quotations",
+        numberField: "quotation_number",
         select: `
           id,
           quotation_number,
@@ -39,16 +46,27 @@ export async function POST(request: Request) {
           is_closing_enabled,
           company:companies(name, details),
           product:products(sku, name, base_price)
-        `
+        `,
       },
       // Placeholders for future types
-      'invoice': { table: 'invoices', numberField: 'invoice_number', select: '*' },
-      'delivery-order': { table: 'delivery_orders', numberField: 'do_number', select: '*' }
+      invoice: {
+        table: "invoices",
+        numberField: "invoice_number",
+        select: "*",
+      },
+      "delivery-order": {
+        table: "delivery_orders",
+        numberField: "do_number",
+        select: "*",
+      },
     }
 
     const docConfig = config[type]
     if (!docConfig) {
-      return NextResponse.json({ error: 'Invalid document type' }, { status: 400 })
+      return NextResponse.json(
+        { error: "Invalid document type" },
+        { status: 400 }
+      )
     }
 
     // Use admin client to bypass RLS for this specific public verification task
@@ -59,7 +77,7 @@ export async function POST(request: Request) {
       .single()
 
     if (error || !document) {
-      return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+      return NextResponse.json({ error: "Document not found" }, { status: 404 })
     }
 
     if (sanitize((document as any)[docConfig.numberField]) === sanitizedInput) {
@@ -76,11 +94,16 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ success: true, document, companyInfo })
     } else {
-      return NextResponse.json({ error: 'Invalid document number' }, { status: 401 })
+      return NextResponse.json(
+        { error: "Invalid document number" },
+        { status: 401 }
+      )
     }
-
   } catch (err: any) {
-    console.error('API Verify Document Error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error("API Verify Document Error:", err)
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    )
   }
 }

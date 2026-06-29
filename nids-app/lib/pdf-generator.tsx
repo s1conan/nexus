@@ -1,5 +1,14 @@
 ﻿import React from "react"
-import { Document, Page, Text, View, StyleSheet, Image, Font, pdf } from "@react-pdf/renderer"
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+  Image,
+  Font,
+  pdf,
+} from "@react-pdf/renderer"
 import { format } from "date-fns"
 import { id as dateLocaleId } from "date-fns/locale"
 import { formatNumber } from "./formatters"
@@ -41,7 +50,13 @@ export interface QuotationData {
   note: string
   terms_conditions: string
   closing_remarks: string
-  bank_accounts: { name: string; bank_name?: string; account_number: string; account_name: string; branch: string }[]
+  bank_accounts: {
+    name: string
+    bank_name?: string
+    account_number: string
+    account_name: string
+    branch: string
+  }[]
   tax_details: { name: string; rate: number; enabled: boolean }[]
   qr_code_url?: string
 }
@@ -64,7 +79,39 @@ export interface SalesOrderData {
   delivery_address: string
   note: string
   is_note_enabled: boolean
-  bank_accounts: { name: string; bank_name?: string; account_number: string; account_name: string; branch: string }[]
+  bank_accounts: {
+    name: string
+    bank_name?: string
+    account_number: string
+    account_name: string
+    branch: string
+  }[]
+}
+
+export interface InvoiceData {
+  id: string
+  invoice_number: string
+  issue_date: string
+  due_date: string
+  company_name: string
+  do_number?: string
+  so_number?: string
+  quantity: number
+  unit_price: number
+  delivery_price_per_litre: number
+  subtotal: number
+  tax_details: { name: string; rate: number; enabled: boolean }[]
+  total_amount: number
+  note: string
+  is_note_enabled: boolean
+  bank_accounts: {
+    name: string
+    bank_name?: string
+    account_number: string
+    account_name: string
+    branch: string
+  }[]
+  qr_code_url?: string
 }
 
 export interface DeliveryOrderCompartment {
@@ -100,14 +147,31 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>?/gm, "").replace(/&nbsp;/g, " ")
 }
 
-function createPDFElement(tag: string, children: React.ReactNode[], key: number, meta?: { marker?: string }) {
+function createPDFElement(
+  tag: string,
+  children: React.ReactNode[],
+  key: number,
+  meta?: { marker?: string }
+) {
   switch (tag) {
     case "p":
-      return <Text key={key} style={a4Styles.innerText}>{children}</Text>
+      return (
+        <Text key={key} style={a4Styles.innerText}>
+          {children}
+        </Text>
+      )
     case "ul":
-      return <View key={key} style={a4Styles.ul}>{children}</View>
+      return (
+        <View key={key} style={a4Styles.ul}>
+          {children}
+        </View>
+      )
     case "ol":
-      return <View key={key} style={a4Styles.ol}>{children}</View>
+      return (
+        <View key={key} style={a4Styles.ol}>
+          {children}
+        </View>
+      )
     case "li":
       return (
         <View key={key} style={a4Styles.li}>
@@ -117,12 +181,24 @@ function createPDFElement(tag: string, children: React.ReactNode[], key: number,
       )
     case "b":
     case "strong":
-      return <Text key={key} style={{ fontWeight: "bold" }}>{children}</Text>
+      return (
+        <Text key={key} style={{ fontWeight: "bold" }}>
+          {children}
+        </Text>
+      )
     case "i":
     case "em":
-      return <Text key={key} style={{ fontStyle: "italic" }}>{children}</Text>
+      return (
+        <Text key={key} style={{ fontStyle: "italic" }}>
+          {children}
+        </Text>
+      )
     case "u":
-      return <Text key={key} style={{ textDecoration: "underline" }}>{children}</Text>
+      return (
+        <Text key={key} style={{ textDecoration: "underline" }}>
+          {children}
+        </Text>
+      )
     default:
       return <Text key={key}>{children}</Text>
   }
@@ -133,20 +209,37 @@ function parseHtmlToComponents(htmlString: string): React.ReactNode[] {
   const regex = /(<[^>]+>|[^<]+)/g
   let match
   let key = 0
-  const stack: { tag: string; children: React.ReactNode[]; olIndex?: number }[] = []
+  const stack: {
+    tag: string
+    children: React.ReactNode[]
+    olIndex?: number
+  }[] = []
   while ((match = regex.exec(htmlString)) !== null) {
     const token = match[0]
     if (token.startsWith("</")) {
       const tag = token.slice(2, -1)
       if (stack.length > 0 && stack[stack.length - 1].tag === tag) {
         const top = stack.pop()!
-        const marker = tag === "li" && stack.length > 0 && stack[stack.length - 1].tag === "ol"
-          ? `${stack[stack.length - 1].olIndex || 1}. `
-          : "• "
-        if (tag === "li" && stack.length > 0 && stack[stack.length - 1].tag === "ol") {
-          stack[stack.length - 1].olIndex = (stack[stack.length - 1].olIndex || 1) + 1
+        const marker =
+          tag === "li" &&
+            stack.length > 0 &&
+            stack[stack.length - 1].tag === "ol"
+            ? `${stack[stack.length - 1].olIndex || 1}. `
+            : "• "
+        if (
+          tag === "li" &&
+          stack.length > 0 &&
+          stack[stack.length - 1].tag === "ol"
+        ) {
+          stack[stack.length - 1].olIndex =
+            (stack[stack.length - 1].olIndex || 1) + 1
         }
-        const element = createPDFElement(tag, top.children, key++, tag === "li" ? { marker } : undefined)
+        const element = createPDFElement(
+          tag,
+          top.children,
+          key++,
+          tag === "li" ? { marker } : undefined
+        )
         if (stack.length > 0) {
           stack[stack.length - 1].children.push(element)
         } else {
@@ -177,12 +270,37 @@ function parseHtmlToComponents(htmlString: string): React.ReactNode[] {
 }
 
 const a4Styles = StyleSheet.create({
-  page: { paddingHorizontal: 30, paddingVertical: 20, fontSize: 10, fontFamily: "Calibri", lineHeight: 1 },
-  backgroundImage: { position: "absolute", opacity: "0.06", top: 85, left: 0, right: 0, zIndex: -1, objectFit: "contain", objectPosition: "center" },
-  header: { flexDirection: "row", gap: 10, justifyContent: "center", marginBottom: 5 },
+  page: {
+    paddingHorizontal: 30,
+    paddingVertical: 20,
+    fontSize: 10,
+    fontFamily: "Calibri",
+    lineHeight: 1,
+  },
+  backgroundImage: {
+    position: "absolute",
+    opacity: "0.06",
+    top: 85,
+    left: 0,
+    right: 0,
+    zIndex: -1,
+    objectFit: "contain",
+    objectPosition: "center",
+  },
+  header: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "center",
+    marginBottom: 5,
+  },
   logo: { width: 70, height: 70, marginRight: 10 },
   companyInfo: { fontSize: 11, textSpacing: 1, lineHeight: 1.5 },
-  companyName: { fontSize: 18, fontWeight: "bold", marginBottom: 8, textSpacing: 2 },
+  companyName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 8,
+    textSpacing: 2,
+  },
   blueLine: { height: 2, backgroundColor: "#1e3a8a", marginBottom: 10 },
   row: { flexDirection: "row", marginBottom: 2 },
   label: { width: 60 },
@@ -190,17 +308,72 @@ const a4Styles = StyleSheet.create({
   section: { marginTop: 9 },
   paragraph: { marginTop: 10, lineHeight: 1, textAlign: "justify" },
   innerText: { lineHeight: 0.8, margin: 0 },
-  table: { marginTop: 7, backgroundColor: "#000", flexDirection: "column", paddingVertical: 1, gap: 0, alignSelf: "center" },
-  tableRow: { flexDirection: "row", alignSelf: "flex-start", display: "flex", gap: 1, paddingHorizontal: "1", alignItems: "center", height: "19" },
-  headerCell: { backgroundColor: "#d9f3f8", fontWeight: "bold", display: "flex", textAlign: "center", alignItems: "center" },
-  cell: { padding: 3, backgroundColor: "white", fontSize: 10, height: "18", display: "flex", justifyContent: "center" },
+  table: {
+    marginTop: 7,
+    backgroundColor: "#000",
+    flexDirection: "column",
+    paddingVertical: 1,
+    gap: 0,
+    alignSelf: "center",
+  },
+  tableRow: {
+    flexDirection: "row",
+    alignSelf: "flex-start",
+    display: "flex",
+    gap: 1,
+    paddingHorizontal: "1",
+    alignItems: "center",
+    height: "19",
+  },
+  headerCell: {
+    backgroundColor: "#d9f3f8",
+    fontWeight: "bold",
+    display: "flex",
+    textAlign: "center",
+    alignItems: "center",
+  },
+  cell: {
+    padding: 3,
+    backgroundColor: "white",
+    fontSize: 10,
+    height: "18",
+    display: "flex",
+    justifyContent: "center",
+  },
   center: { textAlign: "center" },
   right: { textAlign: "right" },
   terms: { marginTop: 5, marginLeft: 10, lineHeight: 0.8 },
-  signature: { marginTop: 15, display: "flex", alignItems: "center", width: 80 },
-  stamp: { opacity: "0.5", width: 70, height: 70, objectFit: "contain", objectPosition: "center", zIndex: 2 },
-  ttd: { position: "absolute", top: 5, left: 0, width: 100, height: 70, objectFit: "fill", objectPosition: "center" },
-  qrContainer: { position: "absolute", bottom: 10, right: 10, flexDirection: "column", alignItems: "center", gap: 2 },
+  signature: {
+    marginTop: 15,
+    display: "flex",
+    alignItems: "center",
+    width: 80,
+  },
+  stamp: {
+    opacity: "0.5",
+    width: 70,
+    height: 70,
+    objectFit: "contain",
+    objectPosition: "center",
+    zIndex: 2,
+  },
+  ttd: {
+    position: "absolute",
+    top: 5,
+    left: 0,
+    width: 100,
+    height: 70,
+    objectFit: "fill",
+    objectPosition: "center",
+  },
+  qrContainer: {
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 2,
+  },
   qrImage: { width: 60, height: 60 },
   qrLabel: { fontSize: 7, color: "#666" },
   ul: { marginLeft: 10, marginTop: 3, padding: 0 },
@@ -209,38 +382,155 @@ const a4Styles = StyleSheet.create({
 })
 
 const a5Styles = StyleSheet.create({
-  page: { paddingHorizontal: 15, paddingVertical: 15, fontSize: 10, fontFamily: "Calibri", lineHeight: 1 },
-  backgroundImage: { position: "absolute", opacity: "0.06", top: 15, left: 0, right: 0, zIndex: -1, objectFit: "contain", objectPosition: "center" },
-  header: { flexDirection: "row", gap: 10, justifyContent: "center", marginBottom: 5 },
+  page: {
+    paddingHorizontal: 15,
+    paddingVertical: 15,
+    fontSize: 10,
+    fontFamily: "Calibri",
+    lineHeight: 1,
+  },
+  backgroundImage: {
+    position: "absolute",
+    opacity: "0.06",
+    top: 15,
+    left: 0,
+    right: 0,
+    zIndex: -1,
+    objectFit: "contain",
+    objectPosition: "center",
+  },
+  header: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "center",
+    marginBottom: 5,
+  },
   logo: { width: 70, height: 70, marginRight: 10 },
   companyInfo: { fontSize: 11, textSpacing: 1, lineHeight: 1.5 },
-  companyName: { fontSize: 18, fontWeight: "bold", marginBottom: 8, textSpacing: 2 },
+  companyName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 8,
+    textSpacing: 2,
+  },
   blueLine: { height: 1, backgroundColor: "#1e3a8a", marginBottom: 1 },
   row: { flexDirection: "row", marginBottom: 3 },
   label: { width: 60 },
   colon: { width: 10, marginHorizontal: 2 },
   section: { marginVertical: 5 },
   paragraph: { lineHeight: 1, textAlign: "justify" },
-  title: { fontSize: 14, fontWeight: "bold", textAlign: "center", marginBottom: 8 },
-  subTitle: { fontSize: 10, fontWeight: "bold", flexDirection: "row", justifyContent: "space-between", marginBottom: 3, marginHorizontal: "5" },
-  table: { marginTop: 7, flexDirection: "column", gap: 0, alignSelf: "center", width: "100%", border: "1px solid black" },
-  tableRow: { flexDirection: "row", display: "flex", width: "100%", borderBottom: "1px solid black" },
-  headerCell: { marginTop: 0, paddingVertical: 4, backgroundColor: "#d9f3f8", fontWeight: "bold", display: "flex", textAlign: "center", alignItems: "center", justifyContent: "center" },
-  cell: { fontSize: 10, display: "flex", justifyContent: "center", borderRight: "1px solid black" },
-  remarks: { alignItems: "center", paddingHorizontal: 4, flexDirection: "row", justifyContent: "flex-start", borderBottom: "1px solid black", height: 20, borderRight: 0 },
-  stamp: { position: "absolute", opacity: "0.5", width: 70, height: 70, objectFit: "contain", objectPosition: "center", zIndex: 2, marginTop: 8 },
-  signatureArea: { marginTop: 0, flexDirection: "row", border: "1px solid black" },
-  signatureBox: { alignItems: "center", justifyContent: "space-between", flex: 1, borderRight: "1px solid black", flexDirection: "column" },
-  signatureTitle: { borderBottom: "1px solid black", width: "100%", textAlign: "center", padding: 2, height: 17 },
+  title: {
+    fontSize: 14,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  subTitle: {
+    fontSize: 10,
+    fontWeight: "bold",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 3,
+    marginHorizontal: "5",
+  },
+  table: {
+    marginTop: 7,
+    flexDirection: "column",
+    gap: 0,
+    alignSelf: "center",
+    width: "100%",
+    border: "1px solid black",
+  },
+  tableRow: {
+    flexDirection: "row",
+    display: "flex",
+    width: "100%",
+    borderBottom: "1px solid black",
+  },
+  headerCell: {
+    marginTop: 0,
+    paddingVertical: 4,
+    backgroundColor: "#d9f3f8",
+    fontWeight: "bold",
+    display: "flex",
+    textAlign: "center",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cell: {
+    fontSize: 10,
+    display: "flex",
+    justifyContent: "center",
+    borderRight: "1px solid black",
+  },
+  remarks: {
+    alignItems: "center",
+    paddingHorizontal: 4,
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    borderBottom: "1px solid black",
+    height: 20,
+    borderRight: 0,
+  },
+  stamp: {
+    position: "absolute",
+    opacity: "0.5",
+    width: 70,
+    height: 70,
+    objectFit: "contain",
+    objectPosition: "center",
+    zIndex: 2,
+    marginTop: 8,
+  },
+  signatureArea: {
+    marginTop: 0,
+    flexDirection: "row",
+    border: "1px solid black",
+  },
+  signatureBox: {
+    alignItems: "center",
+    justifyContent: "space-between",
+    flex: 1,
+    borderRight: "1px solid black",
+    flexDirection: "column",
+  },
+  signatureTitle: {
+    borderBottom: "1px solid black",
+    width: "100%",
+    textAlign: "center",
+    padding: 2,
+    height: 17,
+  },
   signatureSpace: { borderBottom: "1px solid black", height: 40 },
-  signatureFooter: { paddingTop: 5, paddingHorizontal: 2, borderTop: "1px solid black", flexGrow: 1, width: "100%", height: "20" },
+  signatureFooter: {
+    paddingTop: 5,
+    paddingHorizontal: 2,
+    borderTop: "1px solid black",
+    flexGrow: 1,
+    width: "100%",
+    height: "20",
+  },
 })
 
-const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: QuotationData }) => {
+const QuotationDocument = ({
+  company,
+  data,
+}: {
+  company: CompanyInfo
+  data: QuotationData
+}) => {
   const replacements: Record<string, string> = {
     quotation_number: data.quotation_number,
-    quotation_date: data.quotation_date ? format(new Date(data.quotation_date), "dd MMMM yyyy", { locale: dateLocaleId }) : "",
-    expiry_date: data.expiry_date ? format(new Date(data.expiry_date), "dd MMMM yyyy", { locale: dateLocaleId }) : "",
+    quotation_date: data.quotation_date
+      ? format(new Date(data.quotation_date), "dd MMMM yyyy", {
+        locale: dateLocaleId,
+      })
+      : "",
+    expiry_date: data.expiry_date
+      ? format(new Date(data.expiry_date), "dd MMMM yyyy", {
+        locale: dateLocaleId,
+      })
+      : "",
     company_name: data.company_name,
     contact_person: data.contact_person || "",
     delivery_address: data.delivery_address || "",
@@ -249,7 +539,7 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
     delivery_price: formatNumber(data.delivery_price),
     min_order: formatNumber(data.min_order),
     shrinkage: data.shrinkage?.toString() || "0",
-    bank_accounts: data.bank_accounts.map(b => b.name).join(", "),
+    bank_accounts: data.bank_accounts.map((b) => b.name).join(", "),
   }
   const replaceVars = (html: string) => {
     if (!html) return html
@@ -265,7 +555,9 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
     <Document>
       <Page size="A4" style={a4Styles.page}>
         <View style={a4Styles.header}>
-          {company.logo_url && <Image src={company.logo_url} style={a4Styles.logo} />}
+          {company.logo_url && (
+            <Image src={company.logo_url} style={a4Styles.logo} />
+          )}
           <View style={a4Styles.companyInfo}>
             <Text style={a4Styles.companyName}>{company.name}</Text>
             <Text>{company.address}</Text>
@@ -280,7 +572,12 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
             <Text>{data.quotation_number}</Text>
           </View>
           <View style={a4Styles.row}>
-            <Text>Palembang, {format(new Date(data.quotation_date), "dd MMMM yyyy", { locale: dateLocaleId })}</Text>
+            <Text>
+              Palembang,{" "}
+              {format(new Date(data.quotation_date), "dd MMMM yyyy", {
+                locale: dateLocaleId,
+              })}
+            </Text>
           </View>
         </View>
         <View style={a4Styles.row}>
@@ -291,7 +588,12 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
         <View style={a4Styles.row}>
           <Text style={a4Styles.label}></Text>
           <Text style={a4Styles.colon}></Text>
-          <Text>Berlaku s.d. {format(new Date(data.expiry_date), "dd MMMM yyyy", { locale: dateLocaleId })}</Text>
+          <Text>
+            Berlaku s.d.{" "}
+            {format(new Date(data.expiry_date), "dd MMMM yyyy", {
+              locale: dateLocaleId,
+            })}
+          </Text>
         </View>
         <View style={a4Styles.section}>
           <Text style={{ marginBottom: 5 }}>Kepada Yth.</Text>
@@ -305,14 +607,21 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
         <View style={a4Styles.table}>
           <View style={a4Styles.tableRow}>
             <View style={[a4Styles.cell, a4Styles.headerCell, { width: 140 }]}>
-              <Text style={{ alignItems: "center" }}>Price Components (per Liter)</Text>
+              <Text style={{ alignItems: "center" }}>
+                Price Components (per Liter)
+              </Text>
             </View>
             <View style={[a4Styles.cell, a4Styles.headerCell, { width: 40 }]}>
               <Text>%</Text>
             </View>
             {data.discounts.map((d, i) => (
-              <View key={i} style={[a4Styles.cell, a4Styles.headerCell, { width: 65 }]}>
-                <Text>{d.label} {d.value}%</Text>
+              <View
+                key={i}
+                style={[a4Styles.cell, a4Styles.headerCell, { width: 65 }]}
+              >
+                <Text>
+                  {d.label} {d.value}%
+                </Text>
               </View>
             ))}
           </View>
@@ -324,7 +633,10 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
               <Text> </Text>
             </View>
             {data.discounts.map((_, i) => (
-              <View key={i} style={[a4Styles.cell, a4Styles.right, { width: 65 }]}>
+              <View
+                key={i}
+                style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+              >
                 <Text>{formatNumber(data.base_price)}</Text>
               </View>
             ))}
@@ -333,12 +645,23 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
             <View style={[a4Styles.cell, { width: 140 }]}>
               <Text>Discount</Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.center, { width: 40, height: 50 }]}>
+            <View
+              style={[
+                a4Styles.cell,
+                a4Styles.center,
+                { width: 40, height: 50 },
+              ]}
+            >
               <Text> </Text>
             </View>
             {data.discounts.map((d, i) => (
-              <View key={i} style={[a4Styles.cell, a4Styles.right, { width: 65 }]}>
-                <Text>{formatNumber(Math.round(data.base_price * (d.value / 100)))}</Text>
+              <View
+                key={i}
+                style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+              >
+                <Text>
+                  {formatNumber(Math.round(data.base_price * (d.value / 100)))}
+                </Text>
               </View>
             ))}
           </View>
@@ -350,41 +673,67 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
               <Text> </Text>
             </View>
             {data.discounts.map((d, i) => (
-              <View key={i} style={[a4Styles.cell, a4Styles.right, { width: 65 }]}>
-                <Text style={{ fontWeight: "bold" }}>{formatNumber(data.base_price - Math.round(data.base_price * (d.value / 100)))}</Text>
+              <View
+                key={i}
+                style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+              >
+                <Text style={{ fontWeight: "bold" }}>
+                  {formatNumber(
+                    data.base_price -
+                    Math.round(data.base_price * (d.value / 100))
+                  )}
+                </Text>
               </View>
             ))}
           </View>
-          {data.tax_details?.filter(t => t.enabled).map((tax, taxIdx) => (
-            <View key={`tax-${taxIdx}`} style={a4Styles.tableRow}>
-              <View style={[a4Styles.cell, { width: 140 }]}>
-                <Text>{tax.name}</Text>
+          {data.tax_details
+            ?.filter((t) => t.enabled)
+            .map((tax, taxIdx) => (
+              <View key={`tax-${taxIdx}`} style={a4Styles.tableRow}>
+                <View style={[a4Styles.cell, { width: 140 }]}>
+                  <Text>{tax.name}</Text>
+                </View>
+                <View style={[a4Styles.cell, a4Styles.center, { width: 40 }]}>
+                  <Text>{tax.rate}%</Text>
+                </View>
+                {data.discounts.map((d, i) => {
+                  const discountValue = Math.round(
+                    data.base_price * (d.value / 100)
+                  )
+                  const baseABS = data.base_price - discountValue
+                  const taxAmount = Math.round(
+                    baseABS * (Number(tax.rate) / 100)
+                  )
+                  return (
+                    <View
+                      key={i}
+                      style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+                    >
+                      <Text>{formatNumber(taxAmount)}</Text>
+                    </View>
+                  )
+                })}
               </View>
-              <View style={[a4Styles.cell, a4Styles.center, { width: 40 }]}>
-                <Text>{tax.rate}%</Text>
-              </View>
-              {data.discounts.map((d, i) => {
-                const discountValue = Math.round(data.base_price * (d.value / 100))
-                const baseABS = data.base_price - discountValue
-                const taxAmount = Math.round(baseABS * (Number(tax.rate) / 100))
-                return (
-                  <View key={i} style={[a4Styles.cell, a4Styles.right, { width: 65 }]}>
-                    <Text>{formatNumber(taxAmount)}</Text>
-                  </View>
-                )
-              })}
-            </View>
-          ))}
+            ))}
           {Number(data.delivery_price) > 0 && (
             <View style={a4Styles.tableRow}>
               <View style={[a4Styles.cell, { width: 140 }]}>
                 <Text>Biaya Pengiriman</Text>
               </View>
-              <View style={[a4Styles.cell, a4Styles.center, { width: 40, height: 22, top: 2 }]}>
+              <View
+                style={[
+                  a4Styles.cell,
+                  a4Styles.center,
+                  { width: 40, height: 22, top: 2 },
+                ]}
+              >
                 <Text> </Text>
               </View>
               {data.discounts.map((_, i) => (
-                <View key={i} style={[a4Styles.cell, a4Styles.right, { width: 65 }]}>
+                <View
+                  key={i}
+                  style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+                >
                   <Text>{formatNumber(Math.round(data.delivery_price))}</Text>
                 </View>
               ))}
@@ -392,24 +741,36 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
           )}
           <View style={a4Styles.tableRow}>
             <View style={[a4Styles.cell, { width: 140 }]}>
-              <Text style={{ fontWeight: "bold" }}>Total Harga Include Pajak</Text>
+              <Text style={{ fontWeight: "bold" }}>
+                Total Harga Include Pajak
+              </Text>
             </View>
             <View style={[a4Styles.cell, a4Styles.center, { width: 40 }]}>
               <Text> </Text>
             </View>
             {data.discounts.map((d, i) => {
-              const discountValue = Math.round(data.base_price * (d.value / 100))
+              const discountValue = Math.round(
+                data.base_price * (d.value / 100)
+              )
               const baseABS = data.base_price - discountValue
               let totalTaxes = 0
               if (data.tax_details) {
-                data.tax_details.filter(t => t.enabled).forEach(tax => {
-                  totalTaxes += Math.round(baseABS * (Number(tax.rate) / 100))
-                })
+                data.tax_details
+                  .filter((t) => t.enabled)
+                  .forEach((tax) => {
+                    totalTaxes += Math.round(baseABS * (Number(tax.rate) / 100))
+                  })
               }
-              const total = baseABS + totalTaxes + Math.round(data.delivery_price)
+              const total =
+                baseABS + totalTaxes + Math.round(data.delivery_price)
               return (
-                <View key={i} style={[a4Styles.cell, a4Styles.right, { width: 65 }]}>
-                  <Text style={{ fontWeight: "bold" }}>{formatNumber(total)}</Text>
+                <View
+                  key={i}
+                  style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+                >
+                  <Text style={{ fontWeight: "bold" }}>
+                    {formatNumber(total)}
+                  </Text>
                 </View>
               )
             })}
@@ -425,7 +786,9 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
         )}
         {(processedTerms || data.min_order > 0) && (
           <View style={a4Styles.section}>
-            <Text style={{ fontWeight: "bold" }}>Syarat-syarat dan Ketentuan :</Text>
+            <Text style={{ fontWeight: "bold" }}>
+              Syarat-syarat dan Ketentuan :
+            </Text>
             <View style={a4Styles.terms}>
               {processedTerms && parseHtmlToComponents(processedTerms)}
             </View>
@@ -434,9 +797,25 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
         {processedNote && (
           <View style={a4Styles.section}>
             <Text style={{ fontWeight: "bold" }}>Metode Pembayaran :</Text>
-            <View style={{ display: "flex", flexDirection: "row", gap: 8, marginTop: 5 }}>
+            <View
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                gap: 8,
+                marginTop: 5,
+              }}
+            >
               {data.bank_accounts.map((d, i) => (
-                <View key={i} style={{ borderRadius: 8, border: "1px solid silver", gap: 4, padding: 8, backgroundColor: "#fafafa" }}>
+                <View
+                  key={i}
+                  style={{
+                    borderRadius: 8,
+                    border: "1px solid silver",
+                    gap: 4,
+                    padding: 8,
+                    backgroundColor: "#fafafa",
+                  }}
+                >
                   <Text style={{ fontWeight: "semibold" }}>{d.name}</Text>
                   <Text>{d.account_number}</Text>
                   <Text>{d.account_name}</Text>
@@ -456,8 +835,12 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
             <Text>Hormat Kami,</Text>
             <Image src={company.logo_url} style={a4Styles.stamp} />
             <Image src="/images/ttd-indah.png" style={a4Styles.ttd} />
-            <Text style={{ fontWeight: "bold", marginTop: 5 }}>Indah Permatasaris</Text>
-            <Text style={{ fontWeight: "bold", marginTop: 2 }}>( DIREKTUR )</Text>
+            <Text style={{ fontWeight: "bold", marginTop: 5 }}>
+              Indah Permatasaris
+            </Text>
+            <Text style={{ fontWeight: "bold", marginTop: 2 }}>
+              ( DIREKTUR )
+            </Text>
           </View>
           {data.qr_code_url && (
             <View style={a4Styles.qrContainer}>
@@ -472,22 +855,35 @@ const QuotationDocument = ({ company, data }: { company: CompanyInfo, data: Quot
   )
 }
 
-const SalesOrderDocument = ({ company, data }: { company: CompanyInfo, data: SalesOrderData }) => {
+const SalesOrderDocument = ({
+  company,
+  data,
+}: {
+  company: CompanyInfo
+  data: SalesOrderData
+}) => {
   const subtotal = data.quantity * data.unit_price
   const discountAmount = subtotal * (data.discount / 100)
   const afterDiscount = subtotal - discountAmount
   const deliveryTotal = data.quantity * data.delivery_price_per_litre
-  const enabledTaxes = data.tax_details.filter(t => t.enabled)
-  const taxLines = enabledTaxes.map(t => ({
+  const enabledTaxes = data.tax_details.filter((t) => t.enabled)
+  const taxLines = enabledTaxes.map((t) => ({
     name: t.name,
-    amount: Math.round((afterDiscount + deliveryTotal) * (Number(t.rate) / 100)),
+    amount: Math.round(
+      (afterDiscount + deliveryTotal) * (Number(t.rate) / 100)
+    ),
   }))
-  const grandTotal = afterDiscount + deliveryTotal + taxLines.reduce((sum, t) => sum + t.amount, 0)
+  const grandTotal =
+    afterDiscount +
+    deliveryTotal +
+    taxLines.reduce((sum, t) => sum + t.amount, 0)
   return (
     <Document>
       <Page size="A4" style={a4Styles.page}>
         <View style={a4Styles.header}>
-          {company.logo_url && <Image src={company.logo_url} style={a4Styles.logo} />}
+          {company.logo_url && (
+            <Image src={company.logo_url} style={a4Styles.logo} />
+          )}
           <View style={a4Styles.companyInfo}>
             <Text style={a4Styles.companyName}>{company.name}</Text>
             <Text>{company.address}</Text>
@@ -502,7 +898,12 @@ const SalesOrderDocument = ({ company, data }: { company: CompanyInfo, data: Sal
             <Text>{data.so_number}</Text>
           </View>
           <View style={a4Styles.row}>
-            <Text>Palembang, {format(new Date(data.so_date), "dd MMMM yyyy", { locale: dateLocaleId })}</Text>
+            <Text>
+              Palembang,{" "}
+              {format(new Date(data.so_date), "dd MMMM yyyy", {
+                locale: dateLocaleId,
+              })}
+            </Text>
           </View>
         </View>
         <View style={a4Styles.row}>
@@ -513,87 +914,179 @@ const SalesOrderDocument = ({ company, data }: { company: CompanyInfo, data: Sal
         <View style={a4Styles.row}>
           <Text style={a4Styles.label}></Text>
           <Text style={a4Styles.colon}></Text>
-          <Text>Pengiriman s.d. {format(new Date(data.delivery_date), "dd MMMM yyyy", { locale: dateLocaleId })}</Text>
+          <Text>
+            Pengiriman s.d.{" "}
+            {format(new Date(data.delivery_date), "dd MMMM yyyy", {
+              locale: dateLocaleId,
+            })}
+          </Text>
         </View>
         <View style={a4Styles.section}>
           <Text style={{ marginBottom: 5 }}>Kepada Yth.</Text>
           <Text style={{ fontWeight: "bold" }}>{data.company_name}</Text>
-          {data.delivery_address && <Text style={{ marginTop: 2 }}>{data.delivery_address}</Text>}
+          {data.delivery_address && (
+            <Text style={{ marginTop: 2 }}>{data.delivery_address}</Text>
+          )}
         </View>
         <View style={a4Styles.table}>
           <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 160 }]}><Text>Item</Text></View>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 60 }]}><Text>Qty (L)</Text></View>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 80 }]}><Text>Harga/L</Text></View>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 80 }]}><Text>Subtotal</Text></View>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 160 }]}>
+              <Text>Item</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 60 }]}>
+              <Text>Qty (L)</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 80 }]}>
+              <Text>Harga/L</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 80 }]}>
+              <Text>Subtotal</Text>
+            </View>
           </View>
           <View style={a4Styles.tableRow}>
             <View style={[a4Styles.cell, { width: 160 }]}>
               <Text>{data.product_name || "-"}</Text>
-              {data.product_sku && <Text style={{ fontSize: 8 }}>SKU: {data.product_sku}</Text>}
+              {data.product_sku && (
+                <Text style={{ fontSize: 8 }}>SKU: {data.product_sku}</Text>
+              )}
             </View>
-            <View style={[a4Styles.cell, a4Styles.center, { width: 60 }]}><Text>{formatNumber(data.quantity)}</Text></View>
-            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}><Text>{formatNumber(data.unit_price)}</Text></View>
-            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}><Text>{formatNumber(subtotal)}</Text></View>
+            <View style={[a4Styles.cell, a4Styles.center, { width: 60 }]}>
+              <Text>{formatNumber(data.quantity)}</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+              <Text>{formatNumber(data.unit_price)}</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+              <Text>{formatNumber(subtotal)}</Text>
+            </View>
           </View>
           {data.discount > 0 && (
             <View style={a4Styles.tableRow}>
-              <View style={[a4Styles.cell, { width: 160 }]}><Text>Discount ({data.discount}%)</Text></View>
-              <View style={[a4Styles.cell, { width: 60 }]}><Text></Text></View>
-              <View style={[a4Styles.cell, { width: 80 }]}><Text></Text></View>
-              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}><Text>-{formatNumber(discountAmount)}</Text></View>
+              <View style={[a4Styles.cell, { width: 160 }]}>
+                <Text>Discount ({data.discount}%)</Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 60 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 80 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+                <Text>-{formatNumber(discountAmount)}</Text>
+              </View>
             </View>
           )}
           <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 160 }]}><Text style={{ fontWeight: "bold" }}>Total Setelah Diskon</Text></View>
-            <View style={[a4Styles.cell, { width: 60 }]}><Text></Text></View>
-            <View style={[a4Styles.cell, { width: 80 }]}><Text></Text></View>
-            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}><Text style={{ fontWeight: "bold" }}>{formatNumber(afterDiscount)}</Text></View>
+            <View style={[a4Styles.cell, { width: 160 }]}>
+              <Text style={{ fontWeight: "bold" }}>Total Setelah Diskon</Text>
+            </View>
+            <View style={[a4Styles.cell, { width: 60 }]}>
+              <Text></Text>
+            </View>
+            <View style={[a4Styles.cell, { width: 80 }]}>
+              <Text></Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+              <Text style={{ fontWeight: "bold" }}>
+                {formatNumber(afterDiscount)}
+              </Text>
+            </View>
           </View>
           {data.delivery_price_per_litre > 0 && (
             <View style={a4Styles.tableRow}>
-              <View style={[a4Styles.cell, { width: 160 }]}><Text>Biaya Pengiriman ({formatNumber(data.quantity)} L x {formatNumber(data.delivery_price_per_litre)}/L)</Text></View>
-              <View style={[a4Styles.cell, { width: 60 }]}><Text></Text></View>
-              <View style={[a4Styles.cell, { width: 80 }]}><Text></Text></View>
-              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}><Text>{formatNumber(deliveryTotal)}</Text></View>
+              <View style={[a4Styles.cell, { width: 160 }]}>
+                <Text>
+                  Biaya Pengiriman ({formatNumber(data.quantity)} L x{" "}
+                  {formatNumber(data.delivery_price_per_litre)}/L)
+                </Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 60 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 80 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+                <Text>{formatNumber(deliveryTotal)}</Text>
+              </View>
             </View>
           )}
           {taxLines.map((tax, taxIdx) => (
             <View key={`tax-${taxIdx}`} style={a4Styles.tableRow}>
-              <View style={[a4Styles.cell, { width: 160 }]}><Text>{tax.name}</Text></View>
-              <View style={[a4Styles.cell, { width: 60 }]}><Text></Text></View>
-              <View style={[a4Styles.cell, { width: 80 }]}><Text></Text></View>
-              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}><Text>{formatNumber(tax.amount)}</Text></View>
+              <View style={[a4Styles.cell, { width: 160 }]}>
+                <Text>{tax.name}</Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 60 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 80 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+                <Text>{formatNumber(tax.amount)}</Text>
+              </View>
             </View>
           ))}
           <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 160 }]}><Text style={{ fontWeight: "bold" }}>Grand Total</Text></View>
-            <View style={[a4Styles.cell, { width: 60 }]}><Text></Text></View>
-            <View style={[a4Styles.cell, { width: 80 }]}><Text></Text></View>
-            <View style={[a4Styles.cell, a4Styles.headerCell, a4Styles.right, { width: 80 }]}><Text style={{ fontWeight: "bold" }}>{formatNumber(grandTotal)}</Text></View>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 160 }]}>
+              <Text style={{ fontWeight: "bold" }}>Grand Total</Text>
+            </View>
+            <View style={[a4Styles.cell, { width: 60 }]}>
+              <Text></Text>
+            </View>
+            <View style={[a4Styles.cell, { width: 80 }]}>
+              <Text></Text>
+            </View>
+            <View
+              style={[
+                a4Styles.cell,
+                a4Styles.headerCell,
+                a4Styles.right,
+                { width: 80 },
+              ]}
+            >
+              <Text style={{ fontWeight: "bold" }}>
+                {formatNumber(grandTotal)}
+              </Text>
+            </View>
           </View>
         </View>
         {data.term_of_payment && (
           <View style={a4Styles.section}>
-            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>Term of Payment</Text>
+            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>
+              Term of Payment
+            </Text>
             <Text>{data.term_of_payment}</Text>
           </View>
         )}
         {data.is_note_enabled && data.note && (
           <View style={a4Styles.section}>
-            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>Catatan / Note</Text>
+            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>
+              Catatan / Note
+            </Text>
             <Text>{data.note}</Text>
           </View>
         )}
         {data.bank_accounts && data.bank_accounts.length > 0 && (
           <View style={a4Styles.section}>
-            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>Rekening Pembayaran / Payment Account</Text>
+            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>
+              Rekening Pembayaran / Payment Account
+            </Text>
             {data.bank_accounts.map((b, i) => (
-              <Text key={i} style={{ fontSize: 9 }}>{b.name} - {b.bank_name} {b.branch ? `(${b.branch})` : ""} : {b.account_number} a.n. {b.account_name}</Text>
+              <Text key={i} style={{ fontSize: 9 }}>
+                {b.name} - {b.bank_name} {b.branch ? `(${b.branch})` : ""} :{" "}
+                {b.account_number} a.n. {b.account_name}
+              </Text>
             ))}
           </View>
         )}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 20 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginTop: 20,
+          }}
+        >
           <View style={{ alignItems: "center" }}>
             <Text style={{ fontSize: 9 }}>Penerima,</Text>
             <View style={{ height: 50 }} />
@@ -610,7 +1103,13 @@ const SalesOrderDocument = ({ company, data }: { company: CompanyInfo, data: Sal
   )
 }
 
-const DeliveryOrderDocument = ({ company, data }: { company: CompanyInfo, data: DeliveryOrderData }) => {
+const DeliveryOrderDocument = ({
+  company,
+  data,
+}: {
+  company: CompanyInfo
+  data: DeliveryOrderData
+}) => {
   return (
     <Document>
       <Page size="A5" orientation="landscape" style={a5Styles.page}>
@@ -618,12 +1117,25 @@ const DeliveryOrderDocument = ({ company, data }: { company: CompanyInfo, data: 
           <Text style={a5Styles.title}>SURAT JALAN / DELIVERY ORDER</Text>
           <View style={a5Styles.subTitle}>
             <Text>{data.do_number}</Text>
-            <Text>Palembang, {data.do_date ? format(new Date(data.do_date), "dd MMMM yyyy", { locale: dateLocaleId }) : "-"}</Text>
+            <Text>
+              Palembang,{" "}
+              {data.do_date
+                ? format(new Date(data.do_date), "dd MMMM yyyy", {
+                  locale: dateLocaleId,
+                })
+                : "-"}
+            </Text>
           </View>
         </View>
         <View style={a5Styles.blueLine} />
-        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 10 }}>
-          <View style={{ width: 270 }} >
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginTop: 10,
+          }}
+        >
+          <View style={{ width: 270 }}>
             <View style={a5Styles.row}>
               <Text style={{ width: 50 }}>Shipped to</Text>
               <Text style={a5Styles.colon}>:</Text>
@@ -680,112 +1192,550 @@ const DeliveryOrderDocument = ({ company, data }: { company: CompanyInfo, data: 
         </View>
         <View style={[a5Styles.table, { marginTop: 5 }]}>
           <View style={a5Styles.tableRow}>
-            <View style={[a5Styles.cell, a5Styles.headerCell, { flex: 1 }]}><Text>Product</Text></View>
-            <View style={[a5Styles.cell, a5Styles.headerCell, { flex: 1 }]}><Text>Quantity (L)</Text></View>
-            <View style={[a5Styles.cell, a5Styles.headerCell, { flex: 1 }]}><Text>Seal</Text></View>
-            <View style={[a5Styles.cell, a5Styles.headerCell, { flex: 3, borderRight: 0 }]}><Text>Remarks</Text></View>
+            <View style={[a5Styles.cell, a5Styles.headerCell, { flex: 1 }]}>
+              <Text>Product</Text>
+            </View>
+            <View style={[a5Styles.cell, a5Styles.headerCell, { flex: 1 }]}>
+              <Text>Quantity (L)</Text>
+            </View>
+            <View style={[a5Styles.cell, a5Styles.headerCell, { flex: 1 }]}>
+              <Text>Seal</Text>
+            </View>
+            <View
+              style={[
+                a5Styles.cell,
+                a5Styles.headerCell,
+                { flex: 3, borderRight: 0 },
+              ]}
+            >
+              <Text>Remarks</Text>
+            </View>
           </View>
           <View style={[a5Styles.tableRow, { borderBottom: 0 }]}>
-            <View style={[a5Styles.cell, { flex: 1, alignItems: "center" }]}><Text>{data.product_name || "-"}</Text></View>
-            <View style={[a5Styles.cell, { flex: 1, alignItems: "center" }]}><Text>{formatNumber(data.quantity)}</Text></View>
+            <View style={[a5Styles.cell, { flex: 1, alignItems: "center" }]}>
+              <Text>{data.product_name || "-"}</Text>
+            </View>
+            <View style={[a5Styles.cell, { flex: 1, alignItems: "center" }]}>
+              <Text>{formatNumber(data.quantity)}</Text>
+            </View>
             <View style={[a5Styles.cell, { flex: 1, alignItems: "center" }]}>
               {(data.compartments || []).map((c, i) => (
-
                 <Text style={{ height: "20" }}>{c.seal_number}</Text>
-
-
               ))}
             </View>
             <View style={[a5Styles.cell, { flex: 3, borderRight: 0 }]}>
-              <View style={[a5Styles.cell, { flexDirection: "column", borderRight: 0 }]}>
-                <View style={[a5Styles.cell, a5Styles.remarks]}><Text style={{ width: "25%" }}>Density</Text>
+              <View
+                style={[
+                  a5Styles.cell,
+                  { flexDirection: "column", borderRight: 0 },
+                ]}
+              >
+                <View style={[a5Styles.cell, a5Styles.remarks]}>
+                  <Text style={{ width: "25%" }}>Density</Text>
                   <View style={{ flexDirection: "column", width: "75%" }}>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}><Text style={{ width: 30 }}></Text><Text style={[a5Styles.colon]}>:</Text></View>
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
+                      <Text style={{ width: 30 }}></Text>
+                      <Text style={[a5Styles.colon]}>:</Text>
+                    </View>
                   </View>
                 </View>
-                <View style={[a5Styles.cell, a5Styles.remarks]}><Text style={{ width: "25%" }}>Temperature</Text>
+                <View style={[a5Styles.cell, a5Styles.remarks]}>
+                  <Text style={{ width: "25%" }}>Temperature</Text>
                   <View style={{ flexDirection: "column", width: "75%" }}>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}><Text style={{ width: 30 }}></Text><Text style={[a5Styles.colon]}>:</Text></View>
-                  </View></View>
-                <View style={[a5Styles.cell, a5Styles.remarks, { height: 36, alignItems: "center" }]}>
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
+                      <Text style={{ width: 30 }}></Text>
+                      <Text style={[a5Styles.colon]}>:</Text>
+                    </View>
+                  </View>
+                </View>
+                <View
+                  style={[
+                    a5Styles.cell,
+                    a5Styles.remarks,
+                    { height: 36, alignItems: "center" },
+                  ]}
+                >
                   <Text style={{ width: "20%" }}>Tera</Text>
                   <View style={{ flexDirection: "column", width: "80%" }}>
-                    <View style={{ flexDirection: "row", height: 18, alignItems: "center", borderBottom: "1px solid gray", paddingHorizontal: 5 }}><Text style={{ width: 30 }}>Front</Text><Text style={a5Styles.colon}>:</Text></View>
-                    <View style={{ flexDirection: "row", height: 18, alignItems: "center", paddingHorizontal: 5 }}><Text style={{ width: 30 }}>Back</Text><Text style={a5Styles.colon}>:</Text></View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        height: 18,
+                        alignItems: "center",
+                        borderBottom: "1px solid gray",
+                        paddingHorizontal: 5,
+                      }}
+                    >
+                      <Text style={{ width: 30 }}>Front</Text>
+                      <Text style={a5Styles.colon}>:</Text>
+                    </View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        height: 18,
+                        alignItems: "center",
+                        paddingHorizontal: 5,
+                      }}
+                    >
+                      <Text style={{ width: 30 }}>Back</Text>
+                      <Text style={a5Styles.colon}>:</Text>
+                    </View>
                   </View>
                 </View>
-                <View style={[a5Styles.cell, a5Styles.remarks, { height: 36, alignItems: "center" }]}>
-
+                <View
+                  style={[
+                    a5Styles.cell,
+                    a5Styles.remarks,
+                    { height: 36, alignItems: "center" },
+                  ]}
+                >
                   <Text style={{ width: "20%" }}>Manual Stick</Text>
                   <View style={{ flexDirection: "column", width: "80%" }}>
-                    <View style={{ flexDirection: "row", height: 18, alignItems: "center", borderBottom: "1px solid gray", paddingHorizontal: 5 }}><Text style={{ width: 30 }}>Front</Text><Text style={[a5Styles.colon]}>:</Text></View>
-                    <View style={{ flexDirection: "row", height: 18, alignItems: "center", paddingHorizontal: 5 }}><Text style={{ width: 30 }}>Back</Text><Text style={[a5Styles.colon]}>:</Text></View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        height: 18,
+                        alignItems: "center",
+                        borderBottom: "1px solid gray",
+                        paddingHorizontal: 5,
+                      }}
+                    >
+                      <Text style={{ width: 30 }}>Front</Text>
+                      <Text style={[a5Styles.colon]}>:</Text>
+                    </View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        height: 18,
+                        alignItems: "center",
+                        paddingHorizontal: 5,
+                      }}
+                    >
+                      <Text style={{ width: 30 }}>Back</Text>
+                      <Text style={[a5Styles.colon]}>:</Text>
+                    </View>
                   </View>
                 </View>
-                <View style={[a5Styles.cell, a5Styles.remarks, { borderWidth: "0", alignItems: "center" }]}><Text style={{ width: "25%" }} >Flowmeter</Text>
+                <View
+                  style={[
+                    a5Styles.cell,
+                    a5Styles.remarks,
+                    { borderWidth: "0", alignItems: "center" },
+                  ]}
+                >
+                  <Text style={{ width: "25%" }}>Flowmeter</Text>
                   <View style={{ flexDirection: "column", width: "75%" }}>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}><Text style={{ width: 30 }}></Text><Text style={[a5Styles.colon]}>:</Text></View>
-                  </View></View>
-
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
+                      <Text style={{ width: 30 }}></Text>
+                      <Text style={[a5Styles.colon]}>:</Text>
+                    </View>
+                  </View>
+                </View>
               </View>
             </View>
           </View>
         </View>
-        {/* {data.compartments && data.compartments.length > 0 && (
-          <View style={{ marginTop: 15 }}>
-            <Text style={{ fontWeight: "bold", marginBottom: 5 }}>Detail Kompartemen & Segel:</Text>
-            <View style={[a5Styles.table, { width: "70%", alignSelf: "flex-start" }]}>
-              <View style={a5Styles.tableRow}>
-                <View style={[a5Styles.cell, a5Styles.headerCell, { flex: 1 }]}><Text>Komp #</Text></View>
-                <View style={[a5Styles.cell, a5Styles.headerCell, { flex: 2 }]}><Text>No. Segel</Text></View>
-                <View style={[a5Styles.cell, a5Styles.headerCell, { flex: 1 }]}><Text>Quantity</Text></View>
-              </View>
-              {data.compartments.map((c, i) => (
-                <View key={i} style={a5Styles.tableRow}>
-                  <View style={[a5Styles.cell, { flex: 1, alignItems: "center" }]}><Text>{c.compartment_number}</Text></View>
-                  <View style={[a5Styles.cell, { flex: 2, alignItems: "center" }]}><Text>{c.seal_number}</Text></View>
-                  <View style={[a5Styles.cell, { flex: 1, alignItems: "center" }]}><Text>{formatNumber(c.quantity)}</Text></View>
-                </View>
-              ))}
-            </View>
-          </View>
-        )} */}
-        {data.note && (
-          <View style={[a5Styles.section, { flexDirection: "row" }]}>
-            <Text style={{ fontWeight: "bold" }}>Keterangan : </Text>
-            <Text style={a5Styles.paragraph}>{parseHtmlToComponents(data.note)}</Text>
-          </View>
-        )}
+
+        <View style={[a5Styles.section, { flexDirection: "row" }]}>
+          <Text style={{ fontWeight: "bold" }}>Keterangan : </Text>
+          {data.note && (
+            <Text style={a5Styles.paragraph}>
+              {parseHtmlToComponents(data.note)}
+            </Text>
+          )}
+        </View>
+
         <View style={a5Styles.signatureArea}>
           <View style={a5Styles.signatureBox}>
             <Text style={a5Styles.signatureTitle}>Supplier</Text>
             <Text style={[a5Styles.signatureSpace]}></Text>
             <Text style={[a5Styles.signatureFooter, { borderTop: 0 }]}> </Text>
             <Image src={company.logo_url} style={[a5Styles.stamp]} />
-            <Text style={[a5Styles.signatureFooter, { textAlign: "center" }]}>{company.name}</Text>
+            <Text style={[a5Styles.signatureFooter, { textAlign: "center" }]}>
+              {company.name}
+            </Text>
           </View>
           <View style={a5Styles.signatureBox}>
             <Text style={a5Styles.signatureTitle}>Transporter</Text>
             <Text style={a5Styles.signatureSpace}></Text>
-            <Text style={[a5Styles.signatureFooter, { textAlign: "center" }]} >Driver</Text>
-            <Text style={[a5Styles.signatureFooter, { textAlign: "center" }]}>{data.driver_name}</Text>
+            <Text style={[a5Styles.signatureFooter, { textAlign: "center" }]}>
+              Driver
+            </Text>
+            <Text style={[a5Styles.signatureFooter, { textAlign: "center" }]}>
+              {data.driver_name}
+            </Text>
           </View>
           <View style={a5Styles.signatureBox}>
             <Text style={a5Styles.signatureTitle}>Customer</Text>
             <Text style={a5Styles.signatureSpace}></Text>
-            <View style={{ flexDirection: "row", }}><Text style={[a5Styles.signatureFooter, { width: "36%" }]}>Receive By</Text><Text style={[a5Styles.signatureFooter, { width: "64%" }]}>:</Text></View>
-            <View style={{ flexDirection: "row" }}><Text style={[a5Styles.signatureFooter, { width: "36%" }]}>Date</Text><Text style={[a5Styles.signatureFooter, { width: "64%" }]}>:</Text></View>
+            <View style={{ flexDirection: "row" }}>
+              <Text style={[a5Styles.signatureFooter, { width: "36%" }]}>
+                Receive By
+              </Text>
+              <Text style={[a5Styles.signatureFooter, { width: "64%" }]}>
+                :
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row" }}>
+              <Text style={[a5Styles.signatureFooter, { width: "36%" }]}>
+                Date
+              </Text>
+              <Text style={[a5Styles.signatureFooter, { width: "64%" }]}>
+                :
+              </Text>
+            </View>
           </View>
           <View style={[a5Styles.signatureBox, { borderRight: 0 }]}>
             <Text style={a5Styles.signatureTitle}>Security</Text>
             <Text style={a5Styles.signatureSpace}></Text>
-            <View style={{ flexDirection: "row", }}><Text style={[a5Styles.signatureFooter, { width: "36%" }]}>Receive By</Text><Text style={[a5Styles.signatureFooter, { width: "64%" }]}>:</Text></View>
-            <View style={{ flexDirection: "row" }}><Text style={[a5Styles.signatureFooter, { width: "36%" }]}>Date</Text><Text style={[a5Styles.signatureFooter, { width: "64%" }]}>:</Text></View>
+            <View style={{ flexDirection: "row" }}>
+              <Text style={[a5Styles.signatureFooter, { width: "36%" }]}>
+                Receive By
+              </Text>
+              <Text style={[a5Styles.signatureFooter, { width: "64%" }]}>
+                :
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row" }}>
+              <Text style={[a5Styles.signatureFooter, { width: "36%" }]}>
+                Date
+              </Text>
+              <Text style={[a5Styles.signatureFooter, { width: "64%" }]}>
+                :
+              </Text>
+            </View>
           </View>
         </View>
         <Image src={company.logo_url} style={a5Styles.backgroundImage} />
       </Page>
-    </Document >
+    </Document>
+  )
+}
+
+const InvoiceDocument = ({
+  company,
+  data,
+}: {
+  company: CompanyInfo
+  data: InvoiceData
+}) => {
+  const subtotal = data.subtotal
+  const enabledTaxes = data.tax_details.filter((t) => t.enabled)
+  const taxLines = enabledTaxes.map((t) => ({
+    name: t.name,
+    amount: Math.round(subtotal * (Number(t.rate) / 100)),
+  }))
+  const grandTotal = subtotal + taxLines.reduce((sum, t) => sum + t.amount, 0)
+
+  return (
+    <Document>
+      <Page size="A4" style={a4Styles.page}>
+        <View style={a4Styles.header}>
+          {company.logo_url && (
+            <Image src={company.logo_url} style={a4Styles.logo} />
+          )}
+          <View style={a4Styles.companyInfo}>
+            <Text style={a4Styles.companyName}>{company.name}</Text>
+            <Text>{company.address}</Text>
+            <Text>Email : {company.email}</Text>
+          </View>
+        </View>
+        <View style={a4Styles.blueLine} />
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <View style={a4Styles.row}>
+            <Text style={a4Styles.label}>No</Text>
+            <Text style={a4Styles.colon}>:</Text>
+            <Text>{data.invoice_number}</Text>
+          </View>
+          <View style={a4Styles.row}>
+            <Text>
+              Palembang,{" "}
+              {format(new Date(data.issue_date), "dd MMMM yyyy", {
+                locale: dateLocaleId,
+              })}
+            </Text>
+          </View>
+        </View>
+        <View style={a4Styles.row}>
+          <Text style={a4Styles.label}>Perihal</Text>
+          <Text style={a4Styles.colon}>:</Text>
+          <Text>Invoice</Text>
+        </View>
+        <View style={a4Styles.row}>
+          <Text style={a4Styles.label}></Text>
+          <Text style={a4Styles.colon}></Text>
+          <Text>
+            Jatuh tempo s.d.{" "}
+            {format(new Date(data.due_date), "dd MMMM yyyy", {
+              locale: dateLocaleId,
+            })}
+          </Text>
+        </View>
+        {data.do_number && (
+          <View style={a4Styles.row}>
+            <Text style={a4Styles.label}></Text>
+            <Text style={a4Styles.colon}></Text>
+            <Text>
+              DO: {data.do_number}
+              {data.so_number ? ` / SO: ${data.so_number}` : ""}
+            </Text>
+          </View>
+        )}
+        <View style={a4Styles.section}>
+          <Text style={{ marginBottom: 5 }}>Kepada Yth.</Text>
+          <Text style={{ fontWeight: "bold" }}>{data.company_name}</Text>
+        </View>
+        <View style={a4Styles.table}>
+          <View style={a4Styles.tableRow}>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 160 }]}>
+              <Text>Item</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 60 }]}>
+              <Text>Qty (L)</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 80 }]}>
+              <Text>Harga/L</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 80 }]}>
+              <Text>Subtotal</Text>
+            </View>
+          </View>
+          <View style={a4Styles.tableRow}>
+            <View style={[a4Styles.cell, { width: 160 }]}>
+              <Text>{data.so_number ? `SO: ${data.so_number}` : "-"}</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.center, { width: 60 }]}>
+              <Text>{formatNumber(data.quantity)}</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+              <Text>{formatNumber(data.unit_price)}</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+              <Text>{formatNumber(subtotal)}</Text>
+            </View>
+          </View>
+          {data.delivery_price_per_litre > 0 && (
+            <View style={a4Styles.tableRow}>
+              <View style={[a4Styles.cell, { width: 160 }]}>
+                <Text>
+                  Biaya Pengiriman ({formatNumber(data.quantity)} L x{" "}
+                  {formatNumber(data.delivery_price_per_litre)}/L)
+                </Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 60 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 80 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+                <Text>
+                  {formatNumber(data.quantity * data.delivery_price_per_litre)}
+                </Text>
+              </View>
+            </View>
+          )}
+          <View style={a4Styles.tableRow}>
+            <View style={[a4Styles.cell, { width: 160 }]}>
+              <Text style={{ fontWeight: "bold" }}>Subtotal</Text>
+            </View>
+            <View style={[a4Styles.cell, { width: 60 }]}>
+              <Text></Text>
+            </View>
+            <View style={[a4Styles.cell, { width: 80 }]}>
+              <Text></Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+              <Text style={{ fontWeight: "bold" }}>
+                {formatNumber(subtotal)}
+              </Text>
+            </View>
+          </View>
+          {taxLines.map((tax, taxIdx) => (
+            <View key={`tax-${taxIdx}`} style={a4Styles.tableRow}>
+              <View style={[a4Styles.cell, { width: 160 }]}>
+                <Text>{tax.name}</Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 60 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 80 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+                <Text>{formatNumber(tax.amount)}</Text>
+              </View>
+            </View>
+          ))}
+          <View style={a4Styles.tableRow}>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 160 }]}>
+              <Text style={{ fontWeight: "bold" }}>Grand Total</Text>
+            </View>
+            <View style={[a4Styles.cell, { width: 60 }]}>
+              <Text></Text>
+            </View>
+            <View style={[a4Styles.cell, { width: 80 }]}>
+              <Text></Text>
+            </View>
+            <View
+              style={[
+                a4Styles.cell,
+                a4Styles.headerCell,
+                a4Styles.right,
+                { width: 80 },
+              ]}
+            >
+              <Text style={{ fontWeight: "bold" }}>
+                {formatNumber(grandTotal)}
+              </Text>
+            </View>
+          </View>
+        </View>
+        {data.qr_code_url && (
+          <View style={{ alignItems: "center", marginTop: 10 }}>
+            <Image src={data.qr_code_url} style={{ width: 80, height: 80 }} />
+          </View>
+        )}
+        {data.is_note_enabled && data.note && (
+          <View style={a4Styles.section}>
+            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>
+              Catatan / Note
+            </Text>
+            <Text>{data.note}</Text>
+          </View>
+        )}
+        {data.bank_accounts && data.bank_accounts.length > 0 && (
+          <View style={a4Styles.section}>
+            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>
+              Rekening Pembayaran / Payment Account
+            </Text>
+            {data.bank_accounts.map((b, i) => (
+              <Text key={i} style={{ fontSize: 9 }}>
+                {b.name} - {b.bank_name} {b.branch ? `(${b.branch})` : ""} :{" "}
+                {b.account_number} a.n. {b.account_name}
+              </Text>
+            ))}
+          </View>
+        )}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginTop: 20,
+          }}
+        >
+          <View style={{ alignItems: "center" }}>
+            <Text style={{ fontSize: 9 }}>Penerima,</Text>
+            <View style={{ height: 50 }} />
+            <Text style={{ fontSize: 9 }}>( _________________________ )</Text>
+          </View>
+          <View style={{ alignItems: "center" }}>
+            <Text style={{ fontSize: 9 }}>Hormat kami,</Text>
+            <View style={{ height: 50 }} />
+            <Text style={{ fontSize: 9 }}>( _________________________ )</Text>
+          </View>
+        </View>
+      </Page>
+    </Document>
+  )
+}
+
+async function generateInvoicePDFReact(
+  company: CompanyInfo,
+  data: InvoiceData,
+  options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
+) {
+  const processedCompany = { ...company }
+  let qrCodeDataUrl: string | undefined = undefined
+  if (data.id) {
+    try {
+      const origin =
+        typeof window !== "undefined"
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_APP_URL || ""
+      const verifyUrl = `${origin}/verify/invoice/${data.id}`
+      qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, {
+        margin: 1,
+        width: 200,
+      })
+    } catch (err) {
+      console.error("Failed to generate QR code:", err)
+    }
+  }
+  const asPdf = pdf(
+    <InvoiceDocument
+      company={processedCompany}
+      data={{
+        ...data,
+        qr_code_url: qrCodeDataUrl,
+        bank_accounts: data.bank_accounts,
+      }}
+    />
+  )
+  const blob = await asPdf.toBlob()
+  if (options.save) {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `Invoice_${data.invoice_number}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    return null
+  }
+  if (options.output === "datauri") {
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result as string)
+      reader.readAsDataURL(blob)
+    })
+  }
+  return blob
+}
+
+export async function generateStandardInvoicePDF(
+  companyInfo: any,
+  inv: any,
+  options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
+) {
+  const quantity = inv.do?.quantity || inv.quantity || 0
+  const unitPrice = inv.do?.so?.unit_price || 0
+  const deliveryPricePerLitre = inv.do?.so?.delivery_price_per_litre || 0
+  const subtotal = quantity * unitPrice + quantity * deliveryPricePerLitre
+
+  return await generateInvoicePDFReact(
+    {
+      name: companyInfo?.name || "PT Anugerah Buana Sriwijaya",
+      address: companyInfo?.address || "",
+      email: companyInfo?.email || "",
+      logo_url: companyInfo?.logo_url,
+    },
+    {
+      id: inv.id,
+      invoice_number: inv.invoice_number,
+      issue_date: inv.issue_date,
+      due_date: inv.due_date,
+      company_name: inv.company?.name || "-",
+      do_number: inv.do?.do_number,
+      so_number: inv.do?.so?.so_number,
+      quantity,
+      unit_price: unitPrice,
+      delivery_price_per_litre: deliveryPricePerLitre,
+      subtotal,
+      tax_details: inv.tax_details || [],
+      total_amount: inv.total_amount || 0,
+      note: inv.is_note_enabled ? inv.note : "",
+      is_note_enabled: true,
+      bank_accounts: inv.bank_accounts || [],
+    },
+    options
   )
 }
 
@@ -798,14 +1748,25 @@ async function generateQuotationPDFReact(
   let qrCodeDataUrl: string | undefined = undefined
   if (data.id) {
     try {
-      const origin = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || "")
+      const origin =
+        typeof window !== "undefined"
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_APP_URL || ""
       const verifyUrl = `${origin}/verify/quotation/${data.id}`
-      qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 200 })
+      qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, {
+        margin: 1,
+        width: 200,
+      })
     } catch (err) {
       console.error("Failed to generate QR code:", err)
     }
   }
-  const asPdf = pdf(<QuotationDocument company={processedCompany} data={{ ...data, qr_code_url: qrCodeDataUrl }} />)
+  const asPdf = pdf(
+    <QuotationDocument
+      company={processedCompany}
+      data={{ ...data, qr_code_url: qrCodeDataUrl }}
+    />
+  )
   const blob = await asPdf.toBlob()
   if (options.save) {
     const url = URL.createObjectURL(blob)
@@ -871,7 +1832,9 @@ async function generateSalesOrderPDFReact(
   data: SalesOrderData,
   options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
 ) {
-  const blob = await pdf(<SalesOrderDocument company={company} data={data} />).toBlob()
+  const blob = await pdf(
+    <SalesOrderDocument company={company} data={data} />
+  ).toBlob()
   if (options.save !== false) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -928,7 +1891,9 @@ async function generateDeliveryOrderPDFReact(
   data: DeliveryOrderData,
   options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
 ) {
-  const blob = await pdf(<DeliveryOrderDocument company={company} data={data} />).toBlob()
+  const blob = await pdf(
+    <DeliveryOrderDocument company={company} data={data} />
+  ).toBlob()
   if (options.save) {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
@@ -957,14 +1922,22 @@ export async function generateStandardDeliveryOrderPDF(
 ) {
   let deliveryAddressLabel: string | undefined = undefined
   if (doRecord.delivery_address && doRecord.company?.details?.addresses) {
-    const addresses = doRecord.company.details.addresses as { label: string; address: string }[]
-    const matched = addresses.find((a: any) => a.address === doRecord.delivery_address)
+    const addresses = doRecord.company.details.addresses as {
+      label: string
+      address: string
+    }[]
+    const matched = addresses.find(
+      (a: any) => a.address === doRecord.delivery_address
+    )
     if (matched) {
       deliveryAddressLabel = matched.label
     }
   }
 
-  const driverInfo = doRecord.driver_info as { name?: string; phone?: string } | null
+  const driverInfo = doRecord.driver_info as {
+    name?: string
+    phone?: string
+  } | null
 
   return await generateDeliveryOrderPDFReact(
     {
@@ -980,14 +1953,15 @@ export async function generateStandardDeliveryOrderPDF(
       company_name: doRecord.company?.name || "-",
       supplier_name: doRecord.supplier?.name,
       transporter_name: doRecord.transporter?.name,
-      vehicle_number: doRecord.vehicle?.license_number || doRecord.vehicle_number,
+      vehicle_number:
+        doRecord.vehicle?.license_number || doRecord.vehicle_number,
       driver_name: driverInfo?.name || doRecord.driver_name || "-",
       driver_phone: driverInfo?.phone || doRecord.driver_phone || "-",
       product_name: doRecord.product?.name,
       quantity: doRecord.quantity || 0,
       delivery_address_label: deliveryAddressLabel,
       delivery_address: doRecord.delivery_address || "-",
-      po_no: doRecord.po?.so_number || doRecord.po?.po_number,
+      po_no: doRecord.po.po_number,
       po_date: doRecord.po?.so_date,
       PIC: doRecord.company?.details?.contact_person,
       PIC_phone: doRecord.company?.details?.phone,

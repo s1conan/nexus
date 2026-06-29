@@ -10,11 +10,29 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow
+  TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Plus, Building2, Search, Pencil, Save, X, Phone, Mail, User, Info, Warehouse, Truck, Trash2, RefreshCw, AlertCircle, Users, CheckCircle } from "lucide-react"
+import {
+  Plus,
+  Building2,
+  Search,
+  Pencil,
+  Save,
+  X,
+  Phone,
+  Mail,
+  User,
+  Info,
+  Warehouse,
+  Truck,
+  Trash2,
+  RefreshCw,
+  AlertCircle,
+  Users,
+  CheckCircle,
+} from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { SummaryCard } from "@/components/summary-card"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
@@ -25,7 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogFooter
+  DialogFooter,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import {
@@ -33,7 +51,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
+  SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { cn, constructMultiWordSearch } from "@/lib/utils"
@@ -63,15 +81,28 @@ export default function CompaniesPage() {
     totalCustomers: 0,
     totalSuppliers: 0,
     totalTransporters: 0,
-    activeCompanies: 0
+    activeCompanies: 0,
   })
 
   const [isOpen, setIsOpen] = usePersistedState("companies_dialog_open", false)
-  const [editingCompany, setEditingCompany] = usePersistedState<any>("companies_editing_data", null)
-  const [searchQuery, setSearchQuery] = usePersistedState("companies_search", "")
-  const [typeFilter, setTypeFilter] = usePersistedState("companies_type_filter", "all")
+  const [editingCompany, setEditingCompany] = usePersistedState<any>(
+    "companies_editing_data",
+    null
+  )
+  const [searchQuery, setSearchQuery] = usePersistedState(
+    "companies_search",
+    ""
+  )
+  const [typeFilter, setTypeFilter] = usePersistedState(
+    "companies_type_filter",
+    "all"
+  )
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string, name: string } | null>(null)
+  const [viewOnly, setViewOnly] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    id: string
+    name: string
+  } | null>(null)
   const debouncedSearchQuery = useDebounce(searchQuery, 300)
 
   const observerTarget = useRef(null)
@@ -80,14 +111,22 @@ export default function CompaniesPage() {
   const [formData, setFormData] = usePersistedState("companies_form_data", {
     name: "",
     types: [] as string[],
-    contact_persons: [{ name: "", email: "", phone: "", description: "" }] as { name: string, email: string, phone: string, description: string }[],
+    contact_persons: [{ name: "", email: "", phone: "", description: "" }] as {
+      name: string
+      email: string
+      phone: string
+      description: string
+    }[],
     phone: "",
     email: "",
-    addresses: [{ label: "", address: "" }] as { label: string, address: string }[],
+    addresses: [{ label: "", address: "" }] as {
+      label: string
+      address: string
+    }[],
     npwp: "",
     city: "",
     other_info: "",
-    is_active: true
+    is_active: true,
   })
 
   // Permission Checks
@@ -102,77 +141,105 @@ export default function CompaniesPage() {
         { count: activeCount },
         { count: customerCount },
         { count: supplierCount },
-        { count: transporterCount }
+        { count: transporterCount },
       ] = await Promise.all([
-        supabase.from('companies').select('*', { count: 'exact', head: true }).eq('is_active', true),
-        supabase.from('companies').select('*', { count: 'exact', head: true }).contains('type', ['Customer']),
-        supabase.from('companies').select('*', { count: 'exact', head: true }).contains('type', ['Supplier']),
-        supabase.from('companies').select('*', { count: 'exact', head: true }).contains('type', ['Transporter'])
+        supabase
+          .from("companies")
+          .select("*", { count: "exact", head: true })
+          .eq("is_active", true),
+        supabase
+          .from("companies")
+          .select("*", { count: "exact", head: true })
+          .contains("type", ["Customer"]),
+        supabase
+          .from("companies")
+          .select("*", { count: "exact", head: true })
+          .contains("type", ["Supplier"]),
+        supabase
+          .from("companies")
+          .select("*", { count: "exact", head: true })
+          .contains("type", ["Transporter"]),
       ])
 
       setStats({
         activeCompanies: activeCount || 0,
         totalCustomers: customerCount || 0,
         totalSuppliers: supplierCount || 0,
-        totalTransporters: transporterCount || 0
+        totalTransporters: transporterCount || 0,
       })
     } catch (err) {
       console.error("Fetch Stats Error:", err)
     }
   }, [supabase])
 
-  const fetchCompanies = useCallback(async (isInitial = false) => {
-    if (isInitial) {
-      setLoading(true)
-      setOffset(0)
-      fetchStats()
-    } else {
-      setLoadingMore(true)
-    }
-
-    try {
-      const currentOffset = isInitial ? 0 : offset
-      let query = supabase
-        .from("companies")
-        .select("*")
-        .order('is_active', { ascending: false })
-        .order('name', { ascending: true })
-        .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-      if (debouncedSearchQuery) {
-        // Deep filtering in JSONB and text fields
-        const searchStr = constructMultiWordSearch(debouncedSearchQuery, ['name', 'details->>email', 'details->>phone', 'details->>contact_person'])
-        if (searchStr) query = query.or(searchStr)
+  const fetchCompanies = useCallback(
+    async (isInitial = false) => {
+      if (isInitial) {
+        setLoading(true)
+        setOffset(0)
+        fetchStats()
+      } else {
+        setLoadingMore(true)
       }
 
-      if (typeFilter !== "all") {
-        query = query.contains('type', [typeFilter])
-      }
+      try {
+        const currentOffset = isInitial ? 0 : offset
+        let query = supabase
+          .from("companies")
+          .select("*")
+          .order("is_active", { ascending: false })
+          .order("name", { ascending: true })
+          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
-      const { data, error } = await query
-
-      if (error) {
-        console.error("Fetch Companies Error:", error)
-        notify.error(dict.MSG_DATA_FETCH_FAILED, error.message)
-      } else if (data) {
-        if (isInitial) {
-          setCompanies(data)
-        } else {
-          setCompanies(prev => {
-            const newItems = data.filter((item: any) => !prev.some(p => p.id === item.id))
-            return [...prev, ...newItems]
-          })
+        if (debouncedSearchQuery) {
+          // Deep filtering in JSONB and text fields
+          const searchStr = constructMultiWordSearch(debouncedSearchQuery, [
+            "name",
+            "details->>email",
+            "details->>phone",
+            "details->>contact_person",
+          ])
+          if (searchStr) query = query.or(searchStr)
         }
-        setHasMore(data.length === PAGE_SIZE)
-        setOffset(currentOffset + data.length)
+
+        if (typeFilter !== "all") {
+          query = query.contains("type", [typeFilter])
+        }
+
+        const { data, error } = await query
+
+        if (error) {
+          console.error("Fetch Companies Error:", error)
+          notify.error(dict.MSG_DATA_FETCH_FAILED, error.message)
+        } else if (data) {
+          if (isInitial) {
+            setCompanies(data)
+          } else {
+            setCompanies((prev) => {
+              const newItems = data.filter(
+                (item: any) => !prev.some((p) => p.id === item.id)
+              )
+              return [...prev, ...newItems]
+            })
+          }
+          setHasMore(data.length === PAGE_SIZE)
+          setOffset(currentOffset + data.length)
+        }
+      } catch (err) {
+        console.error("Fetch Companies Exception:", err)
+      } finally {
+        setLoading(false)
+        setLoadingMore(false)
       }
-    } catch (err) {
-      console.error("Fetch Companies Exception:", err)
-    } finally {
-      setLoading(false)
-      setLoadingMore(false)
-    }
-  }, [supabase, offset, debouncedSearchQuery, typeFilter, dict.MSG_DATA_FETCH_FAILED])
+    },
+    [
+      supabase,
+      offset,
+      debouncedSearchQuery,
+      typeFilter,
+      dict.MSG_DATA_FETCH_FAILED,
+    ]
+  )
 
   // Initial fetch and reset when filters change
   useEffect(() => {
@@ -182,15 +249,15 @@ export default function CompaniesPage() {
   // Infinite Scroll Observer
   useEffect(() => {
     const observer = new IntersectionObserver(
-      entries => {
+      (entries) => {
         if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
           fetchCompanies(false)
         }
       },
       {
         root: containerRef.current,
-        rootMargin: '400px',
-        threshold: 0
+        rootMargin: "400px",
+        threshold: 0,
       }
     )
 
@@ -206,7 +273,8 @@ export default function CompaniesPage() {
   }
 
   // Open Dialog
-  const handleOpenDialog = (company: any = null) => {
+  const handleOpenDialog = (company: any = null, isViewOnly = false) => {
+    setViewOnly(isViewOnly)
     if (company) {
       setEditingCompany(company)
       const details = company.details || {}
@@ -221,7 +289,14 @@ export default function CompaniesPage() {
 
       let contact_persons = details.contact_persons || []
       if (contact_persons.length === 0 && details.contact_person) {
-        contact_persons = [{ name: details.contact_person, email: "", phone: "", description: "" }]
+        contact_persons = [
+          {
+            name: details.contact_person,
+            email: "",
+            phone: "",
+            description: "",
+          },
+        ]
       }
       if (contact_persons.length === 0) {
         contact_persons = [{ name: "", email: "", phone: "", description: "" }]
@@ -237,7 +312,7 @@ export default function CompaniesPage() {
         npwp: details.npwp || "",
         city: details.city || "",
         other_info: details.other_info || "",
-        is_active: company.is_active ?? true
+        is_active: company.is_active ?? true,
       })
     } else {
       if (!canInsert) return
@@ -252,38 +327,45 @@ export default function CompaniesPage() {
         npwp: "",
         city: "",
         other_info: "",
-        is_active: true
+        is_active: true,
       })
     }
     setIsOpen(true)
   }
 
   const toggleType = (type: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       types: prev.types.includes(type)
-        ? prev.types.filter(t => t !== type)
-        : [...prev.types, type]
+        ? prev.types.filter((t) => t !== type)
+        : [...prev.types, type],
     }))
   }
 
   const addContactPerson = () => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      contact_persons: [...prev.contact_persons, { name: "", email: "", phone: "", description: "" }]
+      contact_persons: [
+        ...prev.contact_persons,
+        { name: "", email: "", phone: "", description: "" },
+      ],
     }))
   }
 
   const removeContactPerson = (index: number) => {
     if (formData.contact_persons.length <= 1) return
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      contact_persons: prev.contact_persons.filter((_, i) => i !== index)
+      contact_persons: prev.contact_persons.filter((_, i) => i !== index),
     }))
   }
 
-  const updateContactPerson = (index: number, field: keyof typeof formData.contact_persons[0], value: string) => {
-    setFormData(prev => {
+  const updateContactPerson = (
+    index: number,
+    field: keyof (typeof formData.contact_persons)[0],
+    value: string
+  ) => {
+    setFormData((prev) => {
       const newContacts = [...prev.contact_persons]
       newContacts[index] = { ...newContacts[index], [field]: value }
       return { ...prev, contact_persons: newContacts }
@@ -291,55 +373,73 @@ export default function CompaniesPage() {
   }
 
   const addAddress = () => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      addresses: [...prev.addresses, { label: "", address: "" }]
+      addresses: [...prev.addresses, { label: "", address: "" }],
     }))
   }
 
   const removeAddress = (index: number) => {
     if (formData.addresses.length <= 1) return
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      addresses: prev.addresses.filter((_, i) => i !== index)
+      addresses: prev.addresses.filter((_, i) => i !== index),
     }))
   }
 
-  const updateAddress = (index: number, field: 'label' | 'address', value: string) => {
-    setFormData(prev => {
+  const updateAddress = (
+    index: number,
+    field: "label" | "address",
+    value: string
+  ) => {
+    setFormData((prev) => {
       const newAddresses = [...prev.addresses]
       newAddresses[index] = { ...newAddresses[index], [field]: value }
       return { ...prev, addresses: newAddresses }
     })
   }
 
-  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>
+  ) => {
+    e.preventDefault()
+    if (isSubmitting || viewOnly) return
 
+    // Validate required fields
+    if (!formData.name?.trim()) {
+      notify.error("Validation Error", "Company name is required.")
+      return
+    }
+    if (formData.types.length === 0) {
+      notify.error(
+        dict.ERROR_UNEXPECTED || "Error",
+        "Please select at least one type."
+      )
+      return
+    }
+
+    setIsSubmitting(true)
+
+    const payload = {
+      name: formData.name,
+      type: formData.types,
+      is_active: formData.is_active,
+      details: {
+        contact_persons: formData.contact_persons.filter(
+          (c) => c.name.trim() !== ""
+        ),
+        contact_person:
+          formData.contact_persons.find((c) => c.name.trim() !== "")?.name ||
+          "",
+        phone: formData.phone,
+        email: formData.email,
+        addresses: formData.addresses.filter((a) => a.address.trim() !== ""),
+        npwp: formData.npwp,
+        city: formData.city,
+        other_info: formData.other_info,
+      },
+    }
     try {
-      if (formData.types.length === 0) {
-        notify.error(dict.ERROR_UNEXPECTED || "Error", "Please select at least one type.")
-        return
-      }
-
-      const payload = {
-        name: formData.name,
-        type: formData.types,
-        is_active: formData.is_active,
-        details: {
-          contact_persons: formData.contact_persons.filter(c => c.name.trim() !== ""),
-          contact_person: formData.contact_persons.find(c => c.name.trim() !== "")?.name || "",
-          phone: formData.phone,
-          email: formData.email,
-          addresses: formData.addresses.filter(a => a.address.trim() !== ""),
-          npwp: formData.npwp,
-          city: formData.city,
-          other_info: formData.other_info
-        }
-      }
-
       if (editingCompany) {
         const { data, error } = await supabase
           .from("companies")
@@ -350,10 +450,15 @@ export default function CompaniesPage() {
 
         if (error) throw error
 
-        setCompanies(prev => prev.map(c => c.id === editingCompany.id ? data : c))
+        setCompanies((prev) =>
+          prev.map((c) => (c.id === editingCompany.id ? data : c))
+        )
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`),
-          dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace("%entity%", `company [${formData.name}]`),
+          dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace(
+            "%entity%",
+            `company [${formData.name}]`
+          ),
           undefined,
           true
         )
@@ -366,31 +471,32 @@ export default function CompaniesPage() {
 
         if (error) throw error
 
-        setCompanies(prev => [data, ...prev])
+        setCompanies((prev) => [data, ...prev])
         notify.success(
           dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`),
-          dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace("%entity%", `company [${formData.name}]`),
+          dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace(
+            "%entity%",
+            `company [${formData.name}]`
+          ),
           undefined,
           true
         )
       }
       fetchStats()
       setIsOpen(false)
-    }
-    catch (err) {
+    } catch (err) {
       console.error("Submit Company Error:", err)
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${formData.name}]`),
         (err as Error).message
       )
-    }
-    finally {
-      setIsSubmitting(false);
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    const company = companies.find(c => c.id === id)
+    const company = companies.find((c) => c.id === id)
     if (!company) return
     setDeleteConfirm({ id: company.id, name: company.name })
   }
@@ -398,15 +504,21 @@ export default function CompaniesPage() {
   const confirmDelete = async () => {
     if (!deleteConfirm) return
     try {
-      const { error } = await supabase.from("companies").delete().eq("id", deleteConfirm.id)
+      const { error } = await supabase
+        .from("companies")
+        .delete()
+        .eq("id", deleteConfirm.id)
       if (error) throw error
       notify.deleted(
         dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`),
-        dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY.replace("%entity%", `company [${deleteConfirm.name}]`),
+        dict.MSG_SUCCESS_DELETE_DESC_NO_COMPANY.replace(
+          "%entity%",
+          `company [${deleteConfirm.name}]`
+        ),
         undefined,
         true
       )
-      setCompanies(prev => prev.filter(c => c.id !== deleteConfirm.id))
+      setCompanies((prev) => prev.filter((c) => c.id !== deleteConfirm.id))
       fetchStats()
     } catch (err: any) {
       notify.error(
@@ -420,11 +532,16 @@ export default function CompaniesPage() {
 
   if (!canView && !loading && !authLoading) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
-        <div className="text-center space-y-2">
-          <AlertCircle className="size-8 text-destructive mx-auto" />
-          <h2 className="text-lg font-semibold">{dict.MSG_ACCESS_DENIED || "Access Denied"}</h2>
-          <p className="text-sm text-muted-foreground">{dict.MSG_NO_PERMISSION || "You do not have permission to view this page."}</p>
+      <div className="flex h-[50vh] items-center justify-center">
+        <div className="space-y-2 text-center">
+          <AlertCircle className="mx-auto size-8 text-destructive" />
+          <h2 className="text-lg font-semibold">
+            {dict.MSG_ACCESS_DENIED || "Access Denied"}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {dict.MSG_NO_PERMISSION ||
+              "You do not have permission to view this page."}
+          </p>
         </div>
       </div>
     )
@@ -434,13 +551,24 @@ export default function CompaniesPage() {
     <div className="page-container">
       <div className="page-header shrink-0">
         <h1 className="page-title">
-          <Building2 className="size-6 mr-2 inline-block text-primary" />
+          <Building2 className="mr-2 inline-block size-6 text-primary" />
           {dict.TITLE_COMPANIES}
         </h1>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading || loadingMore} title="Refresh Data">
-            <RefreshCw className={cn("size-4", (loading || loadingMore) && "animate-spin")} />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={loading || loadingMore}
+            title="Refresh Data"
+          >
+            <RefreshCw
+              className={cn(
+                "size-4",
+                (loading || loadingMore) && "animate-spin"
+              )}
+            />
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -452,264 +580,400 @@ export default function CompaniesPage() {
             <DialogContent className="sm:max-w-[700px]">
               <DialogHeader>
                 <DialogTitle>
-                  <Building2 className="size-5 mr-2 inline-block" />{editingCompany ? dict.TITLE_EDIT_COMPANY : dict.TITLE_ADD_COMPANY}
+                  <Building2 className="mr-2 inline-block size-5" />
+                  {viewOnly
+                    ? formData.name || dict.TITLE_COMPANIES
+                    : editingCompany
+                      ? dict.TITLE_EDIT_COMPANY
+                      : dict.TITLE_ADD_COMPANY}
                 </DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleSubmit} id="company-form" className="flex flex-col gap-6 p-5 overflow-y-auto max-h-[70vh]">
-                {/* Basic Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-2 md:col-span-2">
-                    <Label htmlFor="name">{dict.LABEL_COMPANY_NAME}</Label>
-                    <div className="flex items-center gap-3">
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder=""
-                        className="flex-1"
-                        required
-                      />
-                      <div className="flex flex-col items-center gap-0.5 min-w-[60px]">
-                        <Switch
-                          id="is_active"
-                          checked={formData.is_active}
-                          onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-                        />
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground leading-none mt-1.5">
-                          {formData.is_active ? dict.LABEL_IS_ACTIVE : dict.LABEL_IS_INACTIVE}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Types Selection */}
-                  <div className="flex flex-row gap-10 md:col-span-2 p-3 border rounded-lg bg-muted/20">
-                    <Label>{dict.LABEL_TYPE}</Label>
-                    <div className="flex flex-wrap gap-8">
-                      {["Customer", "Supplier", "Transporter"].map((type) => (
-                        <div key={type} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`type-${type}`}
-                            checked={formData.types.includes(type)}
-                            onCheckedChange={() => toggleType(type)}
-                          />
-                          <Label htmlFor={`type-${type}`} className="cursor-pointer font-normal">
-                            {type === "Customer" ? <>{dict.LABEL_TYPE_CUSTOMER} <User className="size-4 text-blue-600" /></> :
-                              type === "Supplier" ? <>{dict.LABEL_TYPE_SUPPLIER} <Warehouse className="size-4 text-amber-600" /></> :
-                                <>{dict.LABEL_TYPE_TRANSPORTER} <Truck className="size-4 text-emerald-600" /></>}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Company Contact Info */}
-                  <div className="flex flex-col gap-6 md:col-span-2 p-4 border rounded-lg bg-muted/5">
-                    <Label>
-                      {dict.LABEL_COMPANY_CONTACT_INFO}
-                    </Label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="flex flex-col gap-2">
-                        <Label htmlFor="phone" className="text-xs">{dict.LABEL_PHONE}</Label>
-                        <div className="relative">
-                          <Phone className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                          <Input
-                            id="phone"
-                            className="pl-9"
-                            value={formData.phone}
-                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <Label htmlFor="email" className="text-xs">{dict.LABEL_EMAIL}</Label>
-                        <div className="relative">
-                          <Mail className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                          <Input
-                            id="email"
-                            type="email"
-                            className="pl-9"
-                            value={formData.email}
-                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                      {/* NPWP Field */}
-                      <div className="flex flex-col gap-2">
-                        <Label htmlFor="npwp " className="text-xs">{dict.LABEL_NPWP}</Label>
+              <form
+                onSubmit={handleSubmit}
+                id="company-form"
+                className="max-h-[70vh] overflow-y-auto relative"
+              >
+                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
+                  {viewOnly && (
+                    <div className="absolute inset-0 z-20"></div>
+                  )}
+                  {/* Basic Info */}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="flex flex-col gap-2 md:col-span-2">
+                      <Label htmlFor="name">
+                        {dict.LABEL_COMPANY_NAME}
+                        <span className="text-destructive ml-0.5">*</span>
+                      </Label>
+                      <div className="flex items-center gap-3">
                         <Input
-                          id="npwp"
-                          value={formData.npwp}
-                          onChange={(e) => setFormData({ ...formData, npwp: e.target.value })}
-                          placeholder="00.000.000.0-000.000"
+                          id="name"
+                          value={formData.name}
+                          onChange={(e) =>
+                            setFormData({ ...formData, name: e.target.value })
+                          }
+                          placeholder=""
+                          className="flex-1"
+                          required
                         />
+                        <div className="flex min-w-[60px] flex-col items-center gap-0.5">
+                          <Switch
+                            id="is_active"
+                            checked={formData.is_active}
+                            onCheckedChange={(checked) =>
+                              setFormData({ ...formData, is_active: checked })
+                            }
+                          />
+                          <span className="mt-1.5 text-[10px] leading-none font-bold text-muted-foreground uppercase">
+                            {formData.is_active
+                              ? dict.LABEL_IS_ACTIVE
+                              : dict.LABEL_IS_INACTIVE}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Contact Persons Section */}
-                  <div className="flex flex-col gap-4 md:col-span-2 border rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <Label>{dict.LABEL_CONTACT_PERSON}</Label>
-                      <Button type="button" variant="outline" size="sm" onClick={addContactPerson} className="h-8">
-                        <Plus className="size-4" />
-                      </Button>
+                    {/* Types Selection */}
+                    <div className="flex flex-row gap-10 rounded-lg border bg-muted/20 p-3 md:col-span-2">
+                      <Label>{dict.LABEL_TYPE}</Label>
+                      <div className="flex flex-wrap gap-8">
+                        {["Customer", "Supplier", "Transporter"].map((type) => (
+                          <div key={type} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`type-${type}`}
+                              checked={formData.types.includes(type)}
+                              onCheckedChange={() => toggleType(type)}
+                            />
+                            <Label
+                              htmlFor={`type-${type}`}
+                              className="cursor-pointer font-normal"
+                            >
+                              {type === "Customer" ? (
+                                <>
+                                  {dict.LABEL_TYPE_CUSTOMER}{" "}
+                                  <User className="size-4 text-blue-600" />
+                                </>
+                              ) : type === "Supplier" ? (
+                                <>
+                                  {dict.LABEL_TYPE_SUPPLIER}{" "}
+                                  <Warehouse className="size-4 text-amber-600" />
+                                </>
+                              ) : (
+                                <>
+                                  {dict.LABEL_TYPE_TRANSPORTER}{" "}
+                                  <Truck className="size-4 text-emerald-600" />
+                                </>
+                              )}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Company Contact Info */}
+                    <div className="flex flex-col gap-6 rounded-lg border bg-muted/5 p-4 md:col-span-2">
+                      <Label>{dict.LABEL_COMPANY_CONTACT_INFO}</Label>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="phone" className="text-xs">
+                            {dict.LABEL_PHONE}
+                          </Label>
+                          <div className="relative">
+                            <Phone className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
+                            <Input
+                              id="phone"
+                              className="pl-9"
+                              value={formData.phone}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  phone: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="email" className="text-xs">
+                            {dict.LABEL_EMAIL}
+                          </Label>
+                          <div className="relative">
+                            <Mail className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
+                            <Input
+                              id="email"
+                              type="email"
+                              className="pl-9"
+                              value={formData.email}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  email: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
+                        {/* NPWP Field */}
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="npwp " className="text-xs">
+                            {dict.LABEL_NPWP}
+                          </Label>
+                          <Input
+                            id="npwp"
+                            value={formData.npwp}
+                            onChange={(e) =>
+                              setFormData({ ...formData, npwp: e.target.value })
+                            }
+                            placeholder="00.000.000.0-000.000"
+                          />
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex flex-col gap-4">
-                      {formData.contact_persons.map((contact, index) => (
-                        <div key={index} className="flex flex-col gap-3 p-3 border rounded-md bg-background/50 group/contact">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                              {dict.LABEL_CONTACT_PERSON} #{index + 1}
-                            </span>
+                    {/* Contact Persons Section */}
+                    <div className="flex flex-col gap-4 rounded-lg border p-4 md:col-span-2">
+                      <div className="flex items-center justify-between">
+                        <Label>{dict.LABEL_CONTACT_PERSON}</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={addContactPerson}
+                          className="h-8"
+                        >
+                          <Plus className="size-4" />
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-col gap-4">
+                        {formData.contact_persons.map((contact, index) => (
+                          <div
+                            key={index}
+                            className="group/contact flex flex-col gap-3 rounded-md border bg-background/50 p-3"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+                                {dict.LABEL_CONTACT_PERSON} #{index + 1}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  "size-7 transition-colors",
+                                  formData.contact_persons.length > 1
+                                    ? "text-destructive hover:bg-destructive/10"
+                                    : "text-muted-foreground/20"
+                                )}
+                                disabled={formData.contact_persons.length <= 1}
+                                onClick={() => removeContactPerson(index)}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-xs font-bold text-muted-foreground">
+                                  {dict.LABEL_NAME}
+                                </Label>
+                                <div className="relative">
+                                  <User className="absolute top-2.5 left-2 size-3.5 text-muted-foreground" />
+                                  <Input
+                                    value={contact.name}
+                                    onChange={(e) =>
+                                      updateContactPerson(
+                                        index,
+                                        "name",
+                                        e.target.value
+                                      )
+                                    }
+                                    className="h-9 pl-8"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-xs font-bold text-muted-foreground">
+                                  {dict.LABEL_DESCRIPTION}
+                                </Label>
+                                <Input
+                                  value={contact.description}
+                                  onChange={(e) =>
+                                    updateContactPerson(
+                                      index,
+                                      "description",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="h-9"
+                                  placeholder="Purchasing Manager"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-xs font-bold text-muted-foreground">
+                                  {dict.LABEL_PHONE}
+                                </Label>
+                                <div className="relative">
+                                  <Phone className="absolute top-2.5 left-2 size-3.5 text-muted-foreground" />
+                                  <Input
+                                    value={contact.phone}
+                                    onChange={(e) =>
+                                      updateContactPerson(
+                                        index,
+                                        "phone",
+                                        e.target.value
+                                      )
+                                    }
+                                    className="h-9 pl-8"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-xs font-bold text-muted-foreground">
+                                  {dict.LABEL_EMAIL}
+                                </Label>
+                                <div className="relative">
+                                  <Mail className="absolute top-2.5 left-2 size-3.5 text-muted-foreground" />
+                                  <Input
+                                    value={contact.email}
+                                    onChange={(e) =>
+                                      updateContactPerson(
+                                        index,
+                                        "email",
+                                        e.target.value
+                                      )
+                                    }
+                                    className="h-9 pl-8"
+                                    type="email"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Addresses Section */}
+                    <div className="flex flex-col gap-4 rounded-lg border bg-muted/10 p-4 md:col-span-2">
+                      <div className="flex items-center justify-between">
+                        <Label>{dict.LABEL_ADDRESS}</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={addAddress}
+                          className="h-8"
+                        >
+                          <Plus className="size-4" />
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-col gap-3">
+                        {formData.addresses.map((addr, index) => (
+                          <div
+                            key={index}
+                            className="group/addr flex items-end gap-2"
+                          >
+                            <div className="flex w-[140px] shrink-0 flex-col gap-1.5">
+                              <Label className="text-xs font-bold text-muted-foreground">
+                                {dict.LABEL_ADDRESS_LABEL}
+                              </Label>
+                              <Input
+                                value={addr.label}
+                                onChange={(e) =>
+                                  updateAddress(index, "label", e.target.value)
+                                }
+                                placeholder="Head Office"
+                                className="h-9"
+                              />
+                            </div>
+                            <div className="flex flex-1 flex-col gap-1.5">
+                              <Label className="text-xs font-bold text-muted-foreground">
+                                {dict.LABEL_ADDRESS}
+                              </Label>
+                              <Input
+                                value={addr.address}
+                                onChange={(e) =>
+                                  updateAddress(index, "address", e.target.value)
+                                }
+                                placeholder="Jln. Raya..."
+                                className="h-9"
+                              />
+                            </div>
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
                               className={cn(
-                                "size-7 transition-colors",
-                                formData.contact_persons.length > 1 ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground/20"
+                                "size-9 shrink-0 transition-colors",
+                                formData.addresses.length > 1
+                                  ? "text-destructive hover:bg-destructive/10"
+                                  : "text-muted-foreground/20"
                               )}
-                              disabled={formData.contact_persons.length <= 1}
-                              onClick={() => removeContactPerson(index)}
+                              disabled={formData.addresses.length <= 1}
+                              onClick={() => removeAddress(index)}
                             >
                               <Trash2 className="size-4" />
                             </Button>
                           </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div className="flex flex-col gap-1.5">
-                              <Label className="text-xs font-bold text-muted-foreground">{dict.LABEL_NAME}</Label>
-                              <div className="relative">
-                                <User className="absolute left-2 top-2.5 size-3.5 text-muted-foreground" />
-                                <Input
-                                  value={contact.name}
-                                  onChange={(e) => updateContactPerson(index, 'name', e.target.value)}
-                                  className="h-9 pl-8"
-                                />
-                              </div>
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              <Label className="text-xs font-bold text-muted-foreground">{dict.LABEL_DESCRIPTION}</Label>
-                              <Input
-                                value={contact.description}
-                                onChange={(e) => updateContactPerson(index, 'description', e.target.value)}
-                                className="h-9"
-                                placeholder="Purchasing Manager"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              <Label className="text-xs font-bold text-muted-foreground">{dict.LABEL_PHONE}</Label>
-                              <div className="relative">
-                                <Phone className="absolute left-2 top-2.5 size-3.5 text-muted-foreground" />
-                                <Input
-                                  value={contact.phone}
-                                  onChange={(e) => updateContactPerson(index, 'phone', e.target.value)}
-                                  className="h-9 pl-8"
-                                />
-                              </div>
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              <Label className="text-xs font-bold text-muted-foreground">{dict.LABEL_EMAIL}</Label>
-                              <div className="relative">
-                                <Mail className="absolute left-2 top-2.5 size-3.5 text-muted-foreground" />
-                                <Input
-                                  value={contact.email}
-                                  onChange={(e) => updateContactPerson(index, 'email', e.target.value)}
-                                  className="h-9 pl-8"
-                                  type="email"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-
-                  {/* Addresses Section */}
-                  <div className="flex flex-col gap-4 md:col-span-2 border rounded-lg p-4 bg-muted/10">
-                    <div className="flex items-center justify-between">
-                      <Label>{dict.LABEL_ADDRESS}</Label>
-                      <Button type="button" variant="outline" size="sm" onClick={addAddress} className="h-8">
-                        <Plus className="size-4" />
-                      </Button>
+                        ))}
+                      </div>
                     </div>
 
-                    <div className="flex flex-col gap-3">
-                      {formData.addresses.map((addr, index) => (
-                        <div key={index} className="flex gap-2 items-end group/addr">
-                          <div className="flex flex-col gap-1.5 w-[140px] shrink-0">
-                            <Label className="text-xs font-bold text-muted-foreground">{dict.LABEL_ADDRESS_LABEL}</Label>
-                            <Input
-                              value={addr.label}
-                              onChange={(e) => updateAddress(index, 'label', e.target.value)}
-                              placeholder="Head Office"
-                              className="h-9"
-                            />
-                          </div>
-                          <div className="flex flex-col gap-1.5 flex-1">
-                            <Label className="text-xs font-bold text-muted-foreground">{dict.LABEL_ADDRESS}</Label>
-                            <Input
-                              value={addr.address}
-                              onChange={(e) => updateAddress(index, 'address', e.target.value)}
-                              placeholder="Jln. Raya..."
-                              className="h-9"
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className={cn(
-                              "size-9 shrink-0 transition-colors",
-                              formData.addresses.length > 1 ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground/20"
-                            )}
-                            disabled={formData.addresses.length <= 1}
-                            onClick={() => removeAddress(index)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Other Info - Full Width */}
-                  <div className="flex flex-col gap-2 md:col-span-2">
-                    <Label htmlFor="other">{dict.LABEL_OTHER_INFO}</Label>
-                    <div className="relative">
-                      <Info className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                      <Input
-                        id="other"
-                        className="pl-9"
-                        value={formData.other_info}
-                        onChange={(e) => setFormData({ ...formData, other_info: e.target.value })}
-                      />
+                    {/* Other Info - Full Width */}
+                    <div className="flex flex-col gap-2 md:col-span-2">
+                      <Label htmlFor="other">{dict.LABEL_OTHER_INFO}</Label>
+                      <div className="relative">
+                        <Info className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
+                        <Input
+                          id="other"
+                          className="pl-9"
+                          value={formData.other_info}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              other_info: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
               </form>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-                  <X data-icon="inline-start" />
-                  {dict.BUTTON_CANCEL}
-                </Button>
-                <Button type="submit" form="company-form" disabled={isSubmitting}>
-                  {isSubmitting ? (<ButtonLoader />) : (<Save data-icon="inline-start" />)}
-                  {dict.BUTTON_SAVE}
-                </Button>
-              </DialogFooter>
+              {!viewOnly && (
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <X data-icon="inline-start" />
+                    {dict.BUTTON_CANCEL}
+                  </Button>
+
+                  <Button
+                    type="submit"
+                    form="company-form"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <ButtonLoader />
+                    ) : (
+                      <Save data-icon="inline-start" />
+                    )}
+                    {dict.BUTTON_SAVE}
+                  </Button>
+                </DialogFooter>
+              )}
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      <div className="action-bar shrink-0 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <div className="relative flex-1 w-full max-sm:w-full max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+      <div className="action-bar flex shrink-0 flex-col items-start gap-4 sm:flex-row sm:items-center">
+        <div className="relative w-full max-w-sm flex-1 max-sm:w-full">
+          <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
             className="pl-8"
@@ -726,12 +990,17 @@ export default function CompaniesPage() {
             <SelectItem value="all">{dict.LABEL_ALL}</SelectItem>
             <SelectItem value="Customer">{dict.LABEL_TYPE_CUSTOMER}</SelectItem>
             <SelectItem value="Supplier">{dict.LABEL_TYPE_SUPPLIER}</SelectItem>
-            <SelectItem value="Transporter">{dict.LABEL_TYPE_TRANSPORTER}</SelectItem>
+            <SelectItem value="Transporter">
+              {dict.LABEL_TYPE_TRANSPORTER}
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      <Card ref={containerRef} className="data-card flex-1 overflow-y-auto custom-scrollbar">
+      <Card
+        ref={containerRef}
+        className="data-card custom-scrollbar flex-1 overflow-y-auto"
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -752,7 +1021,12 @@ export default function CompaniesPage() {
               <>
                 {companies.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-12 text-muted-foreground">{dict.NO_DATA}</TableCell>
+                    <TableCell
+                      colSpan={4}
+                      className="py-12 text-center text-muted-foreground"
+                    >
+                      {dict.NO_DATA}
+                    </TableCell>
                   </TableRow>
                 ) : (
                   companies.map((company) => {
@@ -761,38 +1035,69 @@ export default function CompaniesPage() {
                     const firstContact = contacts[0]
 
                     return (
-                      <TableRow key={company.id} className="group">
-                        <TableCell className="font-medium py-3">
+                      <TableRow
+                        key={company.id}
+                        className="group cursor-pointer"
+                        onDoubleClick={() => handleOpenDialog(company, true)}
+                      >
+                        <TableCell className="py-3 font-medium">
                           <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "size-2 rounded-full",
-                              company.is_active ? "bg-green-500" : "bg-muted-foreground/30"
-                            )} />
+                            <div
+                              className={cn(
+                                "size-2 rounded-full",
+                                company.is_active
+                                  ? "bg-green-500"
+                                  : "bg-muted-foreground/30"
+                              )}
+                            />
                             <div>
                               <div>{company.name}</div>
-                              <div className="text-xs text-muted-foreground font-normal mt-1 flex items-center gap-2">
-                                {details.email && <span className="flex items-center gap-1"><Mail className="size-3" /> {details.email}</span>}
-                                {details.phone && <span className="flex items-center gap-1"><Phone className="size-3" /> {details.phone}</span>}
+                              <div className="mt-1 flex items-center gap-2 text-xs font-normal text-muted-foreground">
+                                {details.email && (
+                                  <span className="flex items-center gap-1">
+                                    <Mail className="size-3" /> {details.email}
+                                  </span>
+                                )}
+                                {details.phone && (
+                                  <span className="flex items-center gap-1">
+                                    <Phone className="size-3" /> {details.phone}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-2">
-                            {(Array.isArray(company.type) ? company.type : [company.type]).map((t: string) => (
+                            {(Array.isArray(company.type)
+                              ? company.type
+                              : [company.type]
+                            ).map((t: string) => (
                               <div
                                 key={t}
-                                title={t === "Customer" ? dict.LABEL_TYPE_CUSTOMER : t === "Supplier" ? dict.LABEL_TYPE_SUPPLIER : dict.LABEL_TYPE_TRANSPORTER}
+                                title={
+                                  t === "Customer"
+                                    ? dict.LABEL_TYPE_CUSTOMER
+                                    : t === "Supplier"
+                                      ? dict.LABEL_TYPE_SUPPLIER
+                                      : dict.LABEL_TYPE_TRANSPORTER
+                                }
                                 className={cn(
-                                  "p-1.5 rounded-md border transition-colors",
-                                  t === "Customer" ? "bg-blue-500/10 text-blue-600 border-blue-200" :
-                                    t === "Supplier" ? "bg-amber-500/10 text-amber-600 border-amber-200" :
-                                      "bg-emerald-500/10 text-emerald-600 border-emerald-200"
+                                  "rounded-md border p-1.5 transition-colors",
+                                  t === "Customer"
+                                    ? "border-blue-200 bg-blue-500/10 text-blue-600"
+                                    : t === "Supplier"
+                                      ? "border-amber-200 bg-amber-500/10 text-amber-600"
+                                      : "border-emerald-200 bg-emerald-500/10 text-emerald-600"
                                 )}
                               >
-                                {t === "Customer" ? <User className="size-3.5" /> :
-                                  t === "Supplier" ? <Warehouse className="size-3.5" /> :
-                                    <Truck className="size-3.5" />}
+                                {t === "Customer" ? (
+                                  <User className="size-3.5" />
+                                ) : t === "Supplier" ? (
+                                  <Warehouse className="size-3.5" />
+                                ) : (
+                                  <Truck className="size-3.5" />
+                                )}
                               </div>
                             ))}
                           </div>
@@ -801,10 +1106,16 @@ export default function CompaniesPage() {
                           <div className="text-sm">
                             {firstContact ? (
                               <div className="flex flex-col">
-                                <span className="font-medium">{firstContact.name}</span>
-                                {firstContact.description && <span className="text-[10px] text-muted-foreground">{firstContact.description}</span>}
+                                <span className="font-medium">
+                                  {firstContact.name}
+                                </span>
+                                {firstContact.description && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {firstContact.description}
+                                  </span>
+                                )}
                                 {contacts.length > 1 && (
-                                  <span className="text-[10px] text-primary font-bold mt-0.5">
+                                  <span className="mt-0.5 text-[10px] font-bold text-primary">
                                     + {contacts.length - 1} more
                                   </span>
                                 )}
@@ -845,14 +1156,14 @@ export default function CompaniesPage() {
 
             {/* Infinite Scroll Sentinel & Loader */}
             <TableRow ref={observerTarget} className="border-0">
-              <TableCell colSpan={4} className="p-0 border-0 overflow-hidden">
+              <TableCell colSpan={4} className="overflow-hidden border-0 p-0">
                 {loadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
                 {!hasMore && companies.length > 0 && !loading && (
-                  <div className="text-center py-3 text-xs text-danger/70 select-none">
+                  <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>
                 )}
@@ -861,7 +1172,7 @@ export default function CompaniesPage() {
           </TableBody>
         </Table>
       </Card>
-      <div className="grid grid-cols-4 gap-2 md:gap-4 mb-1 shrink-0">
+      <div className="mb-1 grid shrink-0 grid-cols-4 gap-2 md:gap-4">
         <SummaryCard
           label={dict.LABEL_ACTIVE_COMPANIES}
           value={stats.activeCompanies}
@@ -893,7 +1204,10 @@ export default function CompaniesPage() {
         onOpenChange={(open) => !open && setDeleteConfirm(null)}
         onConfirm={confirmDelete}
         title={dict.TITLE_DELETE || "Confirm Delete"}
-        description={dict.MSG_DELETE_CONFIRM?.split("%data%")[0] || "Are you sure you want to delete this item? This action cannot be undone."}
+        description={
+          dict.MSG_DELETE_CONFIRM?.split("%data%")[0] ||
+          "Are you sure you want to delete this item? This action cannot be undone."
+        }
         dataName={deleteConfirm?.name}
         confirmText={dict.BUTTON_DELETE || "Delete"}
         cancelText={dict.BUTTON_CANCEL || "Cancel"}

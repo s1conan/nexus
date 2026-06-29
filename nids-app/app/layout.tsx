@@ -2,10 +2,10 @@ import { Geist_Mono, Noto_Sans } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils"
 
-const notoSans = Noto_Sans({ subsets: ['latin'], variable: '--font-sans' })
-const fontMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono", })
+const notoSans = Noto_Sans({ subsets: ["latin"], variable: "--font-sans" })
+const fontMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
 
 import { DictionaryProvider } from "@/components/dictionary-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -26,7 +26,7 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
   // Fetch session and profile on the server for instant initialization
-  let initialLang: Language = 'en'
+  let initialLang: Language = "en"
   let initialUser: any = null
   let initialProfile: any = null
 
@@ -37,11 +37,13 @@ export default async function RootLayout({
     // Keep the timer reference so we can clear it once the race settles,
     // otherwise the timeout still fires and rejects an orphaned promise.
     let timeoutId: ReturnType<typeof setTimeout> | undefined
-    const { data: { user } } = await Promise.race([
+    const {
+      data: { user },
+    } = await Promise.race([
       supabase.auth.getUser(),
       new Promise<any>((_, reject) => {
         timeoutId = setTimeout(() => reject(new Error("Timeout")), 3000)
-      })
+      }),
     ]).finally(() => {
       if (timeoutId) clearTimeout(timeoutId)
     })
@@ -49,19 +51,21 @@ export default async function RootLayout({
     if (user) {
       initialUser = user
       const { data: profile } = await supabase
-        .from('profiles')
-        .select(`
+        .from("profiles")
+        .select(
+          `
           *,
           role_permissions (
             permissions
           )
-        `)
-        .eq('auth_id', user.id)
+        `
+        )
+        .eq("auth_id", user.id)
         .maybeSingle()
 
       if (profile) {
         initialProfile = profile
-        initialLang = profile.preferred_language || 'en'
+        initialLang = profile.preferred_language || "en"
       }
     }
   } catch (e) {
@@ -72,16 +76,22 @@ export default async function RootLayout({
     <html
       lang={initialLang}
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", notoSans.variable)}
+      className={cn(
+        "antialiased",
+        fontMono.variable,
+        "font-sans",
+        notoSans.variable
+      )}
     >
       <body className="min-h-screen bg-background font-sans antialiased">
         <ThemeProvider>
           <DictionaryProvider initialLang={initialLang}>
-            <AuthProvider initialUser={initialUser} initialProfile={initialProfile}>
+            <AuthProvider
+              initialUser={initialUser}
+              initialProfile={initialProfile}
+            >
               <TooltipProvider>
-                <LayoutWrapper>
-                  {children}
-                </LayoutWrapper>
+                <LayoutWrapper>{children}</LayoutWrapper>
                 <Toaster />
               </TooltipProvider>
             </AuthProvider>

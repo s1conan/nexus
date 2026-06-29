@@ -8,17 +8,18 @@ export const SITE_CONFIG = {
   timeFormat: "HH:mm",
   assets: {
     loginImage: "/images/company-logo.jpg",
-  }
+  },
 }
 
-export type Language = 'en' | 'id'
+export type Language = "en" | "id"
 
 export const SITE_CONTENT = {
   en: {
     // Login Page
     LOGIN_TITLE: "NIDS System",
     LOGIN_SUBTITLE: "Enter your credentials to access the Nexus",
-    LOGIN_ERROR_PENDING: "Your account is pending approval from the administrator.",
+    LOGIN_ERROR_PENDING:
+      "Your account is pending approval from the administrator.",
     LOGIN_ERROR_INVALID: "Invalid username or password.",
     LABEL_USERNAME: "Username",
     PLACEHOLDER_USERNAME: "admin",
@@ -106,6 +107,10 @@ export const SITE_CONTENT = {
     LABEL_DRAFT_QUOTATIONS: "Draft Quotations",
     LABEL_SENT_QUOTATIONS: "Sent Quotations",
     LABEL_ALMOST_EXPIRED: "Almost Expired",
+    LABEL_STATUS_DRAFT: "Draft",
+    LABEL_STATUS_SENT: "Sent",
+    LABEL_STATUS_OVERDUE: "Overdue",
+    LABEL_STATUS_PAID: "Paid",
     LABEL_TOTAL_SOS: "Total Sales Orders",
     LABEL_TOTAL_INVOICES: "Total Invoices",
     LABEL_TOTAL_PAYMENTS: "Total Payments",
@@ -184,6 +189,11 @@ export const SITE_CONTENT = {
     LABEL_PAYMENT_DATE: "Payment Date",
     LABEL_REFERENCE_NUMBER: "Reference Number",
     LABEL_LINK_TO_PO: "Link to PO",
+    LABEL_LINK_TO_DO: "Link to DO",
+    BUTTON_EDIT_INVOICE: "Edit Invoice",
+    PLACEHOLDER_SELECT_DO: "Search DO number...",
+    LABEL_PRODUCT: "Product",
+    LABEL_TOTAL: "Total",
     LABEL_TAX_INCLUDED: "Include Tax (PPN)",
     LABEL_TAX_AUTO_CALC: "Calculate tax automatically",
     LABEL_ENABLE_NOTE: "Enable Note",
@@ -340,10 +350,13 @@ export const SITE_CONTENT = {
     MSG_SUCCESS_UPDATE_DESC_NO_COMPANY: "Successfully updated %entity%.",
     MSG_SUCCESS_DELETE_DESC: "Successfully deleted %entity% for %company%.",
     MSG_SUCCESS_DELETE_DESC_NO_COMPANY: "Successfully deleted %entity%.",
-    MSG_SUCCESS_STATUS_DESC: "Successfully changed status to %status% for %company%.",
-    MSG_SUCCESS_STATUS_DESC_NO_COMPANY: "Successfully changed status to %status%.",
+    MSG_SUCCESS_STATUS_DESC:
+      "Successfully changed status to %status% for %company%.",
+    MSG_SUCCESS_STATUS_DESC_NO_COMPANY:
+      "Successfully changed status to %status%.",
     MSG_PRINT_SUCCESS: "PDF generated successfully.",
-    MSG_PRINT_SUCCESS_DESC: "Successfully downloaded and prepared document %data% for printing.",
+    MSG_PRINT_SUCCESS_DESC:
+      "Successfully downloaded and prepared document %data% for printing.",
     MSG_EMAIL_SENT_SUCCESS: "Email sent to customer successfully.",
     MSG_EMAIL_SENT_SUCCESS_DESC: "Document %data% status updated to Sent.",
     LABEL_IS_ACTIVE: "Active",
@@ -379,13 +392,17 @@ export const SITE_CONTENT = {
     ERROR_INVALID_EMAIL: "Please enter a valid email address.",
     ERROR_PASSWORD_SHORT: "Password must be at least 6 characters.",
     ERROR_EMAIL_EXISTS: "This email address is already in use.",
-    ERROR_USERNAME_EXISTS: "This username is already taken. Please try another one.",
+    ERROR_USERNAME_EXISTS:
+      "This username is already taken. Please try another one.",
     ERROR_PHONE_EXISTS: "This phone number is already registered.",
     ERROR_INFO_EXISTS: "An account with this information already exists.",
-    ERROR_REG_RESTRICTED: "Registration is currently restricted. Please contact an admin.",
-    ERROR_SUBMIT_FAILED: "Unable to submit request. Please check your information.",
+    ERROR_REG_RESTRICTED:
+      "Registration is currently restricted. Please contact an admin.",
+    ERROR_SUBMIT_FAILED:
+      "Unable to submit request. Please check your information.",
     ERROR_UNEXPECTED: "An unexpected error occurred. Please try again.",
-    ERROR_TIMEOUT: "Request timed out. Please check your connection and try again.",
+    ERROR_TIMEOUT:
+      "Request timed out. Please check your connection and try again.",
     ERROR_VERIFY_STATUS: "Unable to verify account status.",
 
     // Additional Labels
@@ -403,21 +420,27 @@ export const SITE_CONTENT = {
     LABEL_CONFIRM_PASSWORD: "Confirm New Password",
     BUTTON_SET_NEW_PWD: "Set New Password",
     MSG_VERIFYING_TOKEN: "Verifying security token...",
-    ERROR_EXPIRED_LINK: "This security link has expired. Please contact your administrator to revoke and re-approve your account access.",
-    ERROR_INVALID_LINK: "Invalid security link. Please use the link provided in your email.",
+    ERROR_EXPIRED_LINK:
+      "This security link has expired. Please contact your administrator to revoke and re-approve your account access.",
+    ERROR_INVALID_LINK:
+      "Invalid security link. Please use the link provided in your email.",
     MSG_SECURITY_UPDATED: "Security Updated",
     MSG_RESET_LINK_SENT: "Security Link Dispatched",
-    DESC_SECURITY_REDIRECT: "Your password has been set successfully. You are being redirected to the login page to sign in with your new credentials.",
+    DESC_SECURITY_REDIRECT:
+      "Your password has been set successfully. You are being redirected to the login page to sign in with your new credentials.",
     LINK_FORGOT_PWD: "Forgot password?",
     TITLE_FORGOT_PWD: "Reset Password",
-    DESC_FORGOT_PWD: "Enter your email address and we'll send you a link to reset your password.",
-    MSG_RESET_SENT: "If an account exists with this email, you will receive a password reset link shortly.",
+    DESC_FORGOT_PWD:
+      "Enter your email address and we'll send you a link to reset your password.",
+    MSG_RESET_SENT:
+      "If an account exists with this email, you will receive a password reset link shortly.",
     BUTTON_SEND_LINK: "Send Link",
     ERROR_PASSWORD_MISMATCH: "Passwords do not match. Please try again.",
 
     // Settings Page
     SETTINGS_TITLE: "Global Settings",
-    SETTINGS_SUBTITLE: "Manage enterprise identities, dynamic tax rates, and core operational configurations.",
+    SETTINGS_SUBTITLE:
+      "Manage enterprise identities, dynamic tax rates, and core operational configurations.",
     SETTINGS_TAB_COMPANY: "Company Profile",
     SETTINGS_TAB_BANKS: "Bank Accounts",
     SETTINGS_TAB_PARAMETERS: "System Parameters",
@@ -428,7 +451,8 @@ export const SITE_CONTENT = {
     SETTINGS_LABEL_LOGO_URL: "Brand Logo URL",
     SETTINGS_LABEL_NPWP_ADDRESS: "NPWP Address",
     SETTINGS_LABEL_SHIPPING_ADDRESS: "Operational / Shipping Office Address",
-    SETTINGS_PLACEHOLDER_NPWP_ADDRESS: "Official address registered in NPWP profile",
+    SETTINGS_PLACEHOLDER_NPWP_ADDRESS:
+      "Official address registered in NPWP profile",
     SETTINGS_PLACEHOLDER_SHIPPING_ADDRESS: "Operational headquarters address",
     SETTINGS_BUTTON_SAVE_COMPANY: "Save Specifications",
 
@@ -440,7 +464,8 @@ export const SITE_CONTENT = {
     SETTINGS_LABEL_ACC_NUM: "Account Number",
     SETTINGS_LABEL_ACC_HOLDER: "Account Holder Name",
     SETTINGS_LABEL_BRANCH: "Branch Name",
-    SETTINGS_PLACEHOLDER_BANK_NAME: "e.g. Bank Mandiri, BCA, Bank Rakyat Indonesia",
+    SETTINGS_PLACEHOLDER_BANK_NAME:
+      "e.g. Bank Mandiri, BCA, Bank Rakyat Indonesia",
     SETTINGS_PLACEHOLDER_ACC_NUM: "e.g. 111231002319",
     SETTINGS_PLACEHOLDER_ACC_HOLDER: "e.g. PT Anugerah Buana Sriwijaya",
     SETTINGS_PLACEHOLDER_BRANCH: "e.g. Letkol Iskandar",
@@ -467,10 +492,13 @@ export const SITE_CONTENT = {
     VERIFY_BUTTON_VERIFY: "Verify Document",
     VERIFY_BUTTON_DOWNLOADING: "Downloading...",
     VERIFY_SUCCESS_TITLE: "Authenticity Confirmed",
-    VERIFY_SUCCESS_MSG: "This is an authentic document issued by PT Anugerah Buana Sriwijaya.",
+    VERIFY_SUCCESS_MSG:
+      "This is an authentic document issued by PT Anugerah Buana Sriwijaya.",
     VERIFY_ERROR_TITLE: "Verification Failed",
-    VERIFY_ERROR_MSG: "The quotation number does not match this record. Please check and try again.",
-    VERIFY_ERROR_RATE_LIMIT: "Too many failed attempts. Please try again in a few minutes.",
+    VERIFY_ERROR_MSG:
+      "The quotation number does not match this record. Please check and try again.",
+    VERIFY_ERROR_RATE_LIMIT:
+      "Too many failed attempts. Please try again in a few minutes.",
     VERIFY_DOC_DETAILS: "Document Details",
     VERIFY_LABEL_COMPANY: "Company",
     VERIFY_LABEL_DATE: "Issue Date",
@@ -481,7 +509,8 @@ export const SITE_CONTENT = {
     // Login Page
     LOGIN_TITLE: "Sistem NIDS",
     LOGIN_SUBTITLE: "Masukkan kredensial Anda untuk mengakses Nexus",
-    LOGIN_ERROR_PENDING: "Akun Anda sedang menunggu persetujuan dari administrator.",
+    LOGIN_ERROR_PENDING:
+      "Akun Anda sedang menunggu persetujuan dari administrator.",
     LOGIN_ERROR_INVALID: "Nama pengguna atau kata sandi salah.",
     LABEL_USERNAME: "Nama Pengguna",
     PLACEHOLDER_USERNAME: "admin",
@@ -564,20 +593,24 @@ export const SITE_CONTENT = {
     LABEL_TAX_RATE: "Tarif Pajak (%)",
     LABEL_SUBTOTAL: "Subtotal",
     LABEL_DELIVERY_TOTAL: "Total Pengiriman",
-    LABEL_GRAND_TOTAL: "Total Keseluruhan",
+    LABEL_GRAND_TOTAL: "Total",
     LABEL_TAXES: "Pajak",
     LABEL_TOTAL_DEPOSITS: "Total Setoran",
     LABEL_TOTAL_QUOTATIONS: "Total Penawaran",
     LABEL_DRAFT_QUOTATIONS: "Penawaran Draft",
     LABEL_SENT_QUOTATIONS: "Penawaran Terkirim",
     LABEL_ALMOST_EXPIRED: "Hampir Kedaluwarsa",
+    LABEL_STATUS_DRAFT: "Draft",
+    LABEL_STATUS_SENT: "Terkirim",
+    LABEL_STATUS_OVERDUE: "Jatuh Tempo",
+    LABEL_STATUS_PAID: "Lunas",
     LABEL_TOTAL_SOS: "Total SO",
     LABEL_TOTAL_INVOICES: "Total Faktur",
     LABEL_TOTAL_PAYMENTS: "Total Pembayaran",
     LABEL_TOTAL_AMOUNT: "Total Jumlah",
     LABEL_TOTAL_VOLUME: "Total Volume",
     LABEL_TOTAL_CUSTOMERS: "Pelanggan",
-    LABEL_TOTAL_SUPPLIERS: "Pemasok",
+    LABEL_TOTAL_SUPPLIERS: "Supplier",
     LABEL_TOTAL_TRANSPORTERS: "Transporters",
     LABEL_TOTAL_VEHICLES: "Total Kendaraan",
     LABEL_TOTAL_USERS: "Total Pengguna",
@@ -651,6 +684,11 @@ export const SITE_CONTENT = {
     LABEL_PAYMENT_DATE: "Tanggal Pembayaran",
     LABEL_REFERENCE_NUMBER: "Nomor Referensi",
     LABEL_LINK_TO_PO: "Tautkan ke PO",
+    LABEL_LINK_TO_DO: "Tautkan ke DO",
+    BUTTON_EDIT_INVOICE: "Edit Faktur",
+    PLACEHOLDER_SELECT_DO: "Cari nomor DO...",
+    LABEL_PRODUCT: "Produk",
+    LABEL_TOTAL: "Total",
     LABEL_TAX_INCLUDED: "Termasuk Pajak (PPN)",
     LABEL_TAX_AUTO_CALC: "Hitung pajak otomatis",
     LABEL_ENABLE_NOTE: "Aktifkan Catatan",
@@ -687,7 +725,7 @@ export const SITE_CONTENT = {
     LABEL_DRIVER_PHONE: "Telepon Sopir",
     PLACEHOLDER_SELECT_SO: "Pilih Pesanan Penjualan...",
     PLACEHOLDER_SELECT_TRANSPORTER: "Pilih Transporter...",
-    PLACEHOLDER_SELECT_SUPPLIER: "Pilih Pemasok...",
+    PLACEHOLDER_SELECT_SUPPLIER: "Pilih Supplier...",
     PLACEHOLDER_SELECT_DRIVER: "Pilih atau ketik sopir...",
     PLACEHOLDER_ENTER_DRIVER_PHONE: "Masukkan telepon sopir",
     PLACEHOLDER_SELECT_VEHICLE: "Pilih kendaraan...",
@@ -697,7 +735,7 @@ export const SITE_CONTENT = {
     MSG_SELECT_VEHICLE: "Pilih kendaraan untuk melihat kompartemen",
     MSG_TYPE_DRIVER_HINT: "Ketik nama sopir dan tekan '+' untuk menambahkan.",
     LABEL_ADDITIONAL_NOTES: "Catatan Tambahan",
-    LABEL_SUPPLIER_ORIGIN: "Pemasok (Asal)",
+    LABEL_SUPPLIER_ORIGIN: "Supplier (Asal)",
     LABEL_STOCK: "Stok",
     LABEL_PREVIEW_DO: "Pratinjau Surat Jalan",
     LABEL_CLICK_PREVIEW: "Klik untuk pratinjau",
@@ -763,7 +801,7 @@ export const SITE_CONTENT = {
     LABEL_ID_NUMBER: "Nomor KTP",
     LABEL_OTHER_INFO: "Info Lainnya",
     LABEL_TYPE_CUSTOMER: "Pelanggan",
-    LABEL_TYPE_SUPPLIER: "Pemasok",
+    LABEL_TYPE_SUPPLIER: "Supplier",
     LABEL_TYPE_TRANSPORTER: "Transporter",
     LABEL_COMPANY_CONTACT_INFO: "Informasi Perusahaan",
 
@@ -799,19 +837,24 @@ export const SITE_CONTENT = {
     MSG_SAVE_FAILED: "Simpan Data %data% Gagal",
     MSG_DATA_FETCH_FAILED: "Gagal Mengambil Data",
     MSG_SESSION_EXPIRED: "Sesi Berakhir",
-    MSG_RELOGIN: "Sesi Anda telah berakhir. Silakan masuk kembali untuk melanjutkan.",
+    MSG_RELOGIN:
+      "Sesi Anda telah berakhir. Silakan masuk kembali untuk melanjutkan.",
     MSG_SUCCESS_SAVE_DESC: "Berhasil menyimpan %entity% untuk %company%.",
     MSG_SUCCESS_SAVE_DESC_NO_COMPANY: "Berhasil menyimpan %entity%.",
     MSG_SUCCESS_UPDATE_DESC: "Berhasil memperbarui %entity% untuk %company%.",
     MSG_SUCCESS_UPDATE_DESC_NO_COMPANY: "Berhasil memperbarui %entity%.",
     MSG_SUCCESS_DELETE_DESC: "Berhasil menghapus %entity% untuk %company%.",
     MSG_SUCCESS_DELETE_DESC_NO_COMPANY: "Berhasil menghapus %entity%.",
-    MSG_SUCCESS_STATUS_DESC: "Berhasil mengubah status menjadi %status% untuk %company%.",
-    MSG_SUCCESS_STATUS_DESC_NO_COMPANY: "Berhasil mengubah status menjadi %status%.",
+    MSG_SUCCESS_STATUS_DESC:
+      "Berhasil mengubah status menjadi %status% untuk %company%.",
+    MSG_SUCCESS_STATUS_DESC_NO_COMPANY:
+      "Berhasil mengubah status menjadi %status%.",
     MSG_PRINT_SUCCESS: "PDF berhasil dibuat.",
-    MSG_PRINT_SUCCESS_DESC: "Berhasil mengunduh dan menyiapkan dokumen %data% untuk dicetak.",
+    MSG_PRINT_SUCCESS_DESC:
+      "Berhasil mengunduh dan menyiapkan dokumen %data% untuk dicetak.",
     MSG_EMAIL_SENT_SUCCESS: "Email berhasil dikirim ke pelanggan.",
-    MSG_EMAIL_SENT_SUCCESS_DESC: "Status dokumen %data% diperbarui menjadi Terkirim.",
+    MSG_EMAIL_SENT_SUCCESS_DESC:
+      "Status dokumen %data% diperbarui menjadi Terkirim.",
     LABEL_IS_ACTIVE: "Aktif",
     LABEL_IS_INACTIVE: "Nonaktif",
     MSG_PRODUCT_STATUS: "Produk sekarang",
@@ -836,7 +879,8 @@ export const SITE_CONTENT = {
     LABEL_MODULE: "Modul",
     LABEL_GRANULAR_PERMS: "Izin Granular",
     LABEL_ACC_APPROVAL: "Persetujuan Akun",
-    DESC_ACC_APPROVAL: "Setujui pengguna ini untuk memberi mereka akses ke sistem.",
+    DESC_ACC_APPROVAL:
+      "Setujui pengguna ini untuk memberi mereka akses ke sistem.",
     BUTTON_APPROVE: "Setujui Pengguna",
     BUTTON_REVOKE: "Cabut Persetujuan",
     BUTTON_MANAGE: "Kelola",
@@ -845,13 +889,18 @@ export const SITE_CONTENT = {
     ERROR_INVALID_EMAIL: "Silakan masukkan alamat email yang valid.",
     ERROR_PASSWORD_SHORT: "Kata sandi harus minimal 6 karakter.",
     ERROR_EMAIL_EXISTS: "Alamat email ini sudah digunakan.",
-    ERROR_USERNAME_EXISTS: "Nama pengguna ini sudah diambil. Silakan coba yang lain.",
+    ERROR_USERNAME_EXISTS:
+      "Nama pengguna ini sudah diambil. Silakan coba yang lain.",
     ERROR_PHONE_EXISTS: "Nomor telepon ini sudah terdaftar.",
     ERROR_INFO_EXISTS: "Akun dengan informasi ini sudah ada.",
-    ERROR_REG_RESTRICTED: "Pendaftaran saat ini dibatasi. Silakan hubungi admin.",
-    ERROR_SUBMIT_FAILED: "Tidak dapat mengajukan permintaan. Silakan periksa informasi Anda.",
-    ERROR_UNEXPECTED: "Terjadi kesalahan yang tidak terduga. Silakan coba lagi.",
-    ERROR_TIMEOUT: "Permintaan kehabisan waktu. Silakan periksa koneksi Anda dan coba lagi.",
+    ERROR_REG_RESTRICTED:
+      "Pendaftaran saat ini dibatasi. Silakan hubungi admin.",
+    ERROR_SUBMIT_FAILED:
+      "Tidak dapat mengajukan permintaan. Silakan periksa informasi Anda.",
+    ERROR_UNEXPECTED:
+      "Terjadi kesalahan yang tidak terduga. Silakan coba lagi.",
+    ERROR_TIMEOUT:
+      "Permintaan kehabisan waktu. Silakan periksa koneksi Anda dan coba lagi.",
     ERROR_VERIFY_STATUS: "Tidak dapat memverifikasi status akun.",
 
     // Additional Labels
@@ -869,21 +918,27 @@ export const SITE_CONTENT = {
     LABEL_CONFIRM_PASSWORD: "Konfirmasi Kata Sandi Baru",
     BUTTON_SET_NEW_PWD: "Atur Kata Sandi Baru",
     MSG_VERIFYING_TOKEN: "Memverifikasi token keamanan...",
-    ERROR_EXPIRED_LINK: "Tautan keamanan ini telah kedaluwarsa. Silakan hubungi administrator Anda.",
-    ERROR_INVALID_LINK: "Tautan keamanan tidak valid. Silakan gunakan tautan yang disediakan di email Anda.",
+    ERROR_EXPIRED_LINK:
+      "Tautan keamanan ini telah kedaluwarsa. Silakan hubungi administrator Anda.",
+    ERROR_INVALID_LINK:
+      "Tautan keamanan tidak valid. Silakan gunakan tautan yang disediakan di email Anda.",
     MSG_SECURITY_UPDATED: "Keamanan Diperbarui",
     MSG_RESET_LINK_SENT: "Tautan Keamanan Dikirim",
-    DESC_SECURITY_REDIRECT: "Kata sandi Anda telah berhasil diatur. Anda sedang dialihkan ke halaman login.",
+    DESC_SECURITY_REDIRECT:
+      "Kata sandi Anda telah berhasil diatur. Anda sedang dialihkan ke halaman login.",
     LINK_FORGOT_PWD: "Lupa kata sandi?",
     TITLE_FORGOT_PWD: "Atur Ulang Kata Sandi",
-    DESC_FORGOT_PWD: "Masukkan alamat email Anda dan kami akan mengirimkan tautan untuk mengatur ulang kata sandi Anda.",
-    MSG_RESET_SENT: "Jika akun dengan email ini ada, Anda akan segera menerima tautan atur ulang kata sandi.",
+    DESC_FORGOT_PWD:
+      "Masukkan alamat email Anda dan kami akan mengirimkan tautan untuk mengatur ulang kata sandi Anda.",
+    MSG_RESET_SENT:
+      "Jika akun dengan email ini ada, Anda akan segera menerima tautan atur ulang kata sandi.",
     BUTTON_SEND_LINK: "Kirim Tautan",
     ERROR_PASSWORD_MISMATCH: "Kata sandi tidak cocok. Silakan coba lagi.",
 
     // Settings Page
     SETTINGS_TITLE: "Pengaturan Global",
-    SETTINGS_SUBTITLE: "Kelola identitas perusahaan, tarif pajak dinamis, dan konfigurasi operasional inti.",
+    SETTINGS_SUBTITLE:
+      "Kelola identitas perusahaan, tarif pajak dinamis, dan konfigurasi operasional inti.",
     SETTINGS_TAB_COMPANY: "Profil Perusahaan",
     SETTINGS_TAB_BANKS: "Rekening Bank",
     SETTINGS_TAB_PARAMETERS: "Parameter Sistem",
@@ -894,7 +949,8 @@ export const SITE_CONTENT = {
     SETTINGS_LABEL_LOGO_URL: "URL Logo Brand",
     SETTINGS_LABEL_NPWP_ADDRESS: "Alamat NPWP",
     SETTINGS_LABEL_SHIPPING_ADDRESS: "Alamat Kantor Operasional / Pengiriman",
-    SETTINGS_PLACEHOLDER_NPWP_ADDRESS: "Alamat resmi yang terdaftar di profil NPWP",
+    SETTINGS_PLACEHOLDER_NPWP_ADDRESS:
+      "Alamat resmi yang terdaftar di profil NPWP",
     SETTINGS_PLACEHOLDER_SHIPPING_ADDRESS: "Alamat kantor pusat operasional",
     SETTINGS_BUTTON_SAVE_COMPANY: "Simpan Spesifikasi",
 
@@ -906,7 +962,8 @@ export const SITE_CONTENT = {
     SETTINGS_LABEL_ACC_NUM: "Nomor Rekening",
     SETTINGS_LABEL_ACC_HOLDER: "Nama Pemilik Rekening",
     SETTINGS_LABEL_BRANCH: "Nama Cabang",
-    SETTINGS_PLACEHOLDER_BANK_NAME: "misal: Bank Mandiri, BCA, Bank Rakyat Indonesia",
+    SETTINGS_PLACEHOLDER_BANK_NAME:
+      "misal: Bank Mandiri, BCA, Bank Rakyat Indonesia",
     SETTINGS_PLACEHOLDER_ACC_NUM: "misal: 111231002319",
     SETTINGS_PLACEHOLDER_ACC_HOLDER: "misal: PT Anugerah Buana Sriwijaya",
     SETTINGS_PLACEHOLDER_BRANCH: "misal: Letkol Iskandar",
@@ -933,16 +990,19 @@ export const SITE_CONTENT = {
     VERIFY_BUTTON_VERIFY: "Verifikasi Dokumen",
     VERIFY_BUTTON_DOWNLOADING: "Mengunduh...",
     VERIFY_SUCCESS_TITLE: "Keaslian Terkonfirmasi",
-    VERIFY_SUCCESS_MSG: "Ini adalah dokumen asli yang diterbitkan oleh PT Anugerah Buana Sriwijaya.",
+    VERIFY_SUCCESS_MSG:
+      "Ini adalah dokumen asli yang diterbitkan oleh PT Anugerah Buana Sriwijaya.",
     VERIFY_ERROR_TITLE: "Verifikasi Gagal",
-    VERIFY_ERROR_MSG: "Nomor penawaran tidak cocok dengan catatan ini. Silakan periksa dan coba lagi.",
-    VERIFY_ERROR_RATE_LIMIT: "Terlalu banyak percobaan yang gagal. Silakan coba lagi dalam beberapa menit.",
+    VERIFY_ERROR_MSG:
+      "Nomor penawaran tidak cocok dengan catatan ini. Silakan periksa dan coba lagi.",
+    VERIFY_ERROR_RATE_LIMIT:
+      "Terlalu banyak percobaan yang gagal. Silakan coba lagi dalam beberapa menit.",
     VERIFY_DOC_DETAILS: "Detail Dokumen",
     VERIFY_LABEL_COMPANY: "Perusahaan",
     VERIFY_LABEL_DATE: "Tanggal Terbit",
-    VERIFY_LABEL_TOTAL: "Total Keseluruhan",
+    VERIFY_LABEL_TOTAL: "Total",
     VERIFY_BUTTON_DOWNLOAD_OFFICIAL: "Unduh PDF Resmi",
-  }
+  },
 }
 
 export type ContentKey = keyof typeof SITE_CONTENT.en

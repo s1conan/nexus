@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronRight, Loader2, Plus, X } from "lucide-react"
+import { Check, ChevronRight, CircleCheck, Loader2, Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -92,13 +92,14 @@ export function LiveSearch<T extends Record<string, any>>({
       let isMounted = true
       setIsLoading(true)
 
-      fetchRef.current(debouncedQuery)
-        .then(res => {
+      fetchRef
+        .current(debouncedQuery)
+        .then((res) => {
           if (isMounted) {
             setResults(res)
           }
         })
-        .catch(err => {
+        .catch((err) => {
           console.error("LiveSearch fetch error:", err)
         })
         .finally(() => {
@@ -107,23 +108,27 @@ export function LiveSearch<T extends Record<string, any>>({
           }
         })
 
-      return () => { isMounted = false }
+      return () => {
+        isMounted = false
+      }
     }
   }, [debouncedQuery])
 
   // Combine static data and fetched results to find the currently selected item
   const allKnownItems = React.useMemo(() => {
     const map = new Map<string, T>()
-    data.forEach(item => map.set(String(item[keyField]), item))
-    results.forEach(item => map.set(String(item[keyField]), item))
+    data.forEach((item) => map.set(String(item[keyField]), item))
+    results.forEach((item) => map.set(String(item[keyField]), item))
     return Array.from(map.values())
   }, [data, results, keyField])
 
-  const selectedItem = allKnownItems.find((item) => String(item[keyField]) === value)
+  const selectedItem = allKnownItems.find(
+    (item) => String(item[keyField]) === value
+  )
 
   const getDisplayText = (item: T) => {
     if (!item) return ""
-    if (typeof displayField === 'function') {
+    if (typeof displayField === "function") {
       return displayField(item)
     }
     return String(item[displayField] || "")
@@ -141,14 +146,16 @@ export function LiveSearch<T extends Record<string, any>>({
     const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
     if (words.length === 0) return data.slice(0, 8)
 
-    return data.filter((item) => {
-      // Return true if ANY column contains ALL words
-      return searchColumns.some((col) => {
-        const raw = getNestedValue(item, String(col))
-        const val = String(raw ?? "").toLowerCase()
-        return words.every(word => val.includes(word))
+    return data
+      .filter((item) => {
+        // Return true if ANY column contains ALL words
+        return searchColumns.some((col) => {
+          const raw = getNestedValue(item, String(col))
+          const val = String(raw ?? "").toLowerCase()
+          return words.every((word) => val.includes(word))
+        })
       })
-    }).slice(0, 8)
+      .slice(0, 8)
   }, [data, results, searchQuery, searchColumns, fetchData])
 
   const triggerText = React.useMemo(() => {
@@ -164,17 +171,18 @@ export function LiveSearch<T extends Record<string, any>>({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between font-normal bg-background hover:bg-background/80 transition-colors", className)}
+          className={cn(
+            "w-full justify-between bg-background font-normal transition-colors hover:bg-background/80",
+            className
+          )}
           disabled={disabled}
         >
-          <span className="truncate">
-            {triggerText}
-          </span>
-          <span className="flex items-center gap-0.5 shrink-0">
+          <span className="truncate">{triggerText}</span>
+          <span className="flex shrink-0 items-center gap-0.5">
             {value && !disabled ? (
               <span
                 role="button"
-                className="size-4 shrink-0 rounded-full text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                className="size-4 shrink-0 cursor-pointer rounded-full text-muted-foreground transition-colors hover:text-foreground"
                 onClick={(e) => {
                   e.stopPropagation()
                   e.preventDefault()
@@ -202,7 +210,7 @@ export function LiveSearch<T extends Record<string, any>>({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[var(--radix-popover-trigger-width)] p-0 border shadow-lg"
+        className="w-[var(--radix-popover-trigger-width)] border p-0 shadow-lg"
         align="start"
       >
         <Command shouldFilter={false}>
@@ -233,20 +241,30 @@ export function LiveSearch<T extends Record<string, any>>({
               }}
             />
             {isLoading && (
-              <Loader2 className="absolute right-3 top-3 size-4 animate-spin text-muted-foreground" />
+              <Loader2 className="absolute top-3 right-3 size-4 animate-spin text-muted-foreground" />
             )}
           </div>
           <CommandList className="max-h-[300px] overflow-y-auto">
             {!isLoading && displayData.length === 0 && (
-              <CommandEmpty className="py-4 text-sm text-center text-muted-foreground">{emptyMessage}</CommandEmpty>
+              <CommandEmpty className="py-4 text-center text-sm text-muted-foreground">
+                {emptyMessage}
+              </CommandEmpty>
             )}
             <CommandGroup>
               {/* Optional multi-column visual header */}
               {visualColumns && displayData.length > 0 && (
-                <div className="flex px-2 py-1.5 text-[10px] w-1/3 flex-1 uppercase font-bold text-muted-foreground border-b mb-1 gap-2 w-full">
-                  <div className="size-4 shrink-0" /> {/* Space for checkmark */}
+                <div className="mb-1 flex w-1/3 w-full flex-1 gap-2 border-b px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase">
+                  <div className="size-4 shrink-0" />{" "}
+                  {/* Space for checkmark */}
                   {visualColumns.map((col) => (
-                    <div key={String(col.key)} className={cn("truncate", col.className, col.primary ? "" : "")}>
+                    <div
+                      key={String(col.key)}
+                      className={cn(
+                        "truncate",
+                        col.className,
+                        col.primary ? "" : ""
+                      )}
+                    >
                       {col.header}
                     </div>
                   ))}
@@ -267,11 +285,11 @@ export function LiveSearch<T extends Record<string, any>>({
                       setOpen(false)
                       setSearchQuery("") // Reset search on select
                     }}
-                    className="flex items-center gap-2 w-full cursor-pointer aria-selected:bg-primary/5"
+                    className="flex w-full cursor-pointer items-center gap-2 aria-selected:bg-primary/5"
                   >
                     <Check
                       className={cn(
-                        "size-4 shrink-0 text-primary",
+                        "size-4 stroke-5 shrink-0 text-primary",
                         isSelected ? "opacity-100" : "opacity-0"
                       )}
                     />
@@ -286,7 +304,9 @@ export function LiveSearch<T extends Record<string, any>>({
                             className={cn(
                               "truncate",
                               col.className,
-                              col.primary ? "font-medium" : "text-muted-foreground"
+                              col.primary
+                                ? "font-medium"
+                                : "text-muted-foreground"
                             )}
                           >
                             {val != null ? String(val) : "-"}
@@ -294,7 +314,9 @@ export function LiveSearch<T extends Record<string, any>>({
                         )
                       })
                     ) : (
-                      <span className="truncate flex-1">{getDisplayText(item)}</span>
+                      <span className="flex-1 truncate">
+                        {getDisplayText(item)}
+                      </span>
                     )}
                   </CommandItem>
                 )
@@ -309,7 +331,7 @@ export function LiveSearch<T extends Record<string, any>>({
                     setOpen(false)
                     setSearchQuery("")
                   }}
-                  className="flex items-center gap-2 w-full cursor-pointer text-primary border-t rounded-none mt-1 pt-2"
+                  className="mt-1 flex w-full cursor-pointer items-center gap-2 rounded-none border-t pt-2 text-primary"
                 >
                   <Plus className="size-4 shrink-0" />
                   <span>Use &quot;{searchQuery}&quot;</span>

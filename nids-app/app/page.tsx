@@ -46,10 +46,10 @@ export default function LoginPage() {
     setForgotLoading(true)
 
     try {
-      const response = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: forgotEmail })
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
       })
 
       const result = await response.json()
@@ -87,10 +87,12 @@ export default function LoginPage() {
   }, [loading, user, profile, router])
 
   const toggleLanguage = () => {
-    setLanguage(lang === 'en' ? 'id' : 'en')
+    setLanguage(lang === "en" ? "id" : "en")
   }
 
-  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>
+  ) => {
     e.preventDefault()
     setIsSubmitting(true)
     setLoginError("")
@@ -106,8 +108,8 @@ export default function LoginPage() {
       // 1. Find profile by username OR email
       console.log("Login: Searching for profile record...")
       const { data: profileRecord, error: lookupError } = await supabase
-        .from('profiles')
-        .select('id, email, is_active, preferred_language')
+        .from("profiles")
+        .select("id, email, is_active, preferred_language")
         .or(`username.eq.${input},email.eq.${input}`)
         .maybeSingle()
 
@@ -129,10 +131,11 @@ export default function LoginPage() {
       console.log("Login: Profile found. Using email:", emailToUse)
 
       // 2. Sign In with resolved email
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: emailToUse,
-        password: password,
-      })
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: emailToUse,
+          password: password,
+        })
 
       if (authError) {
         console.error("Login: Supabase Auth error", authError)
@@ -155,18 +158,24 @@ export default function LoginPage() {
 
         // 4. Update last_login, preferred_language and redirect
         const updateData: any = {
-          last_login: new Date().toISOString()
+          last_login: new Date().toISOString(),
         }
 
-        const localLang = typeof window !== 'undefined' ? localStorage.getItem("nids_pref_lang") : null
-        if (!profileRecord.preferred_language || (localLang && localLang !== profileRecord.preferred_language)) {
+        const localLang =
+          typeof window !== "undefined"
+            ? localStorage.getItem("nids_pref_lang")
+            : null
+        if (
+          !profileRecord.preferred_language ||
+          (localLang && localLang !== profileRecord.preferred_language)
+        ) {
           updateData.preferred_language = lang
         }
 
         await supabase
-          .from('profiles')
+          .from("profiles")
           .update(updateData)
-          .eq('auth_id', authData.user.id)
+          .eq("auth_id", authData.user.id)
 
         console.log("Login: Redirecting...")
         router.push("/dashboard")
@@ -209,18 +218,20 @@ export default function LoginPage() {
           <div className="banner-blur-mask" />
 
           <div className="absolute inset-x-0 bottom-0 z-20 p-8 pb-4 text-center">
-            <div className="flex justify-center mb-2">
-              <div className="bg-background/20 backdrop-blur-md p-3 rounded-xl border border-white/20">
+            <div className="mb-2 flex justify-center">
+              <div className="rounded-xl border border-white/20 bg-background/20 p-3 backdrop-blur-md">
                 <LogIn className="size-8 text-foreground shadow-sm" />
               </div>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground drop-shadow-md text-shadow-stroke text-shadow-gray-200">{config.brandName}</h1>
-            <p className="text-foreground mt-1 text-pretty text-sm">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground drop-shadow-md text-shadow-gray-200 text-shadow-stroke">
+              {config.brandName}
+            </h1>
+            <p className="mt-1 text-sm text-pretty text-foreground">
               {dict.LOGIN_SUBTITLE}
             </p>
-            <div className="min-h-[60px] flex items-start justify-center mt-2">
+            <div className="mt-2 flex min-h-[60px] items-start justify-center">
               {loginError && (
-                <div className="w-full p-3 text-sm text-destructive bg-background/40 backdrop-blur-sm border border-destructive/50 rounded-md animate-in fade-in duration-700">
+                <div className="w-full animate-in rounded-md border border-destructive/50 bg-background/40 p-3 text-sm text-destructive backdrop-blur-sm duration-700 fade-in">
                   {loginError}
                 </div>
               )}
@@ -232,8 +243,8 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             <div className="flex flex-col gap-2">
               <Label htmlFor="username">{dict.LABEL_USERNAME}</Label>
-              <div className="relative group">
-                <User className="absolute left-3 top-3 size-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+              <div className="group relative">
+                <User className="absolute top-3 left-3 size-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
                 <Input
                   id="username"
                   placeholder="username / email"
@@ -248,8 +259,8 @@ export default function LoginPage() {
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="password">{dict.LABEL_PASSWORD}</Label>
-              <div className="relative group">
-                <Lock className="absolute left-3 top-3 size-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+              <div className="group relative">
+                <Lock className="absolute top-3 left-3 size-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
                 <Input
                   id="password"
                   ref={passwordRef}
@@ -264,7 +275,11 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full h-11 mt-2" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              className="mt-2 h-11 w-full"
+              disabled={isSubmitting}
+            >
               {isSubmitting ? (
                 <ButtonLoader />
               ) : (
@@ -277,7 +292,10 @@ export default function LoginPage() {
           <div className="mt-8 flex flex-col items-center gap-4">
             <div className="text-center text-sm text-muted-foreground">
               {dict.TEXT_NO_ACCOUNT}{" "}
-              <Link href="/signup" className="font-semibold text-primary underline-offset-4 hover:underline">
+              <Link
+                href="/signup"
+                className="font-semibold text-primary underline-offset-4 hover:underline"
+              >
                 {dict.LINK_SIGNUP}
               </Link>
             </div>
@@ -285,7 +303,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setIsForgotOpen(true)}
-              className="text-xs text-primary font-medium hover:underline underline-offset-4"
+              className="text-xs font-medium text-primary underline-offset-4 hover:underline"
             >
               {dict.LINK_FORGOT_PWD || "Forgot password?"}
             </button>
@@ -300,9 +318,12 @@ export default function LoginPage() {
       <Dialog open={isForgotOpen} onOpenChange={setIsForgotOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{dict.TITLE_FORGOT_PWD || "Reset Password"}</DialogTitle>
+            <DialogTitle>
+              {dict.TITLE_FORGOT_PWD || "Reset Password"}
+            </DialogTitle>
             <DialogDescription>
-              {dict.DESC_FORGOT_PWD || "Enter your email address and we'll send you a link to reset your password."}
+              {dict.DESC_FORGOT_PWD ||
+                "Enter your email address and we'll send you a link to reset your password."}
             </DialogDescription>
           </DialogHeader>
 

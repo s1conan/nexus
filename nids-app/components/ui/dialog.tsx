@@ -38,17 +38,15 @@ function DialogOverlay({
   ...props
 }: React.ComponentProps<"div"> & { isLocal?: boolean }) {
   return (
-
     <div
       data-slot="dialog-overlay"
       className={cn(
         isLocal ? "absolute" : "fixed",
-        "inset-0 isolate z-50 bg-black/20 backdrop-blur-[1.5px] duration-200 animate-in fade-in-0",
+        "inset-0 isolate z-50 animate-in bg-black/20 backdrop-blur-[1.5px] duration-200 fade-in-0",
         className
       )}
       {...props}
     />
-
   )
 }
 
@@ -66,7 +64,7 @@ function DialogContent({
   // Find the nearest .page-container to portal into
   const markerRef = React.useCallback((node: HTMLDivElement | null) => {
     if (node) {
-      const parent = node.closest('.page-container')
+      const parent = node.closest(".page-container")
       if (parent instanceof HTMLElement) {
         setContainer(parent)
         setIsLocal(true)
@@ -76,7 +74,7 @@ function DialogContent({
 
   return (
     <>
-      <div ref={markerRef} style={{ display: 'none' }} />
+      <div ref={markerRef} style={{ display: "none" }} />
       <DialogPortal container={container || undefined}>
         <DialogOverlay isLocal={isLocal} />
         <DialogPrimitive.Content
@@ -86,7 +84,7 @@ function DialogContent({
           onFocusOutside={(e) => e.preventDefault()}
           className={cn(
             isLocal ? "absolute" : "fixed",
-            "top-[calc(50%-1px)] left-1/2 z-50 flex flex-col max-h-[85vh] has-[[data-slot=dialog-description]]:max-h-[84vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "overflow-hidden top-[calc(50%-1px)] left-1/2 z-50 flex max-h-[85vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none has-[[data-slot=dialog-description]]:max-h-[84vh] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
           )}
           {...props}
@@ -96,7 +94,7 @@ function DialogContent({
             <DialogPrimitive.Close data-slot="dialog-close" asChild>
               <Button
                 variant="close"
-                className="z-51 min-h-6 bg-transparent border-none absolute top-2.5 right-1.5 size-7 shadow-none rounded-full p-0 flex items-center justify-center hover:bg-destructive/80 text-primary-foreground right-2"
+                className="absolute top-2.5 right-1.5 right-2 z-51 flex size-7 min-h-6 items-center justify-center rounded-full border-none bg-transparent p-0 text-primary-foreground shadow-none hover:bg-destructive/80"
               >
                 <XIcon className="size-4" strokeWidth={3} />
                 <span className="sr-only">Close</span>
@@ -113,7 +111,10 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 bg-primary px-5 py-4 text-primary-foreground text-base font-medium select-none rounded-t-xl shrink-0 sticky top-0 z-50", className)}
+      className={cn(
+        "sticky top-0 z-50 flex shrink-0 flex-col gap-2 rounded-t-xl bg-primary px-5 py-4 text-base font-medium text-primary-foreground select-none",
+        className
+      )}
       {...props}
     />
   )
@@ -131,7 +132,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "flex flex-col sm:flex-row gap-3 border-t shrink-0 bg-muted/5 rounded-b-xl px-5 py-4 *:flex-1",
+        "flex shrink-0 flex-col gap-3 rounded-b-xl border-t bg-muted/5 px-5 py-4 *:flex-1 sm:flex-row",
         className
       )}
       {...props}
@@ -153,7 +154,10 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("flex flex-row items-center font-heading leading-none font-medium font-semibold", className)}
+      className={cn(
+        "font-heading flex flex-row items-center leading-none font-medium font-semibold",
+        className
+      )}
       {...props}
     />
   )

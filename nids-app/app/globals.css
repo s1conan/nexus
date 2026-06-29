@@ -277,7 +277,7 @@
 
 
     .page-container {
-        @apply flex flex-col gap-4 relative h-full overflow-y-auto p-4;
+        @apply flex flex-col gap-4 relative h-full overflow-y-auto p-4 max-h-[100%];
     }
 
     .page-header {
@@ -286,10 +286,6 @@
 
     .page-title {
         @apply text-2xl font-bold tracking-tight;
-    }
-
-    .data-card {
-        @apply p-2 border rounded-xl shadow-sm bg-card text-card-foreground;
     }
 
     .action-bar {
@@ -306,7 +302,7 @@
     .data-card {
         border: 1px solid var(--border);
         background: var(--card);
-        @apply p-2 rounded-xl shadow-sm text-card-foreground min-h-[60vh];
+        @apply p-2 rounded-xl shadow-sm text-card-foreground select-none min-h-[54vh];
     }
 
     .login-card {

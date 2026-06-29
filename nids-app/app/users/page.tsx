@@ -10,11 +10,23 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow
+  TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { ShieldCheck, ShieldAlert, ShieldX, Save, X, Clock, Pencil, UserCog, AlertCircle, Users, UserPlus } from "lucide-react"
+import {
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
+  Save,
+  X,
+  Clock,
+  Pencil,
+  UserCog,
+  AlertCircle,
+  Users,
+  UserPlus,
+} from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SummaryCard } from "@/components/summary-card"
@@ -24,14 +36,14 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter
+  DialogFooter,
 } from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
+  SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 
@@ -41,6 +53,7 @@ import { usePersistedState } from "@/hooks/use-persisted-state"
 
 import { formatDateTime } from "@/lib/formatters"
 import { cn } from "@/lib/utils"
+import { notify } from "@/lib/notifications"
 
 const supabase = createClient()
 
@@ -56,34 +69,51 @@ export default function UsersPage() {
   const [stats, setStats] = useState({
     totalUsers: 0,
     activeUsers: 0,
-    pendingUsers: 0
+    pendingUsers: 0,
   })
 
-  const [isDialogOpen, setIsDialogOpen] = usePersistedState("users_dialog_open", false)
-  const [editingUser, setEditingUser] = usePersistedState<any>("users_editing_data", null)
+  const [isDialogOpen, setIsDialogOpen] = usePersistedState(
+    "users_dialog_open",
+    false
+  )
+  const [editingUser, setEditingUser] = usePersistedState<any>(
+    "users_editing_data",
+    null
+  )
   const [isCustomizing, setIsCustomizing] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string, name: string, type: 'approve' | 'revoke' } | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    id: string
+    name: string
+    type: "approve" | "revoke"
+  } | null>(null)
 
   const moduleCategories = [
     {
       label: dict.MENU_GROUP_MASTER || "Master Data",
-      modules: ['companies', 'products', 'vehicles', 'funders']
+      modules: ["companies", "products", "vehicles", "funders"],
     },
     {
       label: dict.MENU_TRANSACTION || "Transactions",
-      modules: ['quotation', 'sales-order', 'delivery-order', 'deposit', 'invoice', 'payments']
+      modules: [
+        "quotation",
+        "sales-order",
+        "delivery-order",
+        "deposit",
+        "invoice",
+        "payments",
+      ],
     },
     {
       label: dict.MENU_GROUP_REPORTS || "Reports",
-      modules: ['inventory', 'shipments']
+      modules: ["inventory", "shipments"],
     },
     {
       label: dict.MENU_GROUP_SYSTEM || "System",
-      modules: ['users', 'settings', 'component-test']
-    }
+      modules: ["users", "settings", "component-test"],
+    },
   ]
-  const actions = ['view', 'insert', 'edit', 'delete', 'print']
+  const actions = ["view", "insert", "edit", "delete", "print"]
 
   // Permission Checks
   const canView = hasPermission("users", "view")
@@ -95,17 +125,24 @@ export default function UsersPage() {
       const [
         { count: totalCount },
         { count: activeCount },
-        { count: pendingCount }
+        { count: pendingCount },
       ] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_active', true),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).is('last_login', null).eq('is_active', false)
+        supabase.from("profiles").select("*", { count: "exact", head: true }),
+        supabase
+          .from("profiles")
+          .select("*", { count: "exact", head: true })
+          .eq("is_active", true),
+        supabase
+          .from("profiles")
+          .select("*", { count: "exact", head: true })
+          .is("last_login", null)
+          .eq("is_active", false),
       ])
 
       setStats({
         totalUsers: totalCount || 0,
         activeUsers: activeCount || 0,
-        pendingUsers: pendingCount || 0
+        pendingUsers: pendingCount || 0,
       })
     } catch (err) {
       console.error("Fetch Users Stats Error:", err)
@@ -117,15 +154,18 @@ export default function UsersPage() {
       setLoading(true)
       fetchStats()
       const [userRes, roleRes] = await Promise.all([
-        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-        supabase.from('role_permissions').select('role')
+        supabase
+          .from("profiles")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        supabase.from("role_permissions").select("role"),
       ])
 
       if (userRes.data) {
         const sortedUsers = [...userRes.data].sort((a, b) => {
           const getStatusScore = (u: any) => {
             if (!u.last_login && !u.is_active) return 0 // Pending
-            if (u.last_login && !u.is_active) return 1  // Deactivated
+            if (u.last_login && !u.is_active) return 1 // Deactivated
             return 2 // Active
           }
           const scoreA = getStatusScore(a)
@@ -138,7 +178,7 @@ export default function UsersPage() {
         // Use functional update to avoid dependency on editingUser
         setEditingUser((prev: any) => {
           if (!prev) return prev
-          const updated = sortedUsers.find(u => u.id === prev.id)
+          const updated = sortedUsers.find((u) => u.id === prev.id)
           return updated ? { ...updated } : prev
         })
       }
@@ -165,7 +205,7 @@ export default function UsersPage() {
         label: dict.LABEL_PENDING,
         color: "text-amber-600 dark:text-amber-400",
         icon: ShieldAlert,
-        bg: "bg-amber-100 dark:bg-amber-900/30"
+        bg: "bg-amber-100 dark:bg-amber-900/30",
       }
     }
     if (user.last_login && !user.is_active) {
@@ -173,14 +213,14 @@ export default function UsersPage() {
         label: dict.LABEL_DEACTIVATED,
         color: "text-red-600 dark:text-red-400",
         icon: ShieldX,
-        bg: "bg-red-100 dark:bg-red-900/30"
+        bg: "bg-red-100 dark:bg-red-900/30",
       }
     }
     return {
       label: dict.LABEL_ACTIVE,
       color: "text-emerald-600 dark:text-emerald-400",
       icon: ShieldCheck,
-      bg: "bg-emerald-100 dark:bg-emerald-900/30"
+      bg: "bg-emerald-100 dark:bg-emerald-900/30",
     }
   }
 
@@ -190,18 +230,28 @@ export default function UsersPage() {
     setIsDialogOpen(true)
   }
 
-  const handlePermissionChange = (module: string, action: string, value: boolean) => {
+  const handlePermissionChange = (
+    module: string,
+    action: string,
+    value: boolean
+  ) => {
     if (!isCustomizing) return
     const updatedPermissions = { ...editingUser.permissions }
     if (!updatedPermissions[module]) {
-      updatedPermissions[module] = { view: false, insert: false, edit: false, delete: false, print: false }
+      updatedPermissions[module] = {
+        view: false,
+        insert: false,
+        edit: false,
+        delete: false,
+        print: false,
+      }
     }
 
     const modulePerms = { ...updatedPermissions[module] }
 
-    if (action === 'view' && !value) {
+    if (action === "view" && !value) {
       // Logic: Unchecking "view" unchecks all permissions for this module
-      actions.forEach(a => {
+      actions.forEach((a) => {
         modulePerms[a] = false
       })
     } else {
@@ -209,7 +259,7 @@ export default function UsersPage() {
       modulePerms[action] = value
 
       // Logic: Checking any other permission automatically checks "view"
-      if (value && action !== 'view') {
+      if (value && action !== "view") {
         modulePerms.view = true
       }
     }
@@ -221,9 +271,9 @@ export default function UsersPage() {
   const handleRoleChange = async (role: string) => {
     try {
       const { data: roleInfo } = await supabase
-        .from('role_permissions')
-        .select('permissions')
-        .eq('role', role)
+        .from("role_permissions")
+        .select("permissions")
+        .eq("role", role)
         .single()
 
       setEditingUser((prev: any) => ({
@@ -231,7 +281,9 @@ export default function UsersPage() {
         role: role,
         // If customizing, we keep current permissions, if not, it will be null on save anyway
         // But for UI preview, we might want to show role perms if not customizing
-        permissions: isCustomizing ? prev.permissions : roleInfo?.permissions || prev.permissions
+        permissions: isCustomizing
+          ? prev.permissions
+          : roleInfo?.permissions || prev.permissions,
       }))
     } catch (err) {
       console.error("Unexpected error in handleRoleChange:", err)
@@ -249,7 +301,7 @@ export default function UsersPage() {
     setDeleteConfirm({
       id: editingUser.id,
       name: editingUser.full_name || editingUser.username,
-      type: editingUser.is_active ? 'revoke' : 'approve'
+      type: editingUser.is_active ? "revoke" : "approve",
     })
   }
 
@@ -257,16 +309,16 @@ export default function UsersPage() {
     if (!deleteConfirm || !editingUser) return
     setIsApproving(true)
     try {
-      const response = await fetch('/api/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           profileId: editingUser.id,
           email: editingUser.email,
           fullName: editingUser.full_name,
           phone: editingUser.phone,
-          action: deleteConfirm.type
-        })
+          action: deleteConfirm.type,
+        }),
       })
       const result = await response.json()
       if (result.error) {
@@ -284,20 +336,34 @@ export default function UsersPage() {
   }
 
   const handleSave = async () => {
+    // Validate required fields
+    if (!editingUser?.full_name?.trim()) {
+      notify.error("Validation Error", "Full name is required.")
+      return
+    }
+    if (!editingUser?.phone?.trim()) {
+      notify.error("Validation Error", "Phone is required.")
+      return
+    }
+    if (!editingUser?.role) {
+      notify.error("Validation Error", "Role is required.")
+      return
+    }
+
     try {
       setIsSaving(true)
       const trimmed = (editingUser.phone || "").trim()
       let formattedPhone = ""
-      if (trimmed.startsWith('+')) {
-        formattedPhone = '+' + trimmed.replace(/\D/g, '')
+      if (trimmed.startsWith("+")) {
+        formattedPhone = "+" + trimmed.replace(/\D/g, "")
       } else {
-        let digits = trimmed.replace(/\D/g, '')
-        if (digits.startsWith('0')) {
-          formattedPhone = '+62' + digits.substring(1)
-        } else if (digits.startsWith('62')) {
-          formattedPhone = '+' + digits
+        let digits = trimmed.replace(/\D/g, "")
+        if (digits.startsWith("0")) {
+          formattedPhone = "+62" + digits.substring(1)
+        } else if (digits.startsWith("62")) {
+          formattedPhone = "+" + digits
         } else if (digits.length > 0) {
-          formattedPhone = '+62' + digits
+          formattedPhone = "+62" + digits
         }
       }
 
@@ -306,19 +372,23 @@ export default function UsersPage() {
         // If customizing is OFF, save null to fallback to role permissions
         permissions: isCustomizing ? editingUser.permissions : null,
         full_name: editingUser.full_name,
-        phone: formattedPhone
+        phone: formattedPhone,
       }
 
       console.log("Users: [DEBUG] Attempting update for ID:", editingUser.id)
       console.log("Users: [DEBUG] Update payload:", updateData)
 
       const { data, error, status, statusText } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update(updateData)
-        .eq('id', editingUser.id)
+        .eq("id", editingUser.id)
         .select()
 
-      console.log("Users: [DEBUG] Supabase response status:", status, statusText)
+      console.log(
+        "Users: [DEBUG] Supabase response status:",
+        status,
+        statusText
+      )
 
       if (error) {
         console.error("Users: [DEBUG] Update error:", error)
@@ -326,7 +396,9 @@ export default function UsersPage() {
       }
 
       if (!data || data.length === 0) {
-        console.warn("Users: [DEBUG] Update succeeded but no rows were affected. Check RLS policies.")
+        console.warn(
+          "Users: [DEBUG] Update succeeded but no rows were affected. Check RLS policies."
+        )
       } else {
         console.log("Users: [DEBUG] Update successful, row affected:", data[0])
       }
@@ -343,7 +415,7 @@ export default function UsersPage() {
 
   if (authLoading) {
     return (
-      <div className="h-full w-full flex items-center justify-center">
+      <div className="flex h-full w-full items-center justify-center">
         <SectionLoader />
       </div>
     )
@@ -351,11 +423,16 @@ export default function UsersPage() {
 
   if (!canView) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
-        <div className="text-center space-y-2">
-          <AlertCircle className="size-8 text-destructive mx-auto" />
-          <h2 className="text-lg font-semibold">{dict.MSG_ACCESS_DENIED || "Access Denied"}</h2>
-          <p className="text-sm text-muted-foreground">{dict.MSG_NO_PERMISSION || "You do not have permission to view this page."}</p>
+      <div className="flex h-[50vh] items-center justify-center">
+        <div className="space-y-2 text-center">
+          <AlertCircle className="mx-auto size-8 text-destructive" />
+          <h2 className="text-lg font-semibold">
+            {dict.MSG_ACCESS_DENIED || "Access Denied"}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {dict.MSG_NO_PERMISSION ||
+              "You do not have permission to view this page."}
+          </p>
         </div>
       </div>
     )
@@ -366,12 +443,12 @@ export default function UsersPage() {
       {/* Page Header */}
       <div className="page-header">
         <h1 className="page-title">
-          <UserCog className="size-5 mr-2 inline-block text-primary" />
+          <UserCog className="mr-2 inline-block size-5 text-primary" />
           {dict.TITLE_USER_MGMT}
         </h1>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 shrink-0">
+      <div className="mb-6 grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <SummaryCard
           label={dict.LABEL_TOTAL_USERS || "Total Users"}
           value={stats.totalUsers}
@@ -397,7 +474,9 @@ export default function UsersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="px-7">{dict.LABEL_USERNAME_FIELD || "Username"}</TableHead>
+              <TableHead className="px-7">
+                {dict.LABEL_USERNAME_FIELD || "Username"}
+              </TableHead>
               <TableHead>{dict.LABEL_EMAIL}</TableHead>
               <TableHead>{dict.LABEL_FULL_NAME}</TableHead>
               <TableHead>{dict.LABEL_ROLE}</TableHead>
@@ -413,7 +492,11 @@ export default function UsersPage() {
                 </TableCell>
               </TableRow>
             ) : users.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8">{dict.NO_DATA}</TableCell></TableRow>
+              <TableRow>
+                <TableCell colSpan={6} className="py-8 text-center">
+                  {dict.NO_DATA}
+                </TableCell>
+              </TableRow>
             ) : (
               users.map((u) => {
                 const status = getStatusInfo(u)
@@ -423,28 +506,41 @@ export default function UsersPage() {
                   <TableRow key={u.id} className="group">
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "size-2 rounded-full",
-                          u.is_active ? "bg-green-500" : "bg-muted-foreground/30"
-                        )} />
+                        <div
+                          className={cn(
+                            "size-2 rounded-full",
+                            u.is_active
+                              ? "bg-green-500"
+                              : "bg-muted-foreground/30"
+                          )}
+                        />
                         <span>{u.username}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{u.email}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {u.email}
+                    </TableCell>
                     <TableCell className="text-sm">{u.full_name}</TableCell>
                     <TableCell>
-                      <span className="capitalize text-xs font-semibold px-2 py-0.5 rounded-md bg-secondary/50">
+                      <span className="rounded-md bg-secondary/50 px-2 py-0.5 text-xs font-semibold capitalize">
                         {u.role}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${status.bg} ${status.color}`}>
-                        <StatusIcon className="size-3 mr-1.5" />
+                      <div
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${status.bg} ${status.color}`}
+                      >
+                        <StatusIcon className="mr-1.5 size-3" />
                         {status.label}
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="table_action" size="sm" onClick={() => handleEdit(u)} disabled={!canEdit}>
+                      <Button
+                        variant="table_action"
+                        size="sm"
+                        onClick={() => handleEdit(u)}
+                        disabled={!canEdit}
+                      >
                         <Pencil className="size-4" />
                       </Button>
                     </TableCell>
@@ -460,7 +556,10 @@ export default function UsersPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle><UserCog className="size-5 mr-2 inline-block" />{dict.TITLE_MANAGE_USER}</DialogTitle>
+            <DialogTitle>
+              <UserCog className="mr-2 inline-block size-5" />
+              {dict.TITLE_MANAGE_USER}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-6">
@@ -468,46 +567,99 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <Label>{dict.LABEL_USERNAME_FIELD || "Username"}</Label>
-                  <Input value={editingUser?.username || ""} disabled className="bg-muted" />
+                  <Input
+                    value={editingUser?.username || ""}
+                    disabled
+                    className="bg-muted"
+                  />
                 </div>
                 <div className="flex flex-col gap-2">
                   <Label>{dict.LABEL_EMAIL || "Email"}</Label>
-                  <Input value={editingUser?.email || ""} disabled className="bg-muted" />
+                  <Input
+                    value={editingUser?.email || ""}
+                    disabled
+                    className="bg-muted"
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
-                  <Label>{dict.LABEL_FULL_NAME}</Label>
-                  <Input value={editingUser?.full_name || ""} onChange={(e) => setEditingUser({ ...editingUser, full_name: e.target.value })} />
+                  <Label>
+                    {dict.LABEL_FULL_NAME}
+                    <span className="text-destructive ml-0.5">*</span>
+                  </Label>
+                  <Input
+                    value={editingUser?.full_name || ""}
+                    onChange={(e) =>
+                      setEditingUser({
+                        ...editingUser,
+                        full_name: e.target.value,
+                      })
+                    }
+                  />
                 </div>
                 <div className="flex flex-col gap-2">
-                  <Label>{dict.LABEL_PHONE}</Label>
-                  <Input value={editingUser?.phone || ""} onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })} />
+                  <Label>
+                    {dict.LABEL_PHONE}
+                    <span className="text-destructive ml-0.5">*</span>
+                  </Label>
+                  <Input
+                    value={editingUser?.phone || ""}
+                    onChange={(e) =>
+                      setEditingUser({ ...editingUser, phone: e.target.value })
+                    }
+                  />
                 </div>
               </div>
               <div className="flex flex-col gap-2">
-                <Label>{dict.LABEL_ROLE}</Label>
-                <Select value={editingUser?.role} onValueChange={handleRoleChange}>
+                <Label>
+                  {dict.LABEL_ROLE}
+                  <span className="text-destructive ml-0.5">*</span>
+                </Label>
+                <Select
+                  value={editingUser?.role}
+                  onValueChange={handleRoleChange}
+                >
                   <SelectTrigger className="w-full capitalize">
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {roles.map(r => (
-                      <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
+                    {roles.map((r) => (
+                      <SelectItem key={r} value={r} className="capitalize">
+                        {r}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/30">
+              <div className="flex items-center gap-4 rounded-lg border bg-muted/30 p-4">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-sm">{dict.LABEL_ACC_APPROVAL}</h3>
+                  <h3 className="text-sm font-semibold">
+                    {dict.LABEL_ACC_APPROVAL}
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    {editingUser?.auth_id === profile?.auth_id ? "You cannot revoke your own account access." : dict.DESC_ACC_APPROVAL}
+                    {editingUser?.auth_id === profile?.auth_id
+                      ? "You cannot revoke your own account access."
+                      : dict.DESC_ACC_APPROVAL}
                   </p>
                 </div>
-                <Button variant={editingUser?.is_active ? "destructive" : "default"} onClick={handleApproveToggle} disabled={isApproving || editingUser?.auth_id === profile?.auth_id || !canEdit}>
-                  {isApproving ? <ButtonLoader /> : (editingUser?.is_active ? dict.BUTTON_REVOKE : dict.BUTTON_APPROVE)}
+                <Button
+                  variant={editingUser?.is_active ? "destructive" : "default"}
+                  onClick={handleApproveToggle}
+                  disabled={
+                    isApproving ||
+                    editingUser?.auth_id === profile?.auth_id ||
+                    !canEdit
+                  }
+                >
+                  {isApproving ? (
+                    <ButtonLoader />
+                  ) : editingUser?.is_active ? (
+                    dict.BUTTON_REVOKE
+                  ) : (
+                    dict.BUTTON_APPROVE
+                  )}
                 </Button>
               </div>
 
@@ -515,8 +667,13 @@ export default function UsersPage() {
                 <div className="flex items-center justify-between border-b pb-2">
                   <h3 className="font-bold">{dict.LABEL_GRANULAR_PERMS}</h3>
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="customize-toggle" className="text-xs font-semibold cursor-pointer">
-                      {lang === "id" ? "Sesuaikan Izin" : "Customize Permission"}
+                    <Label
+                      htmlFor="customize-toggle"
+                      className="cursor-pointer text-xs font-semibold"
+                    >
+                      {lang === "id"
+                        ? "Sesuaikan Izin"
+                        : "Customize Permission"}
                     </Label>
                     <Switch
                       id="customize-toggle"
@@ -527,32 +684,47 @@ export default function UsersPage() {
                   </div>
                 </div>
 
-                <div className={cn(
-                  "grid grid-cols-[150px_repeat(5,1fr)] gap-2 text-center text-xs font-bold text-muted-foreground mb-2 px-2",
-                  !isCustomizing && "opacity-50"
-                )}>
+                <div
+                  className={cn(
+                    "mb-2 grid grid-cols-[150px_repeat(5,1fr)] gap-2 px-2 text-center text-xs font-bold text-muted-foreground",
+                    !isCustomizing && "opacity-50"
+                  )}
+                >
                   <div className="text-left">{dict.LABEL_MODULE}</div>
-                  {actions.map(a => <div key={a} className="capitalize">{a}</div>)}
+                  {actions.map((a) => (
+                    <div key={a} className="capitalize">
+                      {a}
+                    </div>
+                  ))}
                 </div>
 
                 {moduleCategories.map((cat, catIdx) => (
                   <div key={catIdx} className="space-y-1">
-                    <div className="bg-muted/50 px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    <div className="rounded bg-muted/50 px-2 py-1 text-[10px] font-black tracking-widest text-muted-foreground uppercase">
                       {cat.label}
                     </div>
-                    {cat.modules.map(m => (
-                      <div key={m} className={cn(
-                        "grid grid-cols-[150px_repeat(5,1fr)] gap-2 items-center border-b border-muted/30 py-2 px-2 hover:bg-muted/10 transition-opacity",
-                        !isCustomizing && "opacity-50 grayscale-[0.5]"
-                      )}>
-                        <div className="text-sm font-medium capitalize">{m.replace('-', ' ')}</div>
-                        {actions.map(a => (
+                    {cat.modules.map((m) => (
+                      <div
+                        key={m}
+                        className={cn(
+                          "grid grid-cols-[150px_repeat(5,1fr)] items-center gap-2 border-b border-muted/30 px-2 py-2 transition-opacity hover:bg-muted/10",
+                          !isCustomizing && "opacity-50 grayscale-[0.5]"
+                        )}
+                      >
+                        <div className="text-sm font-medium capitalize">
+                          {m.replace("-", " ")}
+                        </div>
+                        {actions.map((a) => (
                           <div key={a} className="flex justify-center">
                             <input
                               type="checkbox"
                               className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
-                              checked={editingUser?.permissions?.[m]?.[a] || false}
-                              onChange={(e) => handlePermissionChange(m, a, e.target.checked)}
+                              checked={
+                                editingUser?.permissions?.[m]?.[a] || false
+                              }
+                              onChange={(e) =>
+                                handlePermissionChange(m, a, e.target.checked)
+                              }
                               disabled={!canEdit || !isCustomizing}
                             />
                           </div>
@@ -565,11 +737,19 @@ export default function UsersPage() {
             </div>
           </div>
 
-          <DialogFooter className="p-6 border-t">
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
+          <DialogFooter className="border-t p-6">
+            <Button
+              variant="outline"
+              onClick={() => setIsDialogOpen(false)}
+              className="flex-1"
+            >
               <X className="mr-2 size-4" /> {dict.BUTTON_CANCEL}
             </Button>
-            <Button onClick={handleSave} className="flex-1" disabled={isSaving || !canEdit}>
+            <Button
+              onClick={handleSave}
+              className="flex-1"
+              disabled={isSaving || !canEdit}
+            >
               {isSaving ? <ButtonLoader /> : <Save className="mr-2 size-4" />}
               {dict.BUTTON_SAVE}
             </Button>
@@ -581,14 +761,24 @@ export default function UsersPage() {
         isOpen={deleteConfirm !== null}
         onOpenChange={(open) => !open && setDeleteConfirm(null)}
         onConfirm={confirmApproveToggle}
-        title={deleteConfirm?.type === 'revoke' ? (dict.BUTTON_REVOKE || "Revoke Access") : (dict.BUTTON_APPROVE || "Approve Access")}
-        description={deleteConfirm?.type === 'revoke'
-          ? `Are you sure you want to revoke access for this user?`
-          : `Are you sure you want to approve access for this user?`}
+        title={
+          deleteConfirm?.type === "revoke"
+            ? dict.BUTTON_REVOKE || "Revoke Access"
+            : dict.BUTTON_APPROVE || "Approve Access"
+        }
+        description={
+          deleteConfirm?.type === "revoke"
+            ? `Are you sure you want to revoke access for this user?`
+            : `Are you sure you want to approve access for this user?`
+        }
         dataName={deleteConfirm?.name}
-        confirmText={deleteConfirm?.type === 'revoke' ? (dict.BUTTON_REVOKE || "Revoke") : (dict.BUTTON_APPROVE || "Approve")}
+        confirmText={
+          deleteConfirm?.type === "revoke"
+            ? dict.BUTTON_REVOKE || "Revoke"
+            : dict.BUTTON_APPROVE || "Approve"
+        }
         cancelText={dict.BUTTON_CANCEL || "Cancel"}
-        variant={deleteConfirm?.type === 'revoke' ? "destructive" : "default"}
+        variant={deleteConfirm?.type === "revoke" ? "destructive" : "default"}
       />
     </div>
   )

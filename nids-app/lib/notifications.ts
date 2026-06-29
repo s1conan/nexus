@@ -1,6 +1,11 @@
 import { toast } from "sonner"
 
-const dispatchNotification = (type: string, title: string, description?: string, isDb = false) => {
+const dispatchNotification = (
+  type: string,
+  title: string,
+  description?: string,
+  isDb = false
+) => {
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("nids-notification", {
@@ -10,8 +15,8 @@ const dispatchNotification = (type: string, title: string, description?: string,
           title,
           description: description || "",
           timestamp: new Date().toISOString(),
-          isDb
-        }
+          isDb,
+        },
       })
     )
   }
@@ -19,12 +24,17 @@ const dispatchNotification = (type: string, title: string, description?: string,
 
 /**
  * Standardized Notification Utility for NIDS
- * 
+ *
  * Visually: Uses the "Android-style" rounded floating design defined in globals.css
  * Semantically: Uses the success/error/warning/info colors defined in globals.css
  */
 export const notify = {
-  success: (title: string, description?: string, duration = 5000, isDb = false) => {
+  success: (
+    title: string,
+    description?: string,
+    duration = 5000,
+    isDb = false
+  ) => {
     dispatchNotification("success", title, description, isDb)
     return toast.success(title, {
       description,
@@ -56,7 +66,12 @@ export const notify = {
     })
   },
 
-  deleted: (title: string, description?: string, duration = 5000, isDb = false) => {
+  deleted: (
+    title: string,
+    description?: string,
+    duration = 5000,
+    isDb = false
+  ) => {
     dispatchNotification("deleted", title, description, isDb)
     return toast.error(title, {
       description,
@@ -73,5 +88,5 @@ export const notify = {
       description,
       duration: 10000, // Longer duration for critical info
     })
-  }
+  },
 }
