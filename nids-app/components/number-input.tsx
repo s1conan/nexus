@@ -69,18 +69,14 @@ export function NumberInput({
   useEffect(() => {
     if (value !== undefined && value !== null) {
       const formatted = formatValue(value)
-      const currentParsed = parseFloat(
-        displayValue
-          .replaceAll(separators.thousand, "")
-          .replace(separators.decimal, ".")
-      )
-      if (isNaN(currentParsed) || currentParsed !== value) {
+      // Only update if the formatted value differs from current display
+      // This prevents erasing user input while typing
+      if (formatted !== displayValue) {
         startTransition(() => { setDisplayValue(formatted) })
-      } else {
-        startTransition(() => { setDisplayValue("") })
       }
     }
-  }, [value, locale, separators])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, locale, separators, displayValue])
 
   // Restore cursor position after update
   useEffect(() => {
