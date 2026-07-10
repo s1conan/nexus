@@ -1,7 +1,7 @@
 "use client"
 
 import "./pdf-polyfills"
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, startTransition } from "react"
 import Image from "next/image"
 import {
   ChevronLeft,
@@ -13,7 +13,6 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize,
-  Expand,
   ArrowLeftRight,
   ArrowUpDown,
 } from "lucide-react"
@@ -32,6 +31,10 @@ import { pdfjs, Document, Page } from "react-pdf"
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+
+const PDF_OPTIONS = {
+  verbosity: 0,
+}
 
 import "react-pdf/dist/Page/AnnotationLayer.css"
 import "react-pdf/dist/Page/TextLayer.css"
@@ -123,11 +126,13 @@ export default function Gallery({
   }, [activeDocIndex])
 
   useEffect(() => {
-    setActiveDocIndex(initialIndex)
-    setActiveImageIndex(0)
-    setPageNumber(1)
-    setNumPages(null)
-    setScale(1.0) // Reset zoom on new document
+    startTransition(() => {
+      setActiveDocIndex(initialIndex)
+      setActiveImageIndex(0)
+      setPageNumber(1)
+      setNumPages(null)
+      setScale(1.0) // Reset zoom on new document
+    })
   }, [initialIndex])
 
   const activeDoc = activeDocIndex !== null ? docs[activeDocIndex] : null
@@ -360,6 +365,7 @@ export default function Gallery({
             <div className="mx-auto h-fit w-fit border bg-white shadow-lg">
               <Document
                 file={activeDoc.pdf}
+                options={PDF_OPTIONS}
                 onLoadSuccess={onDocumentLoadSuccess}
                 loading={
                   <div className="flex flex-col items-center justify-center gap-3 p-20">

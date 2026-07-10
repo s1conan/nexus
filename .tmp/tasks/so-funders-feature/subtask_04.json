@@ -1,0 +1,29 @@
+{
+  "id": "so-funders-feature-04",
+  "seq": "04",
+  "title": "Integrate funders dialog into SO page",
+  "status": "pending",
+  "depends_on": ["03"],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "A:\\Projects\\nids\\.opencode\\context\\project-intelligence\\technical-domain.md",
+    "A:\\Projects\\nids\\AGENTS.md"
+  ],
+  "reference_files": [
+    "A:\\Projects\\nids\\nids-app\\app\\sales-order\\page.tsx",
+    "A:\\Projects\\nids\\nids-app\\components\\number-input.tsx"
+  ],
+  "acceptance_criteria": [
+    "SO formData includes funders array field",
+    "Open dialog button added to SO form (e.g., 'Manage Funders' button)",
+    "FundersDialog integrated with grandTotal as totalAmount",
+    "Funders state loaded from existing row data when editing",
+    "Funders state saved to sales_orders.funders column on save",
+    "Follows existing SO page patterns for dialog, form state, and saving",
+    "Typecheck and lint pass without errors"
+  ],
+  "deliverables": [
+    "Updated nids-app/app/sales-order/page.tsx with funders integration"
+  ]
+}

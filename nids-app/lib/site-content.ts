@@ -163,6 +163,10 @@ export const SITE_CONTENT = {
     MSG_DEPOSIT_SAVED: "Deposit %data% saved successfully.",
     MSG_DEPOSIT_DELETED: "Deposit %data% removed.",
     MSG_DEPOSIT_STATUS_UPDATED: "Deposit status %data% updated.",
+    MSG_DEPOSIT_INVENTORY_IN_USE:
+      "Cannot modify deposit %data%. Inventory from this supplier/product has been used in delivery orders.",
+    MSG_DEPOSIT_DELETE_BLOCKED:
+      "This deposit cannot be deleted because its inventory is already in use.",
 
     // Sales Order Module
     LABEL_SO_NUMBER: "SO Number",
@@ -192,6 +196,9 @@ export const SITE_CONTENT = {
     LABEL_LINK_TO_DO: "Link to DO",
     BUTTON_EDIT_INVOICE: "Edit Invoice",
     PLACEHOLDER_SELECT_DO: "Search DO number...",
+    BILLING_NOTE_EXCEEDS_SENT: "Received quantity exceeds sent quantity. Billed quantity is capped at sent quantity.",
+    BILLING_NOTE_EXCEEDS_TOLERANCE: "Loss exceeds shrinkage tolerance. Billing actual received quantity.",
+    BILLING_NOTE_WITHIN_TOLERANCE: "Loss is within shrinkage tolerance. Billing original sent quantity.",
     LABEL_PRODUCT: "Product",
     LABEL_TOTAL: "Total",
     LABEL_TAX_INCLUDED: "Include Tax (PPN)",
@@ -219,6 +226,9 @@ export const SITE_CONTENT = {
     MSG_DO_SAVED: "Delivery Order %data% saved successfully.",
     MSG_DO_DELETED: "Delivery Order %data% removed.",
     MSG_DO_STATUS_UPDATED: "Delivery Order status %data% updated.",
+    LABEL_QTY_SHIPPED: "Qty Shipped",
+    LABEL_QTY_RECEIVED: "Qty Received",
+    MSG_CONFIRM_DELIVERY: "Confirm Delivery",
     MSG_SO_REQUIRED: "Sales Order must be selected.",
     LABEL_SO_INFORMATION: "SO Information",
     LABEL_CUSTOMER_FILTER: "Customer Company",
@@ -226,6 +236,11 @@ export const SITE_CONTENT = {
     LABEL_SO_TOTAL_QTY: "SO Total Quantity",
     LABEL_QTY_DELIVERED: "Delivered",
     LABEL_DELIVERY_DETAILS: "Delivery Details",
+    LABEL_PRICE_DISCOUNT: "Price Discount",
+    LABEL_DELIVERY_FEE: "Delivery Fee",
+    LABEL_CALCULATION_DETAILS: "Calculation Details",
+    LABEL_DATE_SENT: "Date Sent",
+    LABEL_DATE_DELIVERED: "Date Delivered",
     LABEL_TRANSPORTER: "Transporter",
     LABEL_DRIVER_PHONE: "Driver Phone",
     PLACEHOLDER_SELECT_SO: "Select Sales Order...",
@@ -276,6 +291,17 @@ export const SITE_CONTENT = {
     TITLE_ADD_FUNDER: "Add Funder",
     TITLE_EDIT_FUNDER: "Edit Funder",
     TITLE_DELETE: "Confirm Delete",
+
+    // Funder Module
+    LABEL_FUNDERS: "Funders",
+    LABEL_FUNDERS_SECTION: "Funders",
+    LABEL_ADD_FUNDER: "Add Funder",
+    LABEL_FUNDERS_LIST_EMPTY: "No funders added yet",
+    LABEL_FUNDER_NAME: "Funder",
+    LABEL_FUNDER_AMOUNT: "Amount",
+    LABEL_COMPANY_CONTRIBUTION: "Company Covers",
+    LABEL_TOTAL_FUNDERS: "Total Funders",
+    LABEL_MANAGE_FUNDERS: "Manage Funders",
 
     DASHBOARD_TITLE: "Executive Dashboard",
     LABEL_TOTAL_REVENUE: "Total Revenue",
@@ -658,6 +684,10 @@ export const SITE_CONTENT = {
     MSG_DEPOSIT_SAVED: "Setoran %data% berhasil disimpan.",
     MSG_DEPOSIT_DELETED: "Setoran %data% berhasil dihapus.",
     MSG_DEPOSIT_STATUS_UPDATED: "Status setoran %data% diperbarui.",
+    MSG_DEPOSIT_INVENTORY_IN_USE:
+      "Tidak dapat mengubah setoran %data%. Stok dari supplier/produk ini sudah digunakan dalam surat jalan.",
+    MSG_DEPOSIT_DELETE_BLOCKED:
+      "Setoran ini tidak dapat dihapus karena stoknya sudah digunakan.",
 
     // Sales Order Module
     LABEL_SO_NUMBER: "Nomor SO",
@@ -687,6 +717,9 @@ export const SITE_CONTENT = {
     LABEL_LINK_TO_DO: "Tautkan ke DO",
     BUTTON_EDIT_INVOICE: "Edit Faktur",
     PLACEHOLDER_SELECT_DO: "Cari nomor DO...",
+    BILLING_NOTE_EXCEEDS_SENT: "Jumlah diterima melebihi jumlah dikirim. Jumlah ditagih dibatasi pada jumlah dikirim.",
+    BILLING_NOTE_EXCEEDS_TOLERANCE: "Susut melebihi toleransi. Menagih jumlah aktual yang diterima.",
+    BILLING_NOTE_WITHIN_TOLERANCE: "Susut dalam batas toleransi. Menagih jumlah awal yang dikirim.",
     LABEL_PRODUCT: "Produk",
     LABEL_TOTAL: "Total",
     LABEL_TAX_INCLUDED: "Termasuk Pajak (PPN)",
@@ -714,6 +747,9 @@ export const SITE_CONTENT = {
     MSG_DO_SAVED: "Surat Jalan %data% berhasil disimpan.",
     MSG_DO_DELETED: "Surat Jalan %data% berhasil dihapus.",
     MSG_DO_STATUS_UPDATED: "Status Surat Jalan %data% diperbarui.",
+    LABEL_QTY_SHIPPED: "Qty Dikirim",
+    LABEL_QTY_RECEIVED: "Qty Diterima",
+    MSG_CONFIRM_DELIVERY: "Konfirmasi Pengiriman",
     MSG_SO_REQUIRED: "Pesanan Penjualan harus dipilih.",
     LABEL_SO_INFORMATION: "Informasi SO",
     LABEL_CUSTOMER_FILTER: "Perusahaan Pelanggan",
@@ -721,6 +757,11 @@ export const SITE_CONTENT = {
     LABEL_SO_TOTAL_QTY: "Total Kuantitas SO",
     LABEL_QTY_DELIVERED: "Dikirim",
     LABEL_DELIVERY_DETAILS: "Detail Pengiriman",
+    LABEL_PRICE_DISCOUNT: "Diskon Harga",
+    LABEL_DELIVERY_FEE: "Biaya Pengiriman",
+    LABEL_CALCULATION_DETAILS: "Rincian Perhitungan",
+    LABEL_DATE_SENT: "Tanggal Dikirim",
+    LABEL_DATE_DELIVERED: "Tanggal Diterima",
     LABEL_TRANSPORTER: "Transporter",
     LABEL_DRIVER_PHONE: "Telepon Sopir",
     PLACEHOLDER_SELECT_SO: "Pilih Pesanan Penjualan...",
@@ -772,6 +813,17 @@ export const SITE_CONTENT = {
     TITLE_ADD_FUNDER: "Tambah Funder",
     TITLE_EDIT_FUNDER: "Ubah Funder",
     TITLE_DELETE: "Konfirmasi Delete",
+
+    // Funder Module
+    LABEL_FUNDERS: "Funder",
+    LABEL_FUNDERS_SECTION: "Funder",
+    LABEL_ADD_FUNDER: "Tambah Funder",
+    LABEL_FUNDERS_LIST_EMPTY: "Belum ada funder",
+    LABEL_FUNDER_NAME: "Nama Funder",
+    LABEL_FUNDER_AMOUNT: "Jumlah",
+    LABEL_COMPANY_CONTRIBUTION: "Ditanggung Perusahaan",
+    LABEL_TOTAL_FUNDERS: "Total Funder",
+    LABEL_MANAGE_FUNDERS: "Kelola Funder",
 
     DASHBOARD_TITLE: "Dasbor Eksekutif",
     LABEL_TOTAL_REVENUE: "Total Pendapatan",

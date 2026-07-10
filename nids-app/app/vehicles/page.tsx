@@ -1,6 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  startTransition,
+} from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
@@ -54,7 +60,7 @@ const PAGE_SIZE = 50
 
 export default function VehiclesPage() {
   const { dict } = useDictionary()
-  const { hasPermission, profile, loading: authLoading } = useAuth()
+  const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
   const [vehicles, setVehicles] = useState<any[]>([])
@@ -190,11 +196,20 @@ export default function VehiclesPage() {
         setLoadingMore(false)
       }
     },
-    [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED]
+    [
+      supabase,
+      offset,
+      debouncedSearchQuery,
+      dict.MSG_DATA_FETCH_FAILED,
+      fetchStats,
+    ]
   )
 
   useEffect(() => {
-    fetchData(true)
+    startTransition(() => {
+      fetchData(true)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchQuery])
 
   useEffect(() => {
@@ -457,153 +472,155 @@ export default function VehiclesPage() {
               <form
                 onSubmit={handleSave}
                 id="vehicles-form"
-                className="max-h-[70vh] overflow-y-auto relative"
+                className="relative max-h-[70vh] overflow-y-auto"
               >
-                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
-                  {viewOnly && (
-                    <div className="absolute inset-0 z-20"></div>
+                <div
+                  className={cn(
+                    `relative flex w-full flex-col gap-6 p-5 ${viewOnly ? "rounded-b-xl border-2 border-orange-500" : ""}`
                   )}
+                >
+                  {viewOnly && <div className="absolute inset-0 z-20"></div>}
                   <div className="flex-1 space-y-6 py-2">
-                  <div className="grid grid-cols-2 gap-4 pl-1">
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="license">
-                        {dict.LABEL_LICENSE_NUMBER}
-                        <span className="text-destructive ml-0.5">*</span>
-                      </Label>
-                      <input
-                        id="license"
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm font-bold shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                        value={formData.license_number}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            license_number: e.target.value.toUpperCase(),
-                          })
-                        }
-                        placeholder="B 1234 XYZ"
-                        required
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="type">
-                        {dict.LABEL_VEHICLE_TYPE}
-                        <span className="text-destructive ml-0.5">*</span>
-                      </Label>
-                      <div className="flex items-center gap-3">
-                        <Input
-                          id="type"
-                          value={formData.vehicle_type}
+                    <div className="grid grid-cols-2 gap-4 pl-1">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="license">
+                          {dict.LABEL_LICENSE_NUMBER}
+                          <span className="ml-0.5 text-destructive">*</span>
+                        </Label>
+                        <input
+                          id="license"
+                          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm font-bold shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                          value={formData.license_number}
                           onChange={(e) =>
                             setFormData({
                               ...formData,
-                              vehicle_type: e.target.value,
+                              license_number: e.target.value.toUpperCase(),
                             })
                           }
-                          placeholder="e.g. Tanker, Truck"
+                          placeholder="B 1234 XYZ"
                           required
                         />
-                        <div className="flex min-w-[60px] flex-col items-center gap-0.5">
-                          <Switch
-                            id="is_active"
-                            checked={formData.is_active}
-                            onCheckedChange={(checked) =>
-                              setFormData({ ...formData, is_active: checked })
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="type">
+                          {dict.LABEL_VEHICLE_TYPE}
+                          <span className="ml-0.5 text-destructive">*</span>
+                        </Label>
+                        <div className="flex items-center gap-3">
+                          <Input
+                            id="type"
+                            value={formData.vehicle_type}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                vehicle_type: e.target.value,
+                              })
                             }
+                            placeholder="e.g. Tanker, Truck"
+                            required
                           />
-                          <span className="mt-1.5 text-[10px] leading-none font-bold text-muted-foreground uppercase">
-                            {formData.is_active
-                              ? dict.LABEL_IS_ACTIVE || "Active"
-                              : dict.LABEL_IS_INACTIVE || "Inactive"}
-                          </span>
+                          <div className="flex min-w-[60px] flex-col items-center gap-0.5">
+                            <Switch
+                              id="is_active"
+                              checked={formData.is_active}
+                              onCheckedChange={(checked) =>
+                                setFormData({ ...formData, is_active: checked })
+                              }
+                            />
+                            <span className="mt-1.5 text-[10px] leading-none font-bold text-muted-foreground uppercase">
+                              {formData.is_active
+                                ? dict.LABEL_IS_ACTIVE || "Active"
+                                : dict.LABEL_IS_INACTIVE || "Inactive"}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-4 pl-1">
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="total_cap">
-                        {dict.LABEL_TOTAL_CAPACITY}
-                      </Label>
-                      <NumberInput
-                        id="total_cap"
-                        value={formData.capacity}
-                        onChange={(val) =>
-                          setFormData({ ...formData, capacity: val })
-                        }
-                        badge="L"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b pb-2">
-                      <h3 className="flex items-center gap-2 text-base font-semibold">
-                        <Package className="size-4 text-primary" />{" "}
-                        {dict.LABEL_COMPARTMENTS}
-                      </h3>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={addCompartment}
-                      >
-                        <Plus className="size-4" />
-                      </Button>
+                    <div className="grid grid-cols-2 gap-4 pl-1">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="total_cap">
+                          {dict.LABEL_TOTAL_CAPACITY}
+                        </Label>
+                        <NumberInput
+                          id="total_cap"
+                          value={formData.capacity}
+                          onChange={(val) =>
+                            setFormData({ ...formData, capacity: val })
+                          }
+                          badge="L"
+                          required
+                        />
+                      </div>
                     </div>
 
-                    <div className="max-h-[40vh] space-y-3 overflow-y-auto pr-2">
-                      {formData.compartments.map((comp, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-4 rounded-lg border border-border/50 bg-muted/20 p-3"
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between border-b pb-2">
+                        <h3 className="flex items-center gap-2 text-base font-semibold">
+                          <Package className="size-4 text-primary" />{" "}
+                          {dict.LABEL_COMPARTMENTS}
+                        </h3>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={addCompartment}
                         >
-                          <Label
-                            htmlFor={`compartment-${idx}`}
-                            className="flex min-w-[60px] items-center gap-2 font-bold text-primary"
+                          <Plus className="size-4" />
+                        </Button>
+                      </div>
+
+                      <div className="max-h-[40vh] space-y-3 overflow-y-auto pr-2">
+                        {formData.compartments.map((comp, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-4 rounded-lg border border-border/50 bg-muted/20 p-3"
                           >
-                            <Hash className="size-4" />{" "}
-                            {comp.compartment_number}
-                          </Label>
-                          <div className="flex-1">
-                            <NumberInput
-                              id={`compartment-${idx}`}
-                              value={comp.capacity}
-                              onChange={(val) => {
-                                const newComps = [...formData.compartments]
-                                newComps[idx].capacity = val
-                                const newTotal = newComps.reduce(
-                                  (acc, c) => acc + (c.capacity || 0),
-                                  0
-                                )
-                                setFormData({
-                                  ...formData,
-                                  compartments: newComps,
-                                  capacity: newTotal,
-                                })
-                              }}
-                              badge="L"
-                              required
-                            />
+                            <Label
+                              htmlFor={`compartment-${idx}`}
+                              className="flex min-w-[60px] items-center gap-2 font-bold text-primary"
+                            >
+                              <Hash className="size-4" />{" "}
+                              {comp.compartment_number}
+                            </Label>
+                            <div className="flex-1">
+                              <NumberInput
+                                id={`compartment-${idx}`}
+                                value={comp.capacity}
+                                onChange={(val) => {
+                                  const newComps = [...formData.compartments]
+                                  newComps[idx].capacity = val
+                                  const newTotal = newComps.reduce(
+                                    (acc, c) => acc + (c.capacity || 0),
+                                    0
+                                  )
+                                  setFormData({
+                                    ...formData,
+                                    compartments: newComps,
+                                    capacity: newTotal,
+                                  })
+                                }}
+                                badge="L"
+                                required
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-destructive"
+                              onClick={() => removeCompartment(idx)}
+                              disabled={formData.compartments.length === 1}
+                            >
+                              <MinusCircle className="size-4" />
+                            </Button>
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 text-destructive"
-                            onClick={() => removeCompartment(idx)}
-                            disabled={formData.compartments.length === 1}
-                          >
-                            <MinusCircle className="size-4" />
-                          </Button>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </form>
+              </form>
               {!viewOnly && (
                 <DialogFooter>
                   <Button

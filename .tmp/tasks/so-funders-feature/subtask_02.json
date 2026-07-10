@@ -1,0 +1,24 @@
+{
+  "id": "so-funders-feature-02",
+  "seq": "02",
+  "title": "Add funders UI labels to site-content.ts",
+  "status": "pending",
+  "depends_on": [],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "A:\\Projects\\nids\\.opencode\\context\\project-intelligence\\technical-domain.md",
+    "A:\\Projects\\nids\\AGENTS.md"
+  ],
+  "reference_files": [
+    "A:\\Projects\\nids\\nids-app\\lib\\site-content.ts"
+  ],
+  "acceptance_criteria": [
+    "EN labels added for: FUNDERS section header, ADD_FUNDER button, FUNDERS_LIST empty state, FUNDER_NAME label, FUNDER_AMOUNT label, COMPANY_CONTRIBUTION label, TOTAL_FUNDERS label",
+    "ID labels added with proper translations for all EN labels",
+    "All funders-related labels follow existing naming conventions (LABEL_*, BUTTON_*, MSG_*)"
+  ],
+  "deliverables": [
+    "Updated nids-app/lib/site-content.ts with funders labels"
+  ]
+}

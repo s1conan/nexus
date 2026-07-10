@@ -13,10 +13,13 @@ CREATE TABLE IF NOT EXISTS public.sales_orders (
   -- Rich Text Fields with enable/disable toggle
   note TEXT,
   is_note_enabled BOOLEAN DEFAULT TRUE,
-  
+
   terms_conditions TEXT,
   is_terms_enabled BOOLEAN DEFAULT TRUE,
-  
+
+  -- Funder assignments: [{funder_id, funder_name, amount}]
+  funders JSONB DEFAULT '[]'::jsonb,
+
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   created_by UUID REFERENCES auth.users(id)
@@ -32,6 +35,9 @@ CREATE POLICY "Enable all for authenticated users" ON public.sales_orders FOR AL
 -- Audit Trigger
 DROP TRIGGER IF EXISTS audit_sales_orders_trigger ON public.sales_orders;
 CREATE TRIGGER audit_sales_orders_trigger AFTER INSERT OR UPDATE OR DELETE ON public.sales_orders FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
+
+-- Column documentation
+COMMENT ON COLUMN public.sales_orders.funders IS 'JSONB array of funder assignments: [{funder_id, funder_name, amount}]';
 
 -- Seed Example Data
 DO $$

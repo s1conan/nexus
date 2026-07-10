@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public.delivery_orders (
   do_date DATE NOT NULL DEFAULT CURRENT_DATE,
   shipment_date DATE NOT NULL DEFAULT CURRENT_DATE,
   quantity NUMERIC(12,2) NOT NULL DEFAULT 0,
+  delivered_date DATE,
   driver_name TEXT,
   vehicle_number TEXT,
   status TEXT DEFAULT 'Draft' CHECK (status IN ('Draft', 'Shipped', 'Delivered', 'Cancelled')),

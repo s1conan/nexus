@@ -1,0 +1,27 @@
+{
+  "id": "so-funders-feature-01",
+  "seq": "01",
+  "title": "Add funders JSONB column to sales_orders table",
+  "status": "pending",
+  "depends_on": [],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "A:\\Projects\\nids\\.opencode\\context\\project-intelligence\\technical-domain.md",
+    "A:\\Projects\\nids\\AGENTS.md"
+  ],
+  "reference_files": [
+    "A:\\Projects\\nids\\sales_orders_schema.sql",
+    "A:\\Projects\\nids\\funders_schema.sql"
+  ],
+  "acceptance_criteria": [
+    "sales_orders table has funders JSONB column (array of {funder_id, funder_name, amount})",
+    "Migration script created at nids-app/add_funders_to_sales_orders.sql",
+    "sales_orders_schema.sql updated to include the new column",
+    "RLS policy allows authenticated users access to the column"
+  ],
+  "deliverables": [
+    "nids-app/add_funders_to_sales_orders.sql",
+    "Updated sales_orders_schema.sql with funders column"
+  ]
+}

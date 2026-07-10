@@ -360,74 +360,76 @@ export default function ProductsPage() {
               <form
                 onSubmit={handleSubmit}
                 id="products-form"
-                className="max-h-[70vh] overflow-y-auto relative"
+                className="relative max-h-[70vh] overflow-y-auto"
               >
-                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
-                  {viewOnly && (
-                    <div className="absolute inset-0 z-20"></div>
+                <div
+                  className={cn(
+                    `relative flex w-full flex-col gap-6 p-5 ${viewOnly ? "rounded-b-xl border-2 border-orange-500" : ""}`
                   )}
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="sku">
-                    {dict.LABEL_SKU}
-                    <span className="text-destructive ml-0.5">*</span>
-                  </Label>
-                  <div className="flex items-center gap-3">
-                    <Input
-                      id="sku"
-                      value={formData.sku}
-                      onChange={(e) =>
-                        setFormData({ ...formData, sku: e.target.value })
-                      }
-                      placeholder="OIL-001"
-                      className="flex-1"
-                      required
-                    />
-                    <div className="flex min-w-[60px] flex-col items-center gap-0.5">
-                      <Switch
-                        id="is_active"
-                        checked={formData.is_active}
-                        onCheckedChange={(checked) =>
-                          setFormData({ ...formData, is_active: checked })
+                >
+                  {viewOnly && <div className="absolute inset-0 z-20"></div>}
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="sku">
+                      {dict.LABEL_SKU}
+                      <span className="ml-0.5 text-destructive">*</span>
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        id="sku"
+                        value={formData.sku}
+                        onChange={(e) =>
+                          setFormData({ ...formData, sku: e.target.value })
                         }
+                        placeholder="OIL-001"
+                        className="flex-1"
+                        required
                       />
-                      <span className="mt-1.5 text-[10px] leading-none font-bold text-muted-foreground uppercase">
-                        {formData.is_active
-                          ? dict.LABEL_IS_ACTIVE
-                          : dict.LABEL_IS_INACTIVE}
-                      </span>
+                      <div className="flex min-w-[60px] flex-col items-center gap-0.5">
+                        <Switch
+                          id="is_active"
+                          checked={formData.is_active}
+                          onCheckedChange={(checked) =>
+                            setFormData({ ...formData, is_active: checked })
+                          }
+                        />
+                        <span className="mt-1.5 text-[10px] leading-none font-bold text-muted-foreground uppercase">
+                          {formData.is_active
+                            ? dict.LABEL_IS_ACTIVE
+                            : dict.LABEL_IS_INACTIVE}
+                        </span>
+                      </div>
                     </div>
                   </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="name">
+                      {dict.LABEL_PRODUCT_NAME}
+                      <span className="ml-0.5 text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                      placeholder="Diesel Premium"
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="base_price">{dict.LABEL_BASE_PRICE}</Label>
+                    <NumberInput
+                      id="base_price"
+                      value={formData.base_price}
+                      onChange={(val) =>
+                        setFormData({ ...formData, base_price: val })
+                      }
+                      leftBadge={SITE_CONFIG.currencySymbol}
+                      rightBadge="/ L"
+                      required
+                    />
+                  </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="name">
-                    {dict.LABEL_PRODUCT_NAME}
-                    <span className="text-destructive ml-0.5">*</span>
-                  </Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                    placeholder="Diesel Premium"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="base_price">{dict.LABEL_BASE_PRICE}</Label>
-                  <NumberInput
-                    id="base_price"
-                    value={formData.base_price}
-                    onChange={(val) =>
-                      setFormData({ ...formData, base_price: val })
-                    }
-                    leftBadge={SITE_CONFIG.currencySymbol}
-                    rightBadge="/ L"
-                    required
-                  />
-                </div>
-              </div>
-            </form>
+              </form>
               {!viewOnly && (
                 <DialogFooter>
                   <Button

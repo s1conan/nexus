@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
@@ -27,6 +27,9 @@ import {
   Wallet,
   AlertCircle,
   RefreshCw,
+  Printer,
+  CheckCircle2,
+  FileText,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -34,6 +37,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import {
   Dialog,
@@ -59,24 +67,108 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { NumberInput } from "@/components/number-input"
+import { generateStandardPaymentPDF } from "@/lib/pdf-generator"
+import { SummaryCard } from "@/components/summary-card"
+import { usePersistedState } from "@/hooks/use-persisted-state"
+import dynamic from "next/dynamic"
+
+const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
 const PAGE_SIZE = 50
+
+interface AppSettingsRow {
+  id?: string
+  category: string
+  name: string
+  value: unknown
+  description?: string | null
+}
+
+interface CompanyInfo {
+  name?: string
+  address?: string
+  email?: string
+  npwp?: string
+  npwp_address?: string
+  logo_url?: string
+}
+
+interface InvoiceInfo {
+  id: string
+  invoice_number: string
+  total_amount: number
+  paid_amount: number
+  company?: {
+    name?: string
+    details?: {
+      contact_persons?: { email?: string; name?: string }[]
+    }
+  }
+}
+
+interface PaymentWithRelations {
+  id: string
+  payment_number: string
+  invoice_id: string
+  payment_date: string
+  amount: number
+  payment_method: string
+  reference_number?: string
+  status: string
+  note?: string
+  invoice?: InvoiceInfo
+}
+
+interface PreviewDoc {
+  id?: string
+  title: string
+  description: string
+  images: string[]
+  pdf: string
+  customerEmail?: string
+  contacts: { name: string; email?: string }[]
+  raw: PaymentWithRelations
+}
+
+type GalleryDoc = {
+  id?: string
+  title: string
+  description: string
+  images: string[]
+  pdf?: string
+  customerEmail?: string
+  contacts?: { name: string; email?: string }[]
+  raw?: unknown
+}
 
 export default function PaymentsPage() {
   const { dict, lang } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
-  const [payments, setPayments] = useState<any[]>([])
+  const [payments, setPayments] = useState<PaymentWithRelations[]>([])
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null)
+  const [previewDoc, setPreviewDoc] = useState<PreviewDoc | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
+  // Stats State
+  const [stats, setStats] = useState({
+    totalPayments: 0,
+    totalAmount: 0,
+    pendingCount: 0,
+    verifiedCount: 0,
+  })
+
   // Dialog State
-  const [isOpen, setIsOpen] = useState(false)
-  const [editingItem, setEditingItem] = useState<any>(null)
+  const [isOpen, setIsOpen] = usePersistedState("payments_dialog_open", false)
+  const [editingItem, setEditingItem] = useState<PaymentWithRelations | null>(
+    null
+  )
   const [viewOnly, setViewOnly] = useState(false)
 
   // Filter States
@@ -95,6 +187,38 @@ export default function PaymentsPage() {
       "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
   }
 
+  // Fetch Stats
+  const fetchStats = useCallback(async () => {
+    try {
+      const { data: allPayments } = await supabase
+        .from("payments")
+        .select("id, amount, status")
+
+      if (allPayments) {
+        type PaymentStatsRow = (typeof allPayments)[number]
+        const totalAmount = allPayments.reduce(
+          (sum: number, p: PaymentStatsRow) => sum + (Number(p.amount) || 0),
+          0
+        )
+        const pendingCount = allPayments.filter(
+          (p: PaymentStatsRow) => p.status === "Pending"
+        ).length
+        const verifiedCount = allPayments.filter(
+          (p: PaymentStatsRow) => p.status === "Verified"
+        ).length
+
+        setStats({
+          totalPayments: allPayments.length,
+          totalAmount,
+          pendingCount,
+          verifiedCount,
+        })
+      }
+    } catch (err) {
+      console.error("Fetch Stats Error:", err)
+    }
+  }, [supabase])
+
   // Form State
   const [formData, setFormData] = useState(() => ({
     payment_number: "",
@@ -107,19 +231,34 @@ export default function PaymentsPage() {
     note: "",
   }))
 
-  const [selectedInvoiceInfo, setSelectedInvoiceInfo] = useState<any>(null)
+  const [selectedInvoiceInfo, setSelectedInvoiceInfo] =
+    useState<InvoiceInfo | null>(null)
 
   const fetchData = useCallback(
     async (isInitial = false) => {
       if (isInitial) {
         setLoading(true)
         setOffset(0)
+        fetchStats()
       } else {
         setLoadingMore(true)
       }
 
       try {
         const currentOffset = isInitial ? 0 : offset
+
+        // Fetch company settings on initial load
+        if (isInitial) {
+          const { data: settings } = await supabase
+            .from("app_settings")
+            .select("*")
+            .eq("category", "company")
+          const info: Record<string, string> = {}
+          settings?.forEach((r: AppSettingsRow) => {
+            info[r.name] = (r.value as string) || ""
+          })
+          setCompanyInfo(info as CompanyInfo)
+        }
 
         let query = supabase
           .from("payments")
@@ -141,27 +280,37 @@ export default function PaymentsPage() {
         if (error) throw error
 
         if (data) {
+          const rows = data as PaymentWithRelations[]
           if (isInitial) {
-            setPayments(data)
+            setPayments(rows)
           } else {
             setPayments((prev) => {
-              const newItems = data.filter(
-                (item: any) => !prev.some((p) => p.id === item.id)
+              const newItems = rows.filter(
+                (item) => !prev.some((p) => p.id === item.id)
               )
               return [...prev, ...newItems]
             })
           }
-          setHasMore(data.length === PAGE_SIZE)
-          setOffset(currentOffset + data.length)
+          setHasMore(rows.length === PAGE_SIZE)
+          setOffset(currentOffset + rows.length)
         }
-      } catch (err: any) {
-        notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
+      } catch (err: unknown) {
+        notify.error(
+          dict.MSG_DATA_FETCH_FAILED,
+          err instanceof Error ? err.message : String(err)
+        )
       } finally {
         setLoading(false)
         setLoadingMore(false)
       }
     },
-    [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED]
+    [
+      supabase,
+      offset,
+      debouncedSearchQuery,
+      dict.MSG_DATA_FETCH_FAILED,
+      fetchStats,
+    ]
   )
 
   const handleRefresh = () => {
@@ -202,6 +351,7 @@ export default function PaymentsPage() {
   const canInsert = hasPermission("payments", "insert")
   const canEdit = hasPermission("payments", "edit")
   const canDelete = hasPermission("payments", "delete")
+  const canPrint = hasPermission("payments", "print")
 
   if (!canView && !loading && !authLoading) {
     return (
@@ -220,11 +370,14 @@ export default function PaymentsPage() {
     )
   }
 
-  const handleOpenDialog = (item: any = null, isViewOnly = false) => {
+  const handleOpenDialog = (
+    item: PaymentWithRelations | null = null,
+    isViewOnly = false
+  ) => {
+    setViewOnly(isViewOnly)
     if (item) {
       setEditingItem(item)
-      setViewOnly(isViewOnly)
-      setSelectedInvoiceInfo(item.invoice)
+      setSelectedInvoiceInfo(item.invoice ?? null)
 
       setFormData({
         payment_number: item.payment_number,
@@ -322,11 +475,11 @@ export default function PaymentsPage() {
         )
       }
       setIsOpen(false)
-    } catch (err: any) {
+    } catch (err: unknown) {
       const docLabel = `[${formData.payment_number}]`
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", docLabel),
-        err.message
+        err instanceof Error ? err.message : String(err)
       )
     } finally {
       setIsSaving(false)
@@ -353,10 +506,10 @@ export default function PaymentsPage() {
         undefined,
         true
       )
-    } catch (err: any) {
+    } catch (err: unknown) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", docLabel),
-        err.message
+        err instanceof Error ? err.message : String(err)
       )
     }
   }
@@ -385,10 +538,160 @@ export default function PaymentsPage() {
         undefined,
         true
       )
-    } catch (err: any) {
+      fetchStats()
+    } catch (err: unknown) {
       notify.error(
         dict.MSG_UPDATE_FAILED.replace("%data%", docLabel),
-        err.message
+        err instanceof Error ? err.message : String(err)
+      )
+    }
+  }
+
+  // Handle Print with Gallery preview
+  const handlePrint = async (p: PaymentWithRelations) => {
+    if (!companyInfo) {
+      notify.error("Error", "Company info not loaded")
+      return
+    }
+    try {
+      const dataUri = await generateStandardPaymentPDF(companyInfo, p, {
+        save: false,
+        output: "datauri",
+      })
+      if (!dataUri || typeof dataUri !== "string") {
+        throw new Error("Failed to generate PDF data URI")
+      }
+      const contacts = (
+        p.invoice?.company?.details?.contact_persons?.length
+          ? p.invoice.company.details.contact_persons
+          : []
+      ).filter((c): c is { name: string; email?: string } => !!c.name)
+      setPreviewDoc({
+        id: p.id,
+        title: p.payment_number,
+        description: p.invoice?.company?.name || "-",
+        images: [],
+        pdf: dataUri,
+        customerEmail: contacts[0]?.email || "",
+        contacts: contacts,
+        raw: p,
+      })
+    } catch (err: unknown) {
+      notify.error(
+        "Failed to generate PDF",
+        err instanceof Error ? err.message : String(err)
+      )
+    }
+  }
+
+  const handleDownload = (doc: GalleryDoc) => {
+    const link = document.createElement("a")
+    if (!doc.pdf) return
+    link.href = doc.pdf
+    link.download = `Payment_${doc.title}.pdf`
+    link.click()
+    notify.success(
+      dict.MSG_PRINT_SUCCESS,
+      dict.MSG_PRINT_SUCCESS_DESC?.replace("%data%", `[${doc.title}]`),
+      undefined,
+      false
+    )
+  }
+
+  const handleSendEmail = async (doc: GalleryDoc) => {
+    try {
+      const p = (doc.raw || doc) as PaymentWithRelations
+      const pdfDataUri = await generateStandardPaymentPDF(companyInfo, p, {
+        save: false,
+        output: "datauri",
+      })
+      if (!pdfDataUri) throw new Error("Failed to generate PDF for attachment.")
+      const attachments = [
+        {
+          filename: `Payment_${doc.title}.pdf`,
+          content: (pdfDataUri as string).split(",")[1],
+        },
+      ]
+
+      const paymentDate = p.payment_date
+        ? new Date(p.payment_date).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })
+        : "-"
+
+      const emailHtml = `<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff;">
+        <div style="background: #00955c; padding: 32px 40px; text-align: center;">
+          <h1 style="color: #ffffff; font-size: 28px; margin: 0 0 4px 0; font-weight: 700; letter-spacing: -0.5px;">PT Anugerah Buana Sriwijaya</h1>
+          <p style="color: rgba(255,255,255,0.9); font-size: 14px; margin: 0;">Industrial Fuel Distributor</p>
+        </div>
+        <div style="background: #f8fafc; padding: 20px 40px; border-bottom: 1px solid #e2e8f0; text-align: center;">
+          <span style="display: inline-block; background: #00955c; color: white; padding: 8px 24px; border-radius: 20px; font-size: 14px; font-weight: 600; letter-spacing: 0.5px;">PAYMENT CONFIRMATION</span>
+        </div>
+        <div style="padding: 40px;">
+          <p style="color: #1e293b; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">Dear <strong style="color: #00955c;">${p.invoice?.company?.name || "Valued Customer"}</strong>,</p>
+          <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 0 0 20px 0;">We are pleased to confirm that we have received your payment. Please find the payment receipt attached for your records.</p>
+          <div style="background: #f8fafc; border-radius: 8px; padding: 24px; margin: 24px 0; border-left: 4px solid #00955c;">
+            <h3 style="color: #1e293b; font-size: 16px; margin: 0 0 16px 0; font-weight: 600;">Payment Details</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px; width: 35%;">Payment No.</td>
+                <td style="padding: 8px 0; color: #1e293b; font-size: 14px; font-weight: 600;">${p.payment_number || "-"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Date</td>
+                <td style="padding: 8px 0; color: #1e293b; font-size: 14px;">${paymentDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Invoice No.</td>
+                <td style="padding: 8px 0; color: #1e293b; font-size: 14px;">${p.invoice?.invoice_number || "-"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Amount</td>
+                <td style="padding: 8px 0; color: #1e293b; font-size: 14px; font-weight: 600;">${SITE_CONFIG.currencySymbol} ${Number(p.amount || 0).toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Method</td>
+                <td style="padding: 8px 0; color: #1e293b; font-size: 14px;">${p.payment_method || "-"}</td>
+              </tr>
+            </table>
+          </div>
+          <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 24px 0;">For your reference, you can verify this payment using the QR code attached to the PDF document.</p>
+          <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 24px 0 32px 0;">Should you have any questions or require further clarification, please do not hesitate to contact us.</p>
+          <p style="color: #1e293b; font-size: 15px; line-height: 1.6; margin: 0;">Best regards,<br><strong style="font-size: 16px;">PT Anugerah Buana Sriwijaya</strong><br><span style="color: #64748b; font-size: 14px;">Finance Team</span></p>
+        </div>
+        <div style="background: #f8fafc; padding: 24px 40px; border-top: 1px solid #e2e8f0;">
+          <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0; line-height: 1.6;">This is an automated message from PT Anugerah Buana Sriwijaya.<br>Please do not reply directly to this email.<br><br>&copy; ${new Date().getFullYear()} PT Anugerah Buana Sriwijaya. All rights reserved.</p>
+        </div>
+      </div>`
+
+      const res = await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: doc.customerEmail,
+          subject: `Payment Confirmation ${p.payment_number} - PT Anugerah Buana Sriwijaya`,
+          html: emailHtml,
+          attachments,
+        }),
+      })
+      const result = await res.json()
+      if (result.success) {
+        notify.success(
+          dict.MSG_EMAIL_SENT_SUCCESS || "Email Sent",
+          dict.MSG_EMAIL_SENT_SUCCESS_DESC?.replace(
+            "%data%",
+            `[${p.payment_number}]`
+          ) || `Payment confirmation sent`,
+          undefined,
+          true
+        )
+      } else throw new Error(result.error)
+    } catch (err: unknown) {
+      notify.error(
+        "Failed to send email",
+        err instanceof Error ? err.message : String(err)
       )
     }
   }
@@ -427,9 +730,10 @@ export default function PaymentsPage() {
                 {dict.BUTTON_RECORD_PAYMENT || "Record Payment"}
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto p-0 sm:max-w-xl">
-              <DialogHeader className="sticky top-0 z-10 border-b bg-background p-5">
+            <DialogContent className="sm:max-w-3xl">
+              <DialogHeader>
                 <DialogTitle>
+                  <Wallet className="mr-2 inline-block size-5" />
                   {viewOnly
                     ? formData.payment_number
                     : editingItem
@@ -443,195 +747,216 @@ export default function PaymentsPage() {
                   e.preventDefault()
                   handleSave()
                 }}
-                className="max-h-[70vh] overflow-y-auto relative"
+                className="relative max-h-[70vh] overflow-y-auto"
               >
-                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
-                  {viewOnly && (
-                    <div className="absolute inset-0 z-20"></div>
+                <div
+                  className={cn(
+                    `relative flex w-full flex-col gap-6 p-5 ${viewOnly ? "rounded-b-xl border-2 border-orange-500" : ""}`
                   )}
-                <div className="grid gap-2">
-                  <Label>{dict.LABEL_PAYMENT_NUMBER || "Payment Number"}</Label>
-                  <Input
-                    value={formData.payment_number}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        payment_number: e.target.value,
-                      })
-                    }
-                    disabled={editingItem && !hasPermission("payments", "edit")}
-                    placeholder={dict.LABEL_AUTO_GENERATED}
-                    className="font-mono font-bold"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label>{dict.MENU_INVOICE}</Label>
-                  <LiveSearch
-                    data={selectedInvoiceInfo ? [selectedInvoiceInfo] : []}
-                    fetchData={async (query) => {
-                      let q = supabase
-                        .from("invoices")
-                        .select(
-                          "id, invoice_number, total_amount, paid_amount, company:companies(name)"
-                        )
-                        .neq("status", "Cancelled")
-                        .limit(8)
-                      if (query) {
-                        const searchStr = constructMultiWordSearch(query, [
-                          "invoice_number",
-                        ])
-                        if (searchStr) q = q.or(searchStr)
+                >
+                  {viewOnly && <div className="absolute inset-0 z-20"></div>}
+                  <div className="grid gap-2">
+                    <Label>
+                      {dict.LABEL_PAYMENT_NUMBER || "Payment Number"}
+                    </Label>
+                    <Input
+                      value={formData.payment_number}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          payment_number: e.target.value,
+                        })
                       }
-                      const { data } = await q
-                      return data || []
-                    }}
-                    value={formData.invoice_id}
-                    onSelect={(val, item) => {
-                      setFormData({
-                        ...formData,
-                        invoice_id: val,
-                        amount: item ? item.total_amount - item.paid_amount : 0, // Auto-fill remaining amount
-                      })
-                      setSelectedInvoiceInfo(item)
-                    }}
-                    keyField="id"
-                    displayField={(i) =>
-                      `${i.invoice_number} - ${i.company?.name || ""}`
-                    }
-                    defaultDisplay={
-                      selectedInvoiceInfo
-                        ? `${selectedInvoiceInfo.invoice_number} - ${selectedInvoiceInfo.company?.name || ""}`
-                        : ""
-                    }
-                    searchColumns={["invoice_number"]}
-                    visualColumns={[
-                      {
-                        key: "invoice_number",
-                        header: dict.MENU_INVOICE,
-                        className: "w-1/2 font-medium font-mono",
-                        primary: true,
-                      },
-                      {
-                        key: "company.name",
-                        header: dict.LABEL_TYPE_CUSTOMER,
-                        className: "w-1/2",
-                      },
-                    ]}
-                    placeholder={dict.PLACEHOLDER_SELECT_QUOTATION?.replace(
-                      dict.MENU_QUOTATION,
-                      dict.MENU_INVOICE
+                      disabled={
+                        editingItem !== null &&
+                        !hasPermission("payments", "edit")
+                      }
+                      placeholder={dict.LABEL_AUTO_GENERATED}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>{dict.MENU_INVOICE}</Label>
+                    <LiveSearch
+                      data={selectedInvoiceInfo ? [selectedInvoiceInfo] : []}
+                      fetchData={async (query) => {
+                        let q = supabase
+                          .from("invoices")
+                          .select(
+                            "id, invoice_number, total_amount, paid_amount, company:companies(name)"
+                          )
+                          .neq("status", "Cancelled")
+                          .limit(8)
+                        if (query) {
+                          const searchStr = constructMultiWordSearch(query, [
+                            "invoice_number",
+                          ])
+                          if (searchStr) q = q.or(searchStr)
+                        }
+                        const { data } = await q
+                        return data || []
+                      }}
+                      value={formData.invoice_id}
+                      onSelect={(val, item) => {
+                        setFormData({
+                          ...formData,
+                          invoice_id: val,
+                          amount: item
+                            ? item.total_amount - item.paid_amount
+                            : 0, // Auto-fill remaining amount
+                        })
+                        setSelectedInvoiceInfo(item as InvoiceInfo | null)
+                      }}
+                      keyField="id"
+                      displayField={(i) =>
+                        `${i.invoice_number} - ${i.company?.name || ""}`
+                      }
+                      defaultDisplay={
+                        selectedInvoiceInfo
+                          ? `${selectedInvoiceInfo.invoice_number} - ${selectedInvoiceInfo.company?.name || ""}`
+                          : ""
+                      }
+                      searchColumns={["invoice_number"]}
+                      visualColumns={[
+                        {
+                          key: "invoice_number",
+                          header: dict.MENU_INVOICE,
+                          className: "w-1/2 font-medium font-mono",
+                          primary: true,
+                        },
+                        {
+                          key: "company.name" as keyof InvoiceInfo,
+                          header: dict.LABEL_TYPE_CUSTOMER,
+                          className: "w-1/2",
+                        },
+                      ]}
+                      placeholder={dict.PLACEHOLDER_SELECT_QUOTATION?.replace(
+                        dict.MENU_QUOTATION,
+                        dict.MENU_INVOICE
+                      )}
+                    />
+                    {selectedInvoiceInfo && (
+                      <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
+                        <span>
+                          {dict.VERIFY_LABEL_TOTAL?.split(" ")[0]} Total:{" "}
+                          {SITE_CONFIG.currencySymbol}{" "}
+                          {Number(
+                            selectedInvoiceInfo.total_amount
+                          ).toLocaleString()}
+                        </span>
+                        <span className="font-medium text-amber-600">
+                          {dict.LABEL_DUE_DATE?.split(" ")[0]} Due:{" "}
+                          {SITE_CONFIG.currencySymbol}{" "}
+                          {(
+                            selectedInvoiceInfo.total_amount -
+                            selectedInvoiceInfo.paid_amount
+                          ).toLocaleString()}
+                        </span>
+                      </div>
                     )}
-                  />
-                  {selectedInvoiceInfo && (
-                    <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
-                      <span>
-                        {dict.VERIFY_LABEL_TOTAL?.split(" ")[0]} Total:{" "}
-                        {SITE_CONFIG.currencySymbol}{" "}
-                        {Number(
-                          selectedInvoiceInfo.total_amount
-                        ).toLocaleString()}
-                      </span>
-                      <span className="font-medium text-amber-600">
-                        {dict.LABEL_DUE_DATE?.split(" ")[0]} Due:{" "}
-                        {SITE_CONFIG.currencySymbol}{" "}
-                        {(
-                          selectedInvoiceInfo.total_amount -
-                          selectedInvoiceInfo.paid_amount
-                        ).toLocaleString()}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>{dict.LABEL_PAYMENT_DATE || "Payment Date"}</Label>
+                      <Input
+                        type="date"
+                        value={formData.payment_date}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            payment_date: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>{dict.LABEL_AMOUNT}</Label>
+                      <NumberInput
+                        type="number"
+                        value={formData.amount}
+                        onChange={(value) =>
+                          setFormData({
+                            ...formData,
+                            amount: value,
+                          })
+                        }
+                        leftBadge={SITE_CONFIG.currencySymbol}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>{dict.LABEL_PAYMENT_METHOD}</Label>
+                      <Select
+                        value={formData.payment_method}
+                        onValueChange={(v) =>
+                          setFormData({ ...formData, payment_method: v })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={dict.LABEL_ALL} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Bank Transfer">
+                            {lang === "id" ? "Transfer Bank" : "Bank Transfer"}
+                          </SelectItem>
+                          <SelectItem value="Cash">
+                            {lang === "id" ? "Tunai" : "Cash"}
+                          </SelectItem>
+                          <SelectItem value="Cheque">
+                            {lang === "id" ? "Cek / Giro" : "Cheque / Giro"}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>
+                        {dict.LABEL_REFERENCE_NUMBER || "Reference Number"}
+                      </Label>
+                      <Input
+                        value={formData.reference_number}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            reference_number: e.target.value,
+                          })
+                        }
+                        placeholder="e.g. TRF-123456"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>{dict.LABEL_INTERNAL_NOTE || "Internal Note"}</Label>
+                    <Textarea
+                      value={formData.note}
+                      onChange={(e) =>
+                        setFormData({ ...formData, note: e.target.value })
+                      }
+                      placeholder={dict.PLACEHOLDER_EDITOR}
+                    />
+                  </div>
+
+                  {/* Status Badge in View Mode */}
+                  {viewOnly && (
+                    <div className="flex items-center gap-2 rounded border bg-muted/50 p-3">
+                      <span className="text-sm font-medium">Status:</span>
+                      <span
+                        className={cn(
+                          "rounded border px-2 py-0.5 text-[10px] font-bold uppercase",
+                          statusStyles[formData.status] || statusStyles.Pending
+                        )}
+                      >
+                        {formData.status}
                       </span>
                     </div>
                   )}
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>{dict.LABEL_PAYMENT_DATE || "Payment Date"}</Label>
-                    <Input
-                      type="date"
-                      value={formData.payment_date}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          payment_date: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>
-                      {dict.LABEL_AMOUNT} ({SITE_CONFIG.currencySymbol})
-                    </Label>
-                    <Input
-                      type="number"
-                      value={formData.amount}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          amount: Number(e.target.value),
-                        })
-                      }
-                      className="text-right font-bold"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>{dict.LABEL_PAYMENT_METHOD}</Label>
-                    <Select
-                      value={formData.payment_method}
-                      onValueChange={(v) =>
-                        setFormData({ ...formData, payment_method: v })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={dict.LABEL_ALL} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Bank Transfer">
-                          {lang === "id" ? "Transfer Bank" : "Bank Transfer"}
-                        </SelectItem>
-                        <SelectItem value="Cash">
-                          {lang === "id" ? "Tunai" : "Cash"}
-                        </SelectItem>
-                        <SelectItem value="Cheque">
-                          {lang === "id" ? "Cek / Giro" : "Cheque / Giro"}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>
-                      {dict.LABEL_REFERENCE_NUMBER || "Reference Number"}
-                    </Label>
-                    <Input
-                      value={formData.reference_number}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          reference_number: e.target.value,
-                        })
-                      }
-                      placeholder="e.g. TRF-123456"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-2">
-                  <Label>{dict.LABEL_INTERNAL_NOTE || "Internal Note"}</Label>
-                  <Textarea
-                    value={formData.note}
-                    onChange={(e) =>
-                      setFormData({ ...formData, note: e.target.value })
-                    }
-                    placeholder={dict.PLACEHOLDER_EDITOR}
-                  />
-                </div>
-              </div>
-            </form>
+              </form>
               {!viewOnly && (
-                <DialogFooter className="shrink-0 border-t p-5">
+                <DialogFooter>
                   <Button variant="outline" onClick={() => setIsOpen(false)}>
                     <X className="mr-2 size-4" />
                     {dict.BUTTON_CANCEL}
@@ -668,20 +993,16 @@ export default function PaymentsPage() {
         className="data-card custom-scrollbar flex-1 overflow-auto"
       >
         <Table>
-          <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm">
+          <TableHeader>
             <TableRow>
-              <TableHead className="px-7">
-                {dict.LABEL_PAYMENT_NUMBER || "Payment No"}
-              </TableHead>
+              <TableHead>{dict.LABEL_PAYMENT_NUMBER || "Payment No"}</TableHead>
               <TableHead>
                 {dict.MENU_INVOICE} & {dict.LABEL_TYPE_CUSTOMER}
               </TableHead>
               <TableHead>{dict.VERIFY_LABEL_DATE || "Date"}</TableHead>
               <TableHead className="text-right">{dict.LABEL_AMOUNT}</TableHead>
-              <TableHead>{dict.LABEL_STATUS}</TableHead>
-              <TableHead className="px-7 text-right">
-                {dict.LABEL_ACTIONS}
-              </TableHead>
+              <TableHead className="text-center">{dict.LABEL_STATUS}</TableHead>
+              <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -707,9 +1028,7 @@ export default function PaymentsPage() {
                   className="cursor-pointer"
                   onDoubleClick={() => handleOpenDialog(p, true)}
                 >
-                  <TableCell className="px-7 font-mono text-sm font-bold">
-                    {p.payment_number}
-                  </TableCell>
+                  <TableCell className="text-sm">{p.payment_number}</TableCell>
                   <TableCell>
                     <div className="text-sm font-medium">
                       {p.invoice?.invoice_number}
@@ -718,57 +1037,25 @@ export default function PaymentsPage() {
                       {p.invoice?.company?.name}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell className="text-center text-sm">
                     {format(new Date(p.payment_date), "dd MMM yyyy")}
                   </TableCell>
                   <TableCell className="text-right font-bold text-green-700">
                     {SITE_CONFIG.currencySymbol}{" "}
                     {Number(p.amount).toLocaleString()}
                   </TableCell>
-                  <TableCell>
-                    <span
+                  <TableCell className="text-center align-middle">
+                    <div
                       className={cn(
-                        "rounded border px-2 py-0.5 text-[10px] font-bold uppercase",
-                        statusStyles[p.status] || statusStyles.Pending
+                        "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                        statusStyles[p.status]
                       )}
                     >
                       {p.status}
-                    </span>
+                    </div>
                   </TableCell>
-                  <TableCell className="px-7 text-right">
-                    <div className="flex justify-end gap-1">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="table_action"
-                            size="sm"
-                            disabled={!canEdit}
-                          >
-                            <span className="sr-only">{dict.LABEL_STATUS}</span>
-                            <ChevronDown className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => updateStatus(p.id, "Pending")}
-                            className="font-medium text-amber-600 dark:text-amber-400"
-                          >
-                            {dict.LABEL_PENDING || "Pending"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => updateStatus(p.id, "Verified")}
-                            className="font-medium text-emerald-600 dark:text-emerald-400"
-                          >
-                            {dict.LABEL_VERIFY || "Verify"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => updateStatus(p.id, "Rejected")}
-                            className="font-medium text-rose-600 dark:text-rose-400"
-                          >
-                            {dict.LABEL_REJECT || "Reject"}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="table_action"
                         size="sm"
@@ -780,12 +1067,65 @@ export default function PaymentsPage() {
                       <Button
                         variant="table_action"
                         size="sm"
-                        onClick={() => handleDelete(p.id)}
-                        disabled={!canDelete}
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => handlePrint(p)}
+                        disabled={!canPrint}
                       >
-                        <Trash2 className="size-4" />
+                        <Printer className="size-4" />
                       </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="size-8"
+                            disabled={!canEdit && !canDelete}
+                          >
+                            <span className="sr-only">{dict.LABEL_STATUS}</span>
+                            <ChevronDown className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              <CheckCircle2 className="mr-2 size-4" /> Status
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuPortal>
+                              <DropdownMenuSubContent>
+                                <DropdownMenuItem
+                                  onClick={() => updateStatus(p.id, "Pending")}
+                                  className="font-medium text-amber-600 dark:text-amber-400"
+                                >
+                                  Pending
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => updateStatus(p.id, "Verified")}
+                                  className="font-medium text-emerald-600 dark:text-emerald-400"
+                                >
+                                  Verified
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => updateStatus(p.id, "Rejected")}
+                                  className="font-medium text-rose-600 dark:text-rose-400"
+                                >
+                                  Rejected
+                                </DropdownMenuItem>
+                              </DropdownMenuSubContent>
+                            </DropdownMenuPortal>
+                          </DropdownMenuSub>
+                          {canDelete && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => handleDelete(p.id)}
+                              >
+                                <Trash2 className="mr-2 size-4" />
+                                {dict.BUTTON_DELETE}
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -810,6 +1150,55 @@ export default function PaymentsPage() {
           </TableBody>
         </Table>
       </Card>
+
+      <div className="grid shrink-0 grid-cols-4 gap-2 md:gap-4">
+        <SummaryCard
+          label="Total Payments"
+          value={stats.totalPayments}
+          icon={Wallet}
+          color="slate"
+        />
+        <SummaryCard
+          label="Total Amount"
+          value={`${SITE_CONFIG.currencySymbol} ${stats.totalAmount.toLocaleString()}`}
+          icon={FileText}
+          color="green"
+        />
+        <SummaryCard
+          label="Pending"
+          value={stats.pendingCount}
+          icon={AlertCircle}
+          color="amber"
+        />
+        <SummaryCard
+          label="Verified"
+          value={stats.verifiedCount}
+          icon={CheckCircle2}
+          color="blue"
+        />
+      </div>
+
+      {previewDoc && (
+        <Gallery
+          docs={[previewDoc]}
+          initialIndex={0}
+          labels={{
+            previewDocument: "Preview Payment",
+            clickToPreview: "Click to preview",
+            previousPage: "Previous",
+            nextPage: "Next",
+            pageLabel: "Page",
+            closePreview: "Close",
+            download: "Download PDF",
+            sendEmail: "Send to Customer",
+            confirmEmail:
+              "Are you sure you want to send this payment confirmation to",
+          }}
+          onDownload={handleDownload}
+          onSendEmail={handleSendEmail}
+          onClose={() => setPreviewDoc(null)}
+        />
+      )}
     </div>
   )
 }

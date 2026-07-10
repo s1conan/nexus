@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, startTransition } from "react"
 
 export function usePersistedState<T>(key: string, initialState: T) {
   // Use a ref to track if we've initialized from localStorage
@@ -13,7 +13,9 @@ export function usePersistedState<T>(key: string, initialState: T) {
     const saved = localStorage.getItem(key)
     if (saved !== null) {
       try {
-        setState(JSON.parse(saved))
+        startTransition(() => {
+          setState(JSON.parse(saved))
+        })
       } catch (e) {
         console.error(`Failed to parse persisted state for key "${key}"`, e)
       }

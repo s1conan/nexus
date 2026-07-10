@@ -1,0 +1,31 @@
+{
+  "id": "so-funders-feature-03",
+  "seq": "03",
+  "title": "Create funders dialog component",
+  "status": "pending",
+  "depends_on": ["01", "02"],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "A:\\Projects\\nids\\.opencode\\context\\project-intelligence\\technical-domain.md",
+    "A:\\Projects\\nids\\AGENTS.md"
+  ],
+  "reference_files": [
+    "A:\\Projects\\nids\\nids-app\\app\\sales-order\\page.tsx",
+    "A:\\Projects\\nids\\nids-app\\components\\number-input.tsx",
+    "A:\\Projects\\nids\\nids-app\\components\\live-search.tsx",
+    "A:\\Projects\\nids\\funders_schema.sql"
+  ],
+  "acceptance_criteria": [
+    "Component accepts props: open, onOpenChange, totalAmount, funders (array), onFundersChange",
+    "Company header displays company name from app_settings and covers full total by default",
+    "Funder list shows each funder with name and amount using NumberInput display",
+    "Add funder section uses LiveSearch for funder selection + NumberInput for amount",
+    "Real-time calculation shows company contribution = totalAmount - sum(funders.amount)",
+    "Remove funder button (X) for each listed funder",
+    "Follows existing dialog and component patterns from SO page"
+  ],
+  "deliverables": [
+    "nids-app/components/funders-dialog.tsx"
+  ]
+}

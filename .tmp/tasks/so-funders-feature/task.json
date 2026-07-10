@@ -1,0 +1,28 @@
+{
+  "id": "so-funders-feature",
+  "name": "Sales Order Funders Feature",
+  "status": "active",
+  "objective": "Add funders functionality to Sales Orders: DB column, UI labels, funders dialog component, and SO page integration",
+  "context_files": [
+    "A:\\Projects\\nids\\.opencode\\context\\project-intelligence\\technical-domain.md",
+    "A:\\Projects\\nids\\AGENTS.md"
+  ],
+  "reference_files": [
+    "A:\\Projects\\nids\\sales_orders_schema.sql",
+    "A:\\Projects\\nids\\funders_schema.sql",
+    "A:\\Projects\\nids\\nids-app\\app\\sales-order\\page.tsx",
+    "A:\\Projects\\nids\\nids-app\\lib\\site-content.ts",
+    "A:\\Projects\\nids\\nids-app\\components\\number-input.tsx",
+    "A:\\Projects\\nids\\nids-app\\components\\live-search.tsx"
+  ],
+  "exit_criteria": [
+    "Database migration adds funders JSONB column to sales_orders table",
+    "Site content has EN and ID labels for all funders UI elements",
+    "Funders dialog component is created with company header, funder list, add funder section, and real-time calculation",
+    "Funders dialog integrated into SO page with button, dialog state, save/load logic",
+    "Typecheck and lint pass without errors"
+  ],
+  "subtask_count": 4,
+  "completed_count": 0,
+  "created_at": "2026-07-01T00:00:00Z"
+}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef, startTransition } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { useDictionary } from "@/components/dictionary-provider"
 import { createClient } from "@/lib/supabase"
@@ -27,13 +27,9 @@ import {
   Trash2,
   Pencil,
   Save,
-  Percent,
   Settings,
   Mail,
-  MapPin,
   FileText,
-  X,
-  ImageIcon,
   AlertCircle,
 } from "lucide-react"
 
@@ -59,10 +55,28 @@ interface BankAccount {
 
 interface SystemParameter {
   key: string
-  value: any
+  value: unknown
   category: string
   label: string
   description: string | null
+}
+
+interface AppSettingsRow {
+  id?: string
+  category: string
+  name: string
+  value: unknown
+  description?: string | null
+  updated_at?: string
+}
+
+interface BankRow {
+  id?: string
+  name?: string
+  bank_name?: string
+  account_number?: string
+  account_name?: string
+  branch?: string | null
 }
 
 export default function SettingsPage() {
@@ -73,7 +87,8 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<
     "company" | "banks" | "parameters" | "emails" | "numbering"
   >("company")
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
+  const loadDataRef = useRef<(() => Promise<void>) | null>(null)
 
   // ... (existing states)
 
@@ -86,6 +101,7 @@ export default function SettingsPage() {
     "delivery-order": "DO/{YYYY}/{SEQ:3}",
     deposit: "DEP/{YYYY}/{SEQ:3}",
     invoice: "INV/{YYYY}/{SEQ:3}",
+    payment: "PAY/{YYYY}/{SEQ:3}",
   })
   const [savingNumbering, setSavingNumbering] = useState(false)
 
@@ -103,8 +119,8 @@ export default function SettingsPage() {
   // 2. Bank Accounts State
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [isBankDialogOpen, setIsBankDialogOpen] = useState(false)
-  const [savingBank, setSavingBank] = useState(false)
-  const [deletingBankId, setDeletingBankId] = useState<string | null>(null)
+  const [, setSavingBank] = useState(false)
+  const [, setDeletingBankId] = useState<string | null>(null)
   const [currentBank, setCurrentBank] = useState<Partial<BankAccount>>({
     bank_name: "",
     account_number: "",
@@ -119,7 +135,7 @@ export default function SettingsPage() {
 
   // 4. Add Parameter Dialog State
   const [isParamDialogOpen, setIsParamDialogOpen] = useState(false)
-  const [savingParamDialog, setSavingParamDialog] = useState(false)
+  const [, setSavingParamDialog] = useState(false)
   const [newParam, setNewParam] = useState({
     key: "",
     value: "",
@@ -207,7 +223,7 @@ export default function SettingsPage() {
             .from("app_settings")
             .insert(defaultSeeds)
           if (seedError) throw seedError
-          loadData()
+          loadDataRef.current?.()
           return
         } else {
           setCompanyInfo({
@@ -227,25 +243,32 @@ export default function SettingsPage() {
       if (data) {
         // Map data...
         const companyName =
-          data.find((r: any) => r.category === "company" && r.name === "name")
-            ?.value || ""
+          data.find(
+            (r: AppSettingsRow) => r.category === "company" && r.name === "name"
+          )?.value || ""
         const companyAddress =
           data.find(
-            (r: any) => r.category === "company" && r.name === "address"
+            (r: AppSettingsRow) =>
+              r.category === "company" && r.name === "address"
           )?.value || ""
         const companyEmail =
-          data.find((r: any) => r.category === "company" && r.name === "email")
-            ?.value || ""
+          data.find(
+            (r: AppSettingsRow) =>
+              r.category === "company" && r.name === "email"
+          )?.value || ""
         const companyNpwp =
-          data.find((r: any) => r.category === "company" && r.name === "npwp")
-            ?.value || ""
+          data.find(
+            (r: AppSettingsRow) => r.category === "company" && r.name === "npwp"
+          )?.value || ""
         const companyNpwpAddress =
           data.find(
-            (r: any) => r.category === "company" && r.name === "npwp_address"
+            (r: AppSettingsRow) =>
+              r.category === "company" && r.name === "npwp_address"
           )?.value || ""
         const companyLogoUrl =
           data.find(
-            (r: any) => r.category === "company" && r.name === "logo_url"
+            (r: AppSettingsRow) =>
+              r.category === "company" && r.name === "logo_url"
           )?.value || ""
 
         setCompanyInfo({
@@ -258,10 +281,11 @@ export default function SettingsPage() {
         })
 
         const banksList =
-          data.find((r: any) => r.category === "company" && r.name === "bank")
-            ?.value || []
+          data.find(
+            (r: AppSettingsRow) => r.category === "company" && r.name === "bank"
+          )?.value || []
         setBankAccounts(
-          banksList.map((b: any) => ({
+          banksList.map((b: BankRow) => ({
             id: b.id || Math.random().toString(36).substring(2, 9),
             name: b.name || b.bank_name || "",
             bank_name: b.bank_name || b.name || "",
@@ -271,28 +295,32 @@ export default function SettingsPage() {
           }))
         )
 
-        const taxParams = data.filter((r: any) => r.category === "tax")
-        const systemParams: SystemParameter[] = taxParams.map((p: any) => ({
-          key: p.name,
-          value: p.value,
-          category: p.category,
-          label:
-            p.name === "PPN"
-              ? "PPN (VAT) Rate (%)"
-              : p.name === "PBBKB"
-                ? "PBBKB Rate (%)"
-                : p.name === "PPH22"
-                  ? "PPH22 Rate (%)"
-                  : p.name,
-          description:
-            p.name === "PPN"
-              ? "Value Added Tax rate applied to standard transactions."
-              : p.name === "PBBKB"
-                ? "Fuel tax rate applied to logistics and shipping calculations."
-                : p.name === "PPH22"
-                  ? "Art 22 Income Tax rate applied to imported or specific commodities."
-                  : null,
-        }))
+        const taxParams = data.filter(
+          (r: AppSettingsRow) => r.category === "tax"
+        )
+        const systemParams: SystemParameter[] = taxParams.map(
+          (p: AppSettingsRow) => ({
+            key: p.name,
+            value: p.value,
+            category: p.category,
+            label:
+              p.name === "PPN"
+                ? "PPN (VAT) Rate (%)"
+                : p.name === "PBBKB"
+                  ? "PBBKB Rate (%)"
+                  : p.name === "PPH22"
+                    ? "PPH22 Rate (%)"
+                    : p.name,
+            description:
+              p.name === "PPN"
+                ? "Value Added Tax rate applied to standard transactions."
+                : p.name === "PBBKB"
+                  ? "Fuel tax rate applied to logistics and shipping calculations."
+                  : p.name === "PPH22"
+                    ? "Art 22 Income Tax rate applied to imported or specific commodities."
+                    : null,
+          })
+        )
         setParameters(systemParams)
 
         const valMap: Record<string, string> = {}
@@ -307,21 +335,28 @@ export default function SettingsPage() {
         const ccs: Record<string, string> = {
           cc_quotation:
             data.find(
-              (r: any) => r.category === "email" && r.name === "cc_quotation"
+              (r: AppSettingsRow) =>
+                r.category === "email" && r.name === "cc_quotation"
             )?.value || "",
           cc_po:
-            data.find((r: any) => r.category === "email" && r.name === "cc_po")
-              ?.value || "",
+            data.find(
+              (r: AppSettingsRow) =>
+                r.category === "email" && r.name === "cc_po"
+            )?.value || "",
           cc_do:
-            data.find((r: any) => r.category === "email" && r.name === "cc_do")
-              ?.value || "",
+            data.find(
+              (r: AppSettingsRow) =>
+                r.category === "email" && r.name === "cc_do"
+            )?.value || "",
           cc_invoice:
             data.find(
-              (r: any) => r.category === "email" && r.name === "cc_invoice"
+              (r: AppSettingsRow) =>
+                r.category === "email" && r.name === "cc_invoice"
             )?.value || "",
           cc_payment:
             data.find(
-              (r: any) => r.category === "email" && r.name === "cc_payment"
+              (r: AppSettingsRow) =>
+                r.category === "email" && r.name === "cc_payment"
             )?.value || "",
         }
         setEmailCCs(ccs)
@@ -329,25 +364,34 @@ export default function SettingsPage() {
         const formats: Record<string, string> = {
           quotation:
             data.find(
-              (r: any) => r.category === "numbering" && r.name === "quotation"
+              (r: AppSettingsRow) =>
+                r.category === "numbering" && r.name === "quotation"
             )?.value || "QTN/{YYYY}/{SEQ:3}",
           "sales-order":
             data.find(
-              (r: any) => r.category === "numbering" && r.name === "sales-order"
+              (r: AppSettingsRow) =>
+                r.category === "numbering" && r.name === "sales-order"
             )?.value || "PO/{YYYY}/{SEQ:3}",
           "delivery-order":
             data.find(
-              (r: any) =>
+              (r: AppSettingsRow) =>
                 r.category === "numbering" && r.name === "delivery-order"
             )?.value || "DO/{YYYY}/{SEQ:3}",
           deposit:
             data.find(
-              (r: any) => r.category === "numbering" && r.name === "deposit"
+              (r: AppSettingsRow) =>
+                r.category === "numbering" && r.name === "deposit"
             )?.value || "DEP/{YYYY}/{SEQ:3}",
           invoice:
             data.find(
-              (r: any) => r.category === "numbering" && r.name === "invoice"
+              (r: AppSettingsRow) =>
+                r.category === "numbering" && r.name === "invoice"
             )?.value || "INV/{YYYY}/{SEQ:3}",
+          payment:
+            data.find(
+              (r: AppSettingsRow) =>
+                r.category === "numbering" && r.name === "payment"
+            )?.value || "PAY/{YYYY}/{SEQ:3}",
         }
         setNumberingFormats(formats)
       }
@@ -362,20 +406,16 @@ export default function SettingsPage() {
   }, [canEdit, dict.MSG_DATA_FETCH_FAILED])
 
   useEffect(() => {
+    loadDataRef.current = loadData
+  })
+
+  useEffect(() => {
     if (profile && canView) {
-      loadData()
+      startTransition(() => {
+        loadData()
+      })
     }
   }, [profile, canView, loadData])
-
-  // Submits, Handlers...
-  const handleAddressKeyDown = (
-    e: React.KeyboardEvent<HTMLTextAreaElement>
-  ) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      e.currentTarget.form?.requestSubmit()
-    }
-  }
 
   const handleSaveCompany = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -407,10 +447,10 @@ export default function SettingsPage() {
         undefined,
         true
       )
-    } catch (error: any) {
+    } catch (error: unknown) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${companyInfo.name}]`),
-        error.message
+        error instanceof Error ? error.message : String(error)
       )
     } finally {
       setSavingCompany(false)
@@ -422,7 +462,7 @@ export default function SettingsPage() {
     if (!canEdit) return
     try {
       setSavingBank(true)
-      let updatedBanks: BankAccount[] = currentBank.id
+      const updatedBanks: BankAccount[] = currentBank.id
         ? bankAccounts.map((b) =>
             b.id === currentBank.id
               ? ({ ...b, ...currentBank } as BankAccount)
@@ -467,10 +507,10 @@ export default function SettingsPage() {
           true
         )
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${currentBank.bank_name}]`),
-        error.message
+        error instanceof Error ? error.message : String(error)
       )
     } finally {
       setSavingBank(false)
@@ -501,8 +541,11 @@ export default function SettingsPage() {
         undefined,
         true
       )
-    } catch (error: any) {
-      notify.error(dict.MSG_SAVE_FAILED.replace("%data%", label), error.message)
+    } catch (error: unknown) {
+      notify.error(
+        dict.MSG_SAVE_FAILED.replace("%data%", label),
+        error instanceof Error ? error.message : String(error)
+      )
     } finally {
       setDeletingBankId(null)
     }
@@ -534,10 +577,10 @@ export default function SettingsPage() {
         undefined,
         true
       )
-    } catch (error: any) {
+    } catch (error: unknown) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[Parameters]`),
-        error.message
+        error instanceof Error ? error.message : String(error)
       )
     } finally {
       setSavingParams(false)
@@ -567,10 +610,10 @@ export default function SettingsPage() {
         undefined,
         true
       )
-    } catch (error: any) {
+    } catch (error: unknown) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${newParam.key}]`),
-        error.message
+        error instanceof Error ? error.message : String(error)
       )
     } finally {
       setSavingParamDialog(false)
@@ -597,10 +640,10 @@ export default function SettingsPage() {
         undefined,
         true
       )
-    } catch (error: any) {
+    } catch (error: unknown) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${key}]`),
-        error.message
+        error instanceof Error ? error.message : String(error)
       )
     }
   }
@@ -628,10 +671,10 @@ export default function SettingsPage() {
         undefined,
         true
       )
-    } catch (error: any) {
+    } catch (error: unknown) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[Email CC]`),
-        error.message
+        error instanceof Error ? error.message : String(error)
       )
     } finally {
       setSavingEmailCCs(false)
@@ -661,10 +704,10 @@ export default function SettingsPage() {
         undefined,
         true
       )
-    } catch (error: any) {
+    } catch (error: unknown) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[Numbering Format]`),
-        error.message
+        error instanceof Error ? error.message : String(error)
       )
     } finally {
       setSavingNumbering(false)
@@ -735,31 +778,32 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex shrink-0 gap-4 border-b border-border/60">
-        {["company", "banks", "parameters", "emails", "numbering"].map(
-          (t: any) => (
-            <button
-              key={t}
-              onClick={() => setActiveTab(t)}
-              className={`relative z-10 -mb-[2px] flex items-center gap-2 border-b-2 px-1 pb-2.5 text-xs font-medium transition-all md:text-sm ${activeTab === t ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-            >
-              {t === "company" ? (
-                <Building2 className="size-4" />
-              ) : t === "banks" ? (
-                <CreditCard className="size-4" />
-              ) : t === "parameters" ? (
-                <Sliders className="size-4" />
-              ) : t === "emails" ? (
-                <Mail className="size-4" />
-              ) : (
-                <FileText className="size-4" />
-              )}
-              <span>
-                {(dict as any)[`SETTINGS_TAB_${t.toUpperCase()}`] ||
-                  (t === "numbering" ? "Numbering" : t)}
-              </span>
-            </button>
-          )
-        )}
+        {(
+          ["company", "banks", "parameters", "emails", "numbering"] as const
+        ).map((t) => (
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
+            className={`relative z-10 -mb-[2px] flex items-center gap-2 border-b-2 px-1 pb-2.5 text-xs font-medium transition-all md:text-sm ${activeTab === t ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            {t === "company" ? (
+              <Building2 className="size-4" />
+            ) : t === "banks" ? (
+              <CreditCard className="size-4" />
+            ) : t === "parameters" ? (
+              <Sliders className="size-4" />
+            ) : t === "emails" ? (
+              <Mail className="size-4" />
+            ) : (
+              <FileText className="size-4" />
+            )}
+            <span>
+              {(dict as Record<string, string>)[
+                `SETTINGS_TAB_${t.toUpperCase()}`
+              ] || (t === "numbering" ? "Numbering" : t)}
+            </span>
+          </button>
+        ))}
       </div>
 
       <div className="no-scrollbar flex-1 overflow-y-auto scroll-smooth pb-6">
@@ -846,7 +890,7 @@ export default function SettingsPage() {
                   ) : (
                     <Save className="mr-2 size-4" />
                   )}{" "}
-                  Save
+                  {dict.SETTINGS_BUTTON_SAVE_COMPANY}
                 </Button>
               </div>
             )}
@@ -970,7 +1014,7 @@ export default function SettingsPage() {
                   ) : (
                     <Save className="mr-2 size-4" />
                   )}{" "}
-                  Save
+                  {dict.SETTINGS_BUTTON_SAVE_PARAMS}
                 </Button>
               </div>
             )}
@@ -1003,7 +1047,7 @@ export default function SettingsPage() {
                   ) : (
                     <Save className="mr-2 size-4" />
                   )}{" "}
-                  Save
+                  {dict.SETTINGS_BUTTON_SAVE_EMAILS}
                 </Button>
               </div>
             )}
@@ -1109,9 +1153,9 @@ export default function SettingsPage() {
               variant="outline"
               onClick={() => setIsBankDialogOpen(false)}
             >
-              Cancel
+              {dict.BUTTON_CANCEL}
             </Button>
-            <Button onClick={handleSaveBank}>Save</Button>
+            <Button onClick={handleSaveBank}>{dict.BUTTON_SAVE}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1119,7 +1163,7 @@ export default function SettingsPage() {
       <Dialog open={isParamDialogOpen} onOpenChange={setIsParamDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Parameter</DialogTitle>
+            <DialogTitle>{dict.SETTINGS_ADD_PARAM}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -1146,9 +1190,9 @@ export default function SettingsPage() {
               variant="outline"
               onClick={() => setIsParamDialogOpen(false)}
             >
-              Cancel
+              {dict.BUTTON_CANCEL}
             </Button>
-            <Button onClick={handleSaveNewParam}>Save</Button>
+            <Button onClick={handleSaveNewParam}>{dict.BUTTON_SAVE}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

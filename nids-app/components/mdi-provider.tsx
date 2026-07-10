@@ -7,6 +7,7 @@ import React, {
   useCallback,
   useMemo,
   useEffect,
+  startTransition,
 } from "react"
 
 export interface TabMetadata {
@@ -53,17 +54,23 @@ export function MdiProvider({ children }: { children: React.ReactNode }) {
         const metadata: TabMetadata[] = JSON.parse(savedTabs)
         // We initially load tabs without content.
         // The MdiLayout will be responsible for providing the content mapping.
-        setTabs(metadata.map((m) => ({ ...m, content: null })))
+        startTransition(() => {
+          setTabs(metadata.map((m) => ({ ...m, content: null })))
+        })
       } catch (e) {
         console.error("Failed to restore MDI tabs", e)
       }
     }
 
     if (savedActiveTab) {
-      setActiveTabId(savedActiveTab)
+      startTransition(() => {
+        setActiveTabId(savedActiveTab)
+      })
     }
 
-    setIsRestored(true)
+    startTransition(() => {
+      setIsRestored(true)
+    })
   }, [])
 
   // Save to localStorage when tabs change

@@ -79,12 +79,13 @@ function DialogContent({
         <DialogOverlay isLocal={isLocal} />
         <DialogPrimitive.Content
           data-slot="dialog-content"
+          aria-describedby={undefined}
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
           onFocusOutside={(e) => e.preventDefault()}
           className={cn(
             isLocal ? "absolute" : "fixed",
-            "overflow-hidden top-[calc(50%-1px)] left-1/2 z-50 flex max-h-[85vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none has-[[data-slot=dialog-description]]:max-h-[84vh] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "top-[calc(50%-1px)] left-1/2 z-50 flex max-h-[85vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-popover text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none has-[[data-slot=dialog-description]]:max-h-[84vh] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
           )}
           {...props}
@@ -112,7 +113,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="dialog-header"
       className={cn(
-        "sticky top-0 z-50 flex shrink-0 flex-col gap-2 rounded-t-xl bg-primary px-5 py-4 text-base font-medium text-primary-foreground select-none",
+        "sticky top-0 z-50 flex shrink-0 flex-col gap-1 rounded-t-xl bg-primary px-5 py-3 text-base font-medium text-primary-foreground select-none",
         className
       )}
       {...props}
@@ -167,6 +168,7 @@ function DialogDescription({
   className,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Description>) {
+  if (!props?.children) return null
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"

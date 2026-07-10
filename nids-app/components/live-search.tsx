@@ -1,7 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronRight, CircleCheck, Loader2, Plus, X } from "lucide-react"
+import {
+  Check,
+  ChevronRight,
+  Loader2,
+  Plus,
+  X,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -162,6 +168,7 @@ export function LiveSearch<T extends Record<string, any>>({
     if (selectedItem) return getDisplayText(selectedItem)
     if (value && defaultDisplay) return defaultDisplay
     return placeholder
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem, value, defaultDisplay, placeholder])
 
   return (
@@ -289,7 +296,7 @@ export function LiveSearch<T extends Record<string, any>>({
                   >
                     <Check
                       className={cn(
-                        "size-4 stroke-5 shrink-0 text-primary",
+                        "size-4 shrink-0 stroke-5 text-primary",
                         isSelected ? "opacity-100" : "opacity-0"
                       )}
                     />

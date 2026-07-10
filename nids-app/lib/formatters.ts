@@ -36,7 +36,7 @@ export const formatDate = (date: Date | string | number | null | undefined) => {
     const year = d.getFullYear()
 
     return `${day}/${month}/${year}`
-  } catch (e) {
+  } catch {
     return "-"
   }
 }
@@ -54,7 +54,7 @@ export const formatTime = (date: Date | string | number | null | undefined) => {
     const minutes = pad(d.getMinutes())
 
     return `${hours}:${minutes}`
-  } catch (e) {
+  } catch {
     return "-"
   }
 }

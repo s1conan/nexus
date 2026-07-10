@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS public.invoices (
   invoice_number TEXT UNIQUE NOT NULL,
   company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
   so_id UUID REFERENCES public.sales_orders(id) ON DELETE SET NULL, -- Optional link to PO
+  do_id UUID REFERENCES public.delivery_orders(id) ON DELETE SET NULL, -- Optional link to DO
   issue_date DATE NOT NULL DEFAULT CURRENT_DATE,
   due_date DATE NOT NULL,
   subtotal NUMERIC(15,2) NOT NULL DEFAULT 0,

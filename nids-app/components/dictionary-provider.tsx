@@ -6,6 +6,7 @@ import {
   useState,
   useEffect,
   ReactNode,
+  startTransition,
   useCallback,
   useMemo,
 } from "react"
@@ -36,7 +37,9 @@ export function DictionaryProvider({
     if (typeof window !== "undefined") {
       const savedLang = localStorage.getItem("nids_pref_lang") as Language
       if (savedLang && (savedLang === "en" || savedLang === "id")) {
-        setLang(savedLang)
+        startTransition(() => {
+          setLang(savedLang)
+        })
       }
     }
   }, [])

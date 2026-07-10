@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useParams } from "next/navigation"
 import { createClient } from "@/lib/supabase"
 import { useDictionary } from "@/components/dictionary-provider"
@@ -31,7 +31,6 @@ import { cn } from "@/lib/utils"
 export default function VerificationPage() {
   const { id: uuid, type } = useParams()
   const { dict, lang, setLanguage } = useDictionary()
-  const supabase = createClient()
 
   const [inputNumber, setInputNumber] = useState("")
   const [loading, setLoading] = useState(false)

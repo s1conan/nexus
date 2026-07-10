@@ -408,11 +408,43 @@ export default function DepositsPage() {
     }
   }
 
+  // Check if inventory from a deposit's supplier+product has been used in delivery orders
+  const checkInventoryUsed = async (item: any): Promise<boolean> => {
+    if (item.status !== "Accepted" || !item.company_id || !item.product_id)
+      return false
+    try {
+      const { data, error } = await supabase
+        .from("inventory_ledger")
+        .select("id")
+        .eq("supplier_id", item.company_id)
+        .eq("product_id", item.product_id)
+        .eq("transaction_type", "OUT")
+        .limit(1)
+      if (error) return false
+      return (data?.length ?? 0) > 0
+    } catch {
+      return false
+    }
+  }
+
   const handleDelete = async (id: string) => {
     const item = deposits.find((d) => d.id === id)
     if (!item) return
     const docLabel = `[${item.deposit_number}]`
     const companyName = item.company?.name || ""
+
+    // Block deletion of Accepted deposits whose inventory is already used
+    if (item.status === "Accepted") {
+      const inUse = await checkInventoryUsed(item)
+      if (inUse) {
+        notify.error(
+          dict.MSG_DEPOSIT_DELETE_BLOCKED,
+          dict.MSG_DEPOSIT_INVENTORY_IN_USE.replace("%data%", docLabel)
+        )
+        return
+      }
+    }
+
     if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
     try {
       const { error } = await supabase.from("deposits").delete().eq("id", id)
@@ -429,10 +461,15 @@ export default function DepositsPage() {
         true
       )
     } catch (err: any) {
-      notify.error(
-        dict.MSG_SAVE_FAILED.replace("%data%", docLabel),
-        err.message
-      )
+      const msg = err.message || ""
+      if (msg.includes("DEPOSIT_INVENTORY_IN_USE")) {
+        notify.error(
+          dict.MSG_DEPOSIT_DELETE_BLOCKED,
+          dict.MSG_DEPOSIT_INVENTORY_IN_USE.replace("%data%", docLabel)
+        )
+      } else {
+        notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), msg)
+      }
     }
   }
 
@@ -441,6 +478,19 @@ export default function DepositsPage() {
     if (!item) return
     const docLabel = `[${item.deposit_number}]`
     const companyName = item.company?.name || ""
+
+    // Block un-accepting a deposit whose inventory is already used
+    if (item.status === "Accepted" && status !== "Accepted") {
+      const inUse = await checkInventoryUsed(item)
+      if (inUse) {
+        notify.error(
+          dict.MSG_DEPOSIT_DELETE_BLOCKED,
+          dict.MSG_DEPOSIT_INVENTORY_IN_USE.replace("%data%", docLabel)
+        )
+        return
+      }
+    }
+
     try {
       const { error } = await supabase
         .from("deposits")
@@ -461,10 +511,15 @@ export default function DepositsPage() {
         true
       )
     } catch (err: any) {
-      notify.error(
-        dict.MSG_UPDATE_FAILED.replace("%data%", docLabel),
-        err.message
-      )
+      const msg = err.message || ""
+      if (msg.includes("DEPOSIT_INVENTORY_IN_USE")) {
+        notify.error(
+          dict.MSG_DEPOSIT_DELETE_BLOCKED,
+          dict.MSG_DEPOSIT_INVENTORY_IN_USE.replace("%data%", docLabel)
+        )
+      } else {
+        notify.error(dict.MSG_UPDATE_FAILED.replace("%data%", docLabel), msg)
+      }
     }
   }
 
@@ -540,12 +595,14 @@ export default function DepositsPage() {
 
               <form
                 onSubmit={handleSubmit}
-                className="max-h-[70vh] overflow-y-auto relative"
+                className="relative max-h-[70vh] overflow-y-auto"
               >
-                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
-                  {viewOnly && (
-                    <div className="absolute inset-0 z-20"></div>
+                <div
+                  className={cn(
+                    `relative flex w-full flex-col gap-6 p-5 ${viewOnly ? "rounded-b-xl border-2 border-orange-500" : ""}`
                   )}
+                >
+                  {viewOnly && <div className="absolute inset-0 z-20"></div>}
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div className="grid gap-2">
                       <Label htmlFor="dnum">{dict.LABEL_DEPOSIT_NUMBER}</Label>
@@ -711,8 +768,9 @@ export default function DepositsPage() {
                         <div className="space-y-2">
                           {formData.tax_details.map((tax, idx) => {
                             const calculatedAmount =
-                              totals.appliedTaxes.find((t) => t.name === tax.name)
-                                ?.amount || 0
+                              totals.appliedTaxes.find(
+                                (t) => t.name === tax.name
+                              )?.amount || 0
                             return (
                               <div
                                 key={idx}
@@ -752,7 +810,7 @@ export default function DepositsPage() {
                                       containerClassName="h-6 bg-muted/50"
                                       disabled
                                       value={tax.rate}
-                                      onChange={() => { }}
+                                      onChange={() => {}}
                                       rightBadge="%"
                                     />
                                   </div>
@@ -917,7 +975,9 @@ export default function DepositsPage() {
               </TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
               <TableHead>SKU</TableHead>
-              <TableHead className="text-center">{dict.LABEL_DEPOSIT_DATE}</TableHead>
+              <TableHead className="text-center">
+                {dict.LABEL_DEPOSIT_DATE}
+              </TableHead>
               <TableHead>Qty (L)</TableHead>
               <TableHead>{dict.LABEL_TOTAL_PRICE}</TableHead>
               <TableHead className="text-center">{dict.LABEL_STATUS}</TableHead>
@@ -967,7 +1027,7 @@ export default function DepositsPage() {
                       {d.product?.sku || "-"}
                     </span>
                   </TableCell>
-                  <TableCell className="text-sm text-center text-muted-foreground">
+                  <TableCell className="text-center text-sm text-muted-foreground">
                     {format(new Date(d.deposit_date), "dd MMM yyyy")}
                   </TableCell>
                   <TableCell>
@@ -986,10 +1046,10 @@ export default function DepositsPage() {
                       currency: "IDR",
                     }).format(d.total_amount)}
                   </TableCell>
-                  <TableCell className="align-middle text-center">
+                  <TableCell className="text-center align-middle">
                     <div
                       className={cn(
-                        "inline-flex items-center justify-center w-20 rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                        "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
                         statusStyles[d.status] || statusStyles.Pending
                       )}
                     >

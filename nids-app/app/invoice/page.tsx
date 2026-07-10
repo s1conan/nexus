@@ -99,6 +99,33 @@ interface SortLevel {
   direction: "asc" | "desc"
 }
 
+function calculateBilledQuantity(doInfo: any): number {
+  if (!doInfo) return 0
+  const qtySent = Number(doInfo.quantity) || 0
+  const qtyReceived =
+    doInfo.received_quantity !== null && doInfo.received_quantity !== undefined
+      ? Number(doInfo.received_quantity)
+      : null
+
+  if (qtyReceived === null) {
+    return qtySent
+  }
+
+  if (qtyReceived > qtySent) {
+    return qtySent
+  }
+
+  const shrinkageLimitPercent = Number(doInfo.so?.shrinkage_tolerance) || 0
+  const allowedShrinkage = qtySent * (shrinkageLimitPercent / 100)
+  const actualShrinkage = qtySent - qtyReceived
+
+  if (actualShrinkage > allowedShrinkage) {
+    return qtyReceived
+  }
+
+  return qtySent
+}
+
 export default function InvoicePage() {
   const { dict } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
@@ -217,6 +244,74 @@ export default function InvoicePage() {
     return { subtotal, taxTotal, grandTotal, appliedTaxes }
   }, [formData])
 
+  const calcDetails = useMemo(() => {
+    if (!selectedDOInfo) return null
+    const qtySent = Number(selectedDOInfo.quantity) || 0
+    const qtyReceived =
+      selectedDOInfo.received_quantity !== null &&
+      selectedDOInfo.received_quantity !== undefined
+        ? Number(selectedDOInfo.received_quantity)
+        : null
+
+    let qty = qtySent
+    let billingReason = ""
+
+    if (qtyReceived !== null) {
+      if (qtyReceived > qtySent) {
+        qty = qtySent
+        billingReason = "exceeds"
+      } else {
+        const shrinkageLimitPercent =
+          Number(selectedDOInfo.so?.shrinkage_tolerance) || 0
+        const allowedShrinkage = qtySent * (shrinkageLimitPercent / 100)
+        const actualShrinkage = qtySent - qtyReceived
+
+        if (actualShrinkage > allowedShrinkage) {
+          qty = qtyReceived
+          billingReason = "exceeds_tolerance"
+        } else {
+          qty = qtySent
+          billingReason = "within_tolerance"
+        }
+      }
+    }
+    const unitPrice = selectedDOInfo.so?.unit_price || 0
+    const basePrice = qty * unitPrice
+    const discountPercent = selectedDOInfo.so?.discount || 0
+    const discountAmount = basePrice * (discountPercent / 100)
+    const afterDiscount = basePrice - discountAmount
+    const deliveryRate = selectedDOInfo.so?.delivery_price_per_litre || 0
+    const deliveryTotal = qty * deliveryRate
+    const subtotal = Math.max(0, Math.round(afterDiscount + deliveryTotal))
+
+    const appliedTaxes = (formData.tax_details || []).map((t: any) => {
+      const rate = Number(t.rate) || 0
+      const amount = t.enabled ? (subtotal * rate) / 100 : 0
+      return { ...t, amount }
+    })
+    const taxTotal = appliedTaxes.reduce(
+      (sum: number, t: any) => sum + t.amount,
+      0
+    )
+    const grandTotal = subtotal + taxTotal
+
+    return {
+      qty,
+      billingReason,
+      unitPrice,
+      basePrice,
+      discountPercent,
+      discountAmount,
+      afterDiscount,
+      deliveryRate,
+      deliveryTotal,
+      subtotal,
+      appliedTaxes,
+      taxTotal,
+      grandTotal,
+    }
+  }, [selectedDOInfo, formData.tax_details])
+
   // Fetch Stats
   const fetchStats = useCallback(async () => {
     try {
@@ -298,7 +393,7 @@ export default function InvoicePage() {
         let query = supabase
           .from("invoices")
           .select(
-            "*, company:companies!inner(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details)), po:sales_orders(id, so_number, tax_details)"
+            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance)), po:sales_orders(id, so_number, tax_details)"
           )
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -307,7 +402,9 @@ export default function InvoicePage() {
         }
 
         if (debouncedSearchQuery) {
-          const companySearch = constructMultiWordSearch(debouncedSearchQuery, ["name"])
+          const companySearch = constructMultiWordSearch(debouncedSearchQuery, [
+            "name",
+          ])
           let companyIds: string[] = []
           if (companySearch) {
             const { data: companies } = await supabase
@@ -317,7 +414,9 @@ export default function InvoicePage() {
             companyIds = (companies || []).map((c: any) => c.id)
           }
 
-          const invoiceSearch = constructMultiWordSearch(debouncedSearchQuery, ["invoice_number"])
+          const invoiceSearch = constructMultiWordSearch(debouncedSearchQuery, [
+            "invoice_number",
+          ])
           const orConditions: string[] = []
           if (invoiceSearch) {
             orConditions.push(invoiceSearch)
@@ -386,13 +485,11 @@ export default function InvoicePage() {
 
   useEffect(() => {
     fetchData(true)
-  }, [debouncedSearchQuery, statusFilter, sortLevels, fetchData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchQuery, statusFilter, sortLevels])
 
   // Ordinary Infinite Scroll
   useEffect(() => {
-    const rootElement = containerRef.current
-    if (!rootElement) return
-
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
@@ -401,7 +498,6 @@ export default function InvoicePage() {
         }
       },
       {
-        root: rootElement,
         rootMargin: "400px",
         threshold: 0,
       }
@@ -415,11 +511,52 @@ export default function InvoicePage() {
   }, [fetchData, hasMore, loading, loadingMore])
 
   const handleOpenDialog = (item: any = null, isViewOnly = false) => {
-    setViewOnly(isViewOnly)
+    const shouldBeViewOnly =
+      isViewOnly ||
+      (item && (item.status === "Paid" || item.status === "Partial"))
+    setViewOnly(shouldBeViewOnly)
     if (item) {
       setEditingItem(item)
       setSelectedCompanyInfo(item.company)
-      setSelectedDOInfo(item.do)
+
+      // Defensively unwrap array or object structures
+      let doInfo = item.do
+      if (Array.isArray(doInfo)) {
+        doInfo = doInfo[0]
+      }
+      if (doInfo) {
+        if (Array.isArray(doInfo.so)) {
+          doInfo.so = doInfo.so[0]
+        }
+        if (Array.isArray(doInfo.product)) {
+          doInfo.product = doInfo.product[0]
+        }
+      }
+      setSelectedDOInfo(doInfo || null)
+
+      // Dynamic fetch fallback to load full DO & SO details
+      if (item.do_id) {
+        supabase
+          .from("delivery_orders")
+          .select(
+            "*, company:companies!delivery_orders_company_id_fkey(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance)"
+          )
+          .eq("id", item.do_id)
+          .maybeSingle()
+          .then(({ data, error }: { data: any; error: any }) => {
+            if (!error && data) {
+              setSelectedDOInfo((prev: any) => {
+                if (prev && prev.id === data.id) {
+                  return data
+                }
+                return prev || data
+              })
+              if (data.company) {
+                setSelectedCompanyInfo(data.company)
+              }
+            }
+          })
+      }
 
       const savedTaxes = Array.isArray(item.tax_details) ? item.tax_details : []
       const itemBankAccounts = Array.isArray(item.bank_accounts)
@@ -436,7 +573,7 @@ export default function InvoicePage() {
       const pdDiff = Math.round(
         (new Date(item.due_date).getTime() -
           new Date(item.issue_date).getTime()) /
-        (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24)
       )
 
       setFormData({
@@ -492,8 +629,10 @@ export default function InvoicePage() {
     }
     setIsSaving(true)
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { payment_days, ...cleanFormData } = formData
       const payload = {
-        ...formData,
+        ...cleanFormData,
         tax_amount: totals.taxTotal,
         total_amount: totals.grandTotal,
       }
@@ -508,17 +647,52 @@ export default function InvoicePage() {
       }
 
       if (editingItem) {
+        const oldDoId = editingItem.do_id
+        const newDoId = payload.do_id
+        const newStatus = payload.status
+
         const { error } = await supabase
           .from("invoices")
           .update(payload)
           .eq("id", editingItem.id)
         if (error) throw error
 
+        // Update DO statuses
+        if (oldDoId !== newDoId) {
+          if (oldDoId) {
+            await supabase
+              .from("delivery_orders")
+              .update({ status: "Delivered" })
+              .eq("id", oldDoId)
+          }
+          if (newDoId) {
+            await supabase
+              .from("delivery_orders")
+              .update({ status: "Invoiced" })
+              .eq("id", newDoId)
+          }
+        } else if (newDoId) {
+          if (newStatus === "Cancelled") {
+            await supabase
+              .from("delivery_orders")
+              .update({ status: "Delivered" })
+              .eq("id", newDoId)
+          } else if (
+            editingItem.status === "Cancelled" &&
+            newStatus !== "Cancelled"
+          ) {
+            await supabase
+              .from("delivery_orders")
+              .update({ status: "Invoiced" })
+              .eq("id", newDoId)
+          }
+        }
+
         // Fetch updated row to keep local state in sync with relations
         const { data: updatedRow, error: fetchError } = await supabase
           .from("invoices")
           .select(
-            "*, company:companies!inner(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details)), po:sales_orders(id, so_number, tax_details)"
+            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance)), po:sales_orders(id, so_number, tax_details)"
           )
           .eq("id", editingItem.id)
           .single()
@@ -533,6 +707,13 @@ export default function InvoicePage() {
       } else {
         const { error } = await supabase.from("invoices").insert([payload])
         if (error) throw error
+
+        if (payload.do_id) {
+          await supabase
+            .from("delivery_orders")
+            .update({ status: "Invoiced" })
+            .eq("id", payload.do_id)
+        }
         fetchData(true)
       }
 
@@ -588,6 +769,13 @@ export default function InvoicePage() {
         .eq("id", deleteConfirm.id)
       if (error) throw error
 
+      if (item && item.do_id) {
+        await supabase
+          .from("delivery_orders")
+          .update({ status: "Delivered" })
+          .eq("id", item.do_id)
+      }
+
       setInvoices((prev) => prev.filter((i) => i.id !== deleteConfirm.id))
       notify.deleted(
         dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`),
@@ -613,6 +801,7 @@ export default function InvoicePage() {
     const item = invoices.find((i) => i.id === id)
     if (!item) return
     const docLabel = `[${item.invoice_number}]`
+    const oldStatus = item.status
     const companyName = item.company?.name || ""
     try {
       const { error } = await supabase
@@ -620,6 +809,20 @@ export default function InvoicePage() {
         .update({ status })
         .eq("id", id)
       if (error) throw error
+
+      if (item.do_id) {
+        if (status === "Cancelled" && oldStatus !== "Cancelled") {
+          await supabase
+            .from("delivery_orders")
+            .update({ status: "Delivered" })
+            .eq("id", item.do_id)
+        } else if (oldStatus === "Cancelled" && status !== "Cancelled") {
+          await supabase
+            .from("delivery_orders")
+            .update({ status: "Invoiced" })
+            .eq("id", item.do_id)
+        }
+      }
 
       setInvoices((prev) =>
         prev.map((i) => (i.id === id ? { ...i, status } : i))
@@ -702,11 +905,11 @@ export default function InvoicePage() {
       const contacts = q.company?.details?.contact_persons?.length
         ? q.company.details.contact_persons
         : [
-          {
-            name: q.company?.details?.contact_person || "-",
-            email: q.company?.details?.email || q.company?.email || "",
-          },
-        ]
+            {
+              name: q.company?.details?.contact_person || "-",
+              email: q.company?.details?.email || q.company?.email || "",
+            },
+          ]
       setPreviewDoc({
         id: q.id,
         title: q.invoice_number,
@@ -749,9 +952,9 @@ export default function InvoicePage() {
         .single()
       const ccList = ccData?.value
         ? ccData.value
-          .split(",")
-          .map((email: string) => email.trim())
-          .filter((e: string) => e !== "")
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
         : []
       const pdfDataUri = await generateStandardInvoicePDF(companyInfo, inv, {
         save: false,
@@ -772,17 +975,17 @@ export default function InvoicePage() {
         "Valued Customer"
       const issueDateStr = inv.issue_date
         ? new Date(inv.issue_date).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-        })
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })
         : "-"
       const dueDateStr = inv.due_date
         ? new Date(inv.due_date).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-        })
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })
         : "-"
       const doNumber = inv.do?.do_number || "-"
       const soNumber = inv.do?.so?.so_number || inv.po?.so_number || "-"
@@ -1052,12 +1255,14 @@ export default function InvoicePage() {
               <form
                 onSubmit={handleSubmit}
                 id="invoice-form"
-                className="max-h-[70vh] overflow-y-auto relative"
+                className="relative max-h-[70vh] overflow-y-auto"
               >
-                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
-                  {viewOnly && (
-                    <div className="absolute inset-0 z-20"></div>
+                <div
+                  className={cn(
+                    `relative flex w-full flex-col gap-6 p-5 ${viewOnly ? "rounded-b-xl border-2 border-orange-500" : ""}`
                   )}
+                >
+                  {viewOnly && <div className="absolute inset-0 z-20"></div>}
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                     <div className="space-y-4 md:col-span-2">
                       {/* Invoice Number */}
@@ -1075,7 +1280,6 @@ export default function InvoicePage() {
                           }
                           disabled={viewOnly || (editingItem && !canEdit)}
                           placeholder={dict.LABEL_AUTO_GENERATED}
-                          className="font-mono font-bold"
                         />
                       </div>
                       {/* DO LiveSearch — Mandatory */}
@@ -1096,22 +1300,24 @@ export default function InvoicePage() {
                               let q = supabase
                                 .from("delivery_orders")
                                 .select(
-                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details)"
+                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance)"
                                 )
                                 .in("status", ["Shipped", "Delivered"])
                                 .limit(8)
                               if (query) {
-                                const doSearch = constructMultiWordSearch(query, [
-                                  "do_number",
-                                ])
-                                const companySearch = constructMultiWordSearch(query, [
-                                  "name",
-                                ])
+                                const doSearch = constructMultiWordSearch(
+                                  query,
+                                  ["do_number"]
+                                )
+                                const companySearch = constructMultiWordSearch(
+                                  query,
+                                  ["name"]
+                                )
                                 const { data: companies } = companySearch
                                   ? await supabase
-                                    .from("companies")
-                                    .select("id")
-                                    .or(companySearch)
+                                      .from("companies")
+                                      .select("id")
+                                      .or(companySearch)
                                   : { data: [] }
                                 const companyIds = (companies || []).map(
                                   (c: any) => c.id
@@ -1138,9 +1344,10 @@ export default function InvoicePage() {
                             const soTaxes = Array.isArray(item?.so?.tax_details)
                               ? item.so.tax_details
                               : []
-                            const qty = item?.quantity || 0
+                            const qty = calculateBilledQuantity(item)
                             const uPrice = item?.so?.unit_price || 0
-                            const dPrice = item?.so?.delivery_price_per_litre || 0
+                            const dPrice =
+                              item?.so?.delivery_price_per_litre || 0
                             const discountPercent = item?.so?.discount || 0
                             const baseTotal = qty * uPrice
                             const discountAmount =
@@ -1168,7 +1375,7 @@ export default function InvoicePage() {
                           }
                           defaultDisplay={
                             selectedDOInfo
-                              ? `${selectedDOInfo.do_number} - ${selectedDOInfo.company?.name || ""}`
+                              ? `${selectedDOInfo.do_number} - ${selectedDOInfo.company?.name || selectedCompanyInfo?.name || ""}`
                               : ""
                           }
                           searchColumns={["do_number", "company.name"]}
@@ -1194,132 +1401,274 @@ export default function InvoicePage() {
                       </div>
 
                       {/* Grouped DO Data Card — visible after DO selected */}
-                      {selectedDOInfo && (
-                        <div className="space-y-3 rounded-lg border bg-muted/10 p-4 text-sm">
-                          <div className="mb-1 flex items-center gap-2 border-b pb-2 text-xs font-semibold text-primary">
-                            <Receipt className="size-4" />
-                            <span>
-                              {dict.MENU_DELIVERY_ORDER || "Delivery Order"}:{" "}
-                              {selectedDOInfo.do_number}
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <span className="block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                                DO Date
-                              </span>
-                              <span className="text-sm font-medium">
-                                {selectedDOInfo.do_date
-                                  ? format(
-                                    new Date(selectedDOInfo.do_date),
-                                    "dd MMM yyyy"
-                                  )
-                                  : "-"}
+                      {selectedDOInfo && calcDetails && (
+                        <div className="overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm">
+                          {/* Header banner showing DO and SO link */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-3">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+                              <Receipt className="size-4" />
+                              <span>
+                                {dict.MENU_DELIVERY_ORDER || "Delivery Order"}:{" "}
+                                {selectedDOInfo.do_number}
                               </span>
                             </div>
-                            <div className="space-y-1">
-                              <span className="block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                                SO Number
-                              </span>
-                              <span className="font-mono text-sm font-semibold">
+                            <div className="text-xs font-medium text-muted-foreground">
+                              {dict.MENU_SALES_ORDER || "Sales Order"}:{" "}
+                              <span className="font-mono font-semibold">
                                 {selectedDOInfo.so?.so_number || "-"}
                               </span>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 gap-4 border-t pt-2.5">
-                            <div className="space-y-1">
-                              <span className="block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                                Product
-                              </span>
-                              <span
-                                className="block truncate text-sm font-semibold"
-                                title={selectedDOInfo.product?.name}
-                              >
-                                {selectedDOInfo.product
-                                  ? `${selectedDOInfo.product.name}`
-                                  : "-"}
-                              </span>
-                            </div>
-                          </div>
+                          <div className="space-y-4 p-4 text-sm">
+                            {/* Grid for DO & SO Details */}
+                            <div className="grid grid-cols-1 gap-4 border-b pb-4 sm:grid-cols-2">
+                              {/* DO Logistics Column */}
+                              <div className="space-y-2.5">
+                                <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+                                  {dict.LABEL_DELIVERY_DETAILS ||
+                                    "Delivery Details"}
+                                </div>
+                                <div className="grid grid-cols-2 gap-y-2 text-xs">
+                                  <div className="text-muted-foreground">
+                                    {dict.LABEL_PRODUCT || "Product"}:
+                                  </div>
+                                  <div
+                                    className="truncate font-medium"
+                                    title={selectedDOInfo.product?.name}
+                                  >
+                                    {selectedDOInfo.product?.name || "-"}
+                                  </div>
 
-                          <div className="grid grid-cols-2 gap-4 border-t pt-2.5">
-                            <div className="space-y-1">
-                              <span className="block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                                Date Sent
-                              </span>
-                              <span className="text-sm font-medium">
-                                {selectedDOInfo.shipment_date
-                                  ? format(
-                                    new Date(selectedDOInfo.shipment_date),
-                                    "dd MMM yyyy"
-                                  )
-                                  : "-"}
-                              </span>
-                            </div>
-                            <div className="space-y-1">
-                              <span className="block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                                Date Delivered
-                              </span>
-                              <span className="text-sm font-medium">
-                                {selectedDOInfo.delivered_date
-                                  ? format(
-                                    new Date(selectedDOInfo.delivered_date),
-                                    "dd MMM yyyy"
-                                  )
-                                  : "-"}
-                              </span>
-                            </div>
-                          </div>
+                                  <div className="text-muted-foreground">
+                                    {dict.LABEL_DO_DATE || "DO Date"}:
+                                  </div>
+                                  <div>
+                                    {selectedDOInfo.do_date
+                                      ? format(
+                                          new Date(selectedDOInfo.do_date),
+                                          "dd MMM yyyy"
+                                        )
+                                      : "-"}
+                                  </div>
 
-                          <div className="grid grid-cols-2 gap-4 border-t pt-2.5">
-                            <div className="space-y-1">
-                              <span className="block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                                Qty Delivered
-                              </span>
-                              <span className="font-mono text-sm font-bold">
-                                {Number(
-                                  selectedDOInfo.quantity || 0
-                                ).toLocaleString()}{" "}
-                                L
-                              </span>
-                            </div>
-                            <div className="space-y-1">
-                              <span className="block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                                Price per Litre
-                              </span>
-                              <span className="font-mono text-sm font-semibold">
-                                {SITE_CONFIG.currencySymbol}{" "}
-                                {Number(
-                                  selectedDOInfo.so?.unit_price || 0
-                                ).toLocaleString()}
-                              </span>
-                            </div>
-                          </div>
+                                  <div className="text-muted-foreground">
+                                    {dict.LABEL_QTY_SHIPPED || "Qty Shipped"}:
+                                  </div>
+                                  <div className="font-mono">
+                                    {Number(
+                                      selectedDOInfo.quantity || 0
+                                    ).toLocaleString()}{" "}
+                                    L
+                                  </div>
 
-                          <div className="grid grid-cols-2 gap-4 border-t pt-2.5">
-                            <div className="space-y-1">
-                              <span className="block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                                Discount
-                              </span>
-                              <span className="font-mono text-sm">
-                                {SITE_CONFIG.currencySymbol}{" "}
-                                {Number(
-                                  selectedDOInfo.so?.discount || 0
-                                ).toLocaleString()}
-                              </span>
+                                  <div className="text-muted-foreground">
+                                    {dict.LABEL_QTY_RECEIVED || "Qty Received"}:
+                                  </div>
+                                  <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                    {selectedDOInfo.received_quantity != null
+                                      ? `${Number(selectedDOInfo.received_quantity).toLocaleString()} L`
+                                      : "-"}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* SO Pricing Column */}
+                              <div className="space-y-2.5 sm:border-l sm:pl-4">
+                                <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+                                  {dict.LABEL_SO_INFORMATION ||
+                                    "SO Information"}
+                                </div>
+                                <div className="grid grid-cols-2 gap-y-2 text-xs">
+                                  <div className="text-muted-foreground">
+                                    {dict.LABEL_UNIT_PRICE || "Unit Price"}:
+                                  </div>
+                                  <div className="font-mono">
+                                    {SITE_CONFIG.currencySymbol}{" "}
+                                    {Number(
+                                      selectedDOInfo.so?.unit_price || 0
+                                    ).toLocaleString()}
+                                  </div>
+
+                                  <div className="text-muted-foreground">
+                                    {dict.LABEL_PRICE_DISCOUNT ||
+                                      "Price Discount"}
+                                    :
+                                  </div>
+                                  <div className="font-mono">
+                                    {Number(
+                                      selectedDOInfo.so?.discount || 0
+                                    ).toLocaleString()}
+                                    %
+                                  </div>
+
+                                  <div className="text-muted-foreground">
+                                    {dict.LABEL_DELIVERY_FEE || "Delivery Fee"}:
+                                  </div>
+                                  <div className="font-mono">
+                                    {SITE_CONFIG.currencySymbol}{" "}
+                                    {Number(
+                                      selectedDOInfo.so
+                                        ?.delivery_price_per_litre || 0
+                                    ).toLocaleString()}{" "}
+                                    / L
+                                  </div>
+
+                                  <div className="text-muted-foreground">
+                                    {dict.LABEL_SHRINKAGE_TOLERANCE ||
+                                      "Shrinkage Tolerance"}
+                                    :
+                                  </div>
+                                  <div className="font-mono">
+                                    {Number(
+                                      selectedDOInfo.so?.shrinkage_tolerance ||
+                                        0
+                                    ).toLocaleString()}
+                                    %
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                            <div className="space-y-1">
-                              <span className="block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                                Delivery Cost
-                              </span>
-                              <span className="font-mono text-sm">
-                                {SITE_CONFIG.currencySymbol}{" "}
-                                {Number(
-                                  selectedDOInfo.so?.delivery_price_per_litre || 0
-                                ).toLocaleString()}
-                              </span>
+
+                            {/* Calculation Section */}
+                            <div className="space-y-2.5">
+                              <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+                                {dict.LABEL_CALCULATION_DETAILS ||
+                                  "Calculation Details"}
+                              </div>
+                              {calcDetails.billingReason && (
+                                <div className="rounded border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground">
+                                  {calcDetails.billingReason === "exceeds" &&
+                                    dict.BILLING_NOTE_EXCEEDS_SENT}
+                                  {calcDetails.billingReason ===
+                                    "exceeds_tolerance" &&
+                                    dict.BILLING_NOTE_EXCEEDS_TOLERANCE}
+                                  {calcDetails.billingReason ===
+                                    "within_tolerance" &&
+                                    dict.BILLING_NOTE_WITHIN_TOLERANCE}
+                                </div>
+                              )}
+                              <div className="space-y-2">
+                                {/* Base Price */}
+                                <div className="flex items-center justify-between text-xs">
+                                  <div className="flex flex-col">
+                                    <span className="font-medium text-foreground">
+                                      {dict.LABEL_BASE_PRICE || "Base Price"}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {Number(calcDetails.qty).toLocaleString()}{" "}
+                                      L × {SITE_CONFIG.currencySymbol}{" "}
+                                      {Number(
+                                        calcDetails.unitPrice
+                                      ).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <span className="font-mono font-medium">
+                                    {SITE_CONFIG.currencySymbol}{" "}
+                                    {Math.round(
+                                      calcDetails.basePrice
+                                    ).toLocaleString()}
+                                  </span>
+                                </div>
+
+                                {/* Discount */}
+                                {calcDetails.discountAmount > 0 && (
+                                  <div className="flex items-center justify-between text-xs">
+                                    <div className="flex flex-col">
+                                      <span className="font-medium text-red-600 dark:text-red-400">
+                                        {dict.LABEL_PRICE_DISCOUNT ||
+                                          "Price Discount"}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {calcDetails.discountPercent}%
+                                      </span>
+                                    </div>
+                                    <span className="font-mono font-medium text-red-600 dark:text-red-400">
+                                      - {SITE_CONFIG.currencySymbol}{" "}
+                                      {Math.round(
+                                        calcDetails.discountAmount
+                                      ).toLocaleString()}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Delivery Fee */}
+                                {calcDetails.deliveryTotal > 0 && (
+                                  <div className="flex items-center justify-between text-xs">
+                                    <div className="flex flex-col">
+                                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                                        {dict.LABEL_DELIVERY_FEE ||
+                                          "Delivery Fee"}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {Number(
+                                          calcDetails.qty
+                                        ).toLocaleString()}{" "}
+                                        L × {SITE_CONFIG.currencySymbol}{" "}
+                                        {Number(
+                                          calcDetails.deliveryRate
+                                        ).toLocaleString()}
+                                        /L
+                                      </span>
+                                    </div>
+                                    <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                                      + {SITE_CONFIG.currencySymbol}{" "}
+                                      {Math.round(
+                                        calcDetails.deliveryTotal
+                                      ).toLocaleString()}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Subtotal Divider */}
+                                <div className="flex items-center justify-between border-t pt-2 text-xs font-bold">
+                                  <span>
+                                    {dict.LABEL_SUBTOTAL || "Subtotal"}
+                                  </span>
+                                  <span className="font-mono">
+                                    {SITE_CONFIG.currencySymbol}{" "}
+                                    {Math.round(
+                                      calcDetails.subtotal
+                                    ).toLocaleString()}
+                                  </span>
+                                </div>
+
+                                {/* Taxes */}
+                                {calcDetails.appliedTaxes.map(
+                                  (tax: any, idx: number) => {
+                                    if (!tax.enabled) return null
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className="flex items-center justify-between text-xs"
+                                      >
+                                        <span className="font-medium text-muted-foreground">
+                                          {tax.name} ({tax.rate}%)
+                                        </span>
+                                        <span className="font-mono font-medium text-muted-foreground">
+                                          + {SITE_CONFIG.currencySymbol}{" "}
+                                          {Math.round(
+                                            tax.amount
+                                          ).toLocaleString()}
+                                        </span>
+                                      </div>
+                                    )
+                                  }
+                                )}
+
+                                {/* Grand Total */}
+                                <div className="flex items-center justify-between border-t pt-2 text-sm font-bold">
+                                  <span>
+                                    {dict.LABEL_GRAND_TOTAL || "Grand Total"}
+                                  </span>
+                                  <span className="font-mono text-base text-primary">
+                                    {SITE_CONFIG.currencySymbol}{" "}
+                                    {Math.round(
+                                      calcDetails.grandTotal
+                                    ).toLocaleString()}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1414,14 +1763,16 @@ export default function InvoicePage() {
                             })}
                           {formData.tax_details.filter((t) => t.enabled)
                             .length === 0 && (
-                              <div className="py-2 text-center text-xs text-muted-foreground italic">
-                                No taxes applied
-                              </div>
-                            )}
+                            <div className="py-2 text-center text-xs text-muted-foreground italic">
+                              No taxes applied
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center justify-between border-t pt-2 font-mono text-lg font-bold">
-                          <span>{dict.LABEL_GRAND_TOTAL || "Grand Total"}:</span>
+                          <span>
+                            {dict.LABEL_GRAND_TOTAL || "Grand Total"}:
+                          </span>
                           <span className="text-primary">
                             {SITE_CONFIG.currencySymbol}{" "}
                             {Math.round(totals.grandTotal).toLocaleString()}
@@ -1475,10 +1826,10 @@ export default function InvoicePage() {
                                     bank_accounts: checked
                                       ? [...prev.bank_accounts, bank]
                                       : prev.bank_accounts.filter(
-                                        (b: any) =>
-                                          b.account_number !==
-                                          bank.account_number
-                                      ),
+                                          (b: any) =>
+                                            b.account_number !==
+                                            bank.account_number
+                                        ),
                                   }))
                                 }}
                                 disabled={viewOnly}
@@ -1515,7 +1866,6 @@ export default function InvoicePage() {
                   <Button
                     type="submit"
                     form="invoice-form"
-                    onClick={() => handleSave()}
                     disabled={isSaving || !canEdit}
                   >
                     {isSaving ? (
@@ -1747,10 +2097,10 @@ export default function InvoicePage() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="align-middle text-center">
+                    <TableCell className="text-center align-middle">
                       <span
                         className={cn(
-                          "inline-flex items-center justify-center w-20 rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                          "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
                           statusStyles[displayStatus] || statusStyles.Draft
                         )}
                       >
@@ -1763,7 +2113,11 @@ export default function InvoicePage() {
                           variant="table_action"
                           size="sm"
                           onClick={() => handleOpenDialog(i)}
-                          disabled={!canEdit || i.status === "Paid"}
+                          disabled={
+                            !canEdit ||
+                            i.status === "Paid" ||
+                            i.status === "Partial"
+                          }
                         >
                           <Pencil className="size-4" />
                         </Button>
@@ -1782,7 +2136,9 @@ export default function InvoicePage() {
                               size="icon"
                               className="size-8"
                               disabled={
-                                i.status === "Paid" || (!canEdit && !canDelete)
+                                i.status === "Paid" ||
+                                i.status === "Partial" ||
+                                (!canEdit && !canDelete)
                               }
                             >
                               <ChevronDown className="size-4" />

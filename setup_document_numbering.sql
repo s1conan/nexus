@@ -18,7 +18,8 @@ VALUES
 ('numbering', 'purchase-order', '"PO/{YYYY}/{SEQ:3}"', 'Format for Sales Order numbers'),
 ('numbering', 'delivery-order', '"DO/{YYYY}/{SEQ:3}"', 'Format for Delivery Order numbers'),
 ('numbering', 'deposit', '"DEP/{YYYY}/{SEQ:3}"', 'Format for Deposit numbers'),
-('numbering', 'invoice', '"INV/{YYYY}/{SEQ:3}"', 'Format for Invoice numbers')
+('numbering', 'invoice', '"INV/{YYYY}/{SEQ:3}"', 'Format for Invoice numbers'),
+('numbering', 'payment', '"PAY/{YYYY}/{SEQ:3}"', 'Format for Payment numbers')
 ON CONFLICT (category, name) 
 DO UPDATE SET 
     value = EXCLUDED.value,

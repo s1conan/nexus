@@ -1,0 +1,22 @@
+
+
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev:child-app",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/nids-app"
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    }
+  ]
+}

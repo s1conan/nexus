@@ -105,10 +105,10 @@ export default function InventoryReportPage() {
             <Package className="size-5" />
           </div>
           <div>
-            <p className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+            <p className="text-center text-xs font-bold tracking-wider text-muted-foreground uppercase">
               {dict.LABEL_TOTAL_VOLUME || "Total Stock"}
             </p>
-            <p className="text-2xl font-black">
+            <p className="text-center text-2xl font-black">
               {totals.stock.toLocaleString()} L
             </p>
           </div>
@@ -120,10 +120,10 @@ export default function InventoryReportPage() {
               <DollarSign className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+              <p className="text-center text-xs font-bold tracking-wider text-muted-foreground uppercase">
                 {dict.LABEL_INVENTORY_VALUE || "Inventory Value"}
               </p>
-              <p className="text-2xl font-black">
+              <p className="text-center text-2xl font-black">
                 {SITE_CONFIG.currencySymbol} {totals.value.toLocaleString()}
               </p>
             </div>
@@ -135,10 +135,10 @@ export default function InventoryReportPage() {
             <Warehouse className="size-5" />
           </div>
           <div>
-            <p className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+            <p className="text-center text-xs font-bold tracking-wider text-muted-foreground uppercase">
               {dict.LABEL_ACTIVE_WAREHOUSES || "Active Warehouses"}
             </p>
-            <p className="text-2xl font-black">
+            <p className="text-center text-2xl font-black">
               {new Set(filteredInventory.map((i) => i.supplier_id)).size}
             </p>
           </div>

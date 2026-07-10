@@ -8,7 +8,7 @@ import { FullPageLoader } from "@/components/full-page-loader"
 
 export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { user, loading } = useAuth()
+  const { loading } = useAuth()
   const isPublicPage =
     pathname === "/" ||
     pathname === "/signup" ||

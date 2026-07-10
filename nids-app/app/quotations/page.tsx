@@ -404,9 +404,9 @@ export default function QuotationsPage() {
       setEditingItem(item)
       const company = item.company
         ? {
-          ...item.company,
-          contact_person: item.company.details?.contact_person || "",
-        }
+            ...item.company,
+            contact_person: item.company.details?.contact_person || "",
+          }
         : null
 
       setSelectedCompanyInfo(company)
@@ -524,35 +524,35 @@ export default function QuotationsPage() {
           payload.product_id !== (editingItem.product_id || "") ||
           Number(payload.base_price) !== Number(editingItem.base_price || 0) ||
           Number(payload.delivery_price) !==
-          Number(editingItem.delivery_price || 0) ||
+            Number(editingItem.delivery_price || 0) ||
           payload.quotation_date !== editingItem.quotation_date ||
           payload.expiry_date !== editingItem.expiry_date ||
           Number(payload.expiry_days) !==
-          Number(editingItem.expiry_days || 0) ||
+            Number(editingItem.expiry_days || 0) ||
           Number(payload.minimum_order) !==
-          Number(editingItem.minimum_order || 0) ||
+            Number(editingItem.minimum_order || 0) ||
           Number(payload.shrinkage_tolerance) !==
-          Number(editingItem.shrinkage_tolerance ?? 0) ||
+            Number(editingItem.shrinkage_tolerance ?? 0) ||
           payload.content !== (editingItem.content || "") ||
           payload.is_content_enabled !==
-          (editingItem.is_content_enabled ?? true) ||
+            (editingItem.is_content_enabled ?? true) ||
           payload.note !== (editingItem.note || "") ||
           payload.is_note_enabled !== (editingItem.is_note_enabled ?? true) ||
           payload.terms_conditions !== (editingItem.terms_conditions || "") ||
           payload.is_terms_enabled !== (editingItem.is_terms_enabled ?? true) ||
           payload.closing_remarks !== (editingItem.closing_remarks || "") ||
           payload.is_closing_enabled !==
-          (editingItem.is_closing_enabled ?? true) ||
+            (editingItem.is_closing_enabled ?? true) ||
           JSON.stringify(payload.discounts) !==
-          JSON.stringify(editingItem.discounts || []) ||
+            JSON.stringify(editingItem.discounts || []) ||
           JSON.stringify(
             payload.bank_accounts?.map((b: any) => b.account_number)
           ) !==
-          JSON.stringify(
-            (editingItem.bank_accounts || []).map(
-              (b: any) => b.account_number
-            )
-          ) ||
+            JSON.stringify(
+              (editingItem.bank_accounts || []).map(
+                (b: any) => b.account_number
+              )
+            ) ||
           JSON.stringify(
             payload.tax_details?.map((t: any) => ({
               name: t.name,
@@ -560,13 +560,13 @@ export default function QuotationsPage() {
               enabled: t.enabled,
             }))
           ) !==
-          JSON.stringify(
-            (editingItem.tax_details || []).map((t: any) => ({
-              name: t.name,
-              rate: t.rate,
-              enabled: t.enabled,
-            }))
-          )
+            JSON.stringify(
+              (editingItem.tax_details || []).map((t: any) => ({
+                name: t.name,
+                rate: t.rate,
+                enabled: t.enabled,
+              }))
+            )
 
         if (hasDataChanged) {
           payload.status = "Draft"
@@ -731,11 +731,11 @@ export default function QuotationsPage() {
       const contacts = q.company?.details?.contact_persons?.length
         ? q.company.details.contact_persons
         : [
-          {
-            name: q.company?.details?.contact_person || "-",
-            email: q.company?.details?.email || q.company?.email || "",
-          },
-        ]
+            {
+              name: q.company?.details?.contact_person || "-",
+              email: q.company?.details?.email || q.company?.email || "",
+            },
+          ]
       setPreviewDoc({
         id: q.id,
         title: q.quotation_number,
@@ -775,9 +775,9 @@ export default function QuotationsPage() {
         .single()
       const ccList = ccData?.value
         ? ccData.value
-          .split(",")
-          .map((email: string) => email.trim())
-          .filter((e: string) => e !== "")
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
         : []
       const pdfDataUri = await generateStandardQuotationPDF(companyInfo, q, {
         save: false,
@@ -796,17 +796,17 @@ export default function QuotationsPage() {
         q.contact_person || q.company?.name || "Valued Customer"
       const quoteDate = q.quotation_date
         ? new Date(q.quotation_date).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-        })
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })
         : "-"
       const expiryDate = q.expiry_date
         ? new Date(q.expiry_date).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-        })
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })
         : "-"
       const productName = q.product?.name || q.product_name || "-"
       const productSku = q.product?.sku || q.product_sku || "-"
@@ -815,18 +815,18 @@ export default function QuotationsPage() {
       // Strip HTML tags from content for plain text display in email
       const contentText = q.content
         ? q.content
-          .replace(/<[^>]*>/g, "")
-          .replace(/&nbsp;/g, " ")
-          .trim()
+            .replace(/<[^>]*>/g, "")
+            .replace(/&nbsp;/g, " ")
+            .trim()
         : ""
 
       // Replace variables in note
       const processedNote = q.note
         ? q.note
-          .replace(/\{quotation_date\}/g, quoteDate)
-          .replace(/\{expiry_date\}/g, expiryDate)
-          .replace(/\{delivery_address\}/g, q.delivery_address || "-")
-          .replace(/\{contact_person\}/g, customerName)
+            .replace(/\{quotation_date\}/g, quoteDate)
+            .replace(/\{expiry_date\}/g, expiryDate)
+            .replace(/\{delivery_address\}/g, q.delivery_address || "-")
+            .replace(/\{contact_person\}/g, customerName)
         : ""
 
       const emailHtml = `<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff;">
@@ -1094,12 +1094,14 @@ export default function QuotationsPage() {
                   handleSave()
                 }}
                 id="quotation-form"
-                className="max-h-[70vh] overflow-y-auto relative"
+                className="relative max-h-[70vh] overflow-y-auto"
               >
-                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
-                  {viewOnly && (
-                    <div className="absolute inset-0 z-20"></div>
+                <div
+                  className={cn(
+                    `relative flex w-full flex-col gap-6 p-5 ${viewOnly ? "rounded-b-xl border-2 border-orange-500" : ""}`
                   )}
+                >
+                  {viewOnly && <div className="absolute inset-0 z-20"></div>}
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                     <div className="space-y-4 md:col-span-2">
                       <div className="grid gap-2">
@@ -1122,7 +1124,9 @@ export default function QuotationsPage() {
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_COMPANY_NAME}</Label>
                         <LiveSearch
-                          data={selectedCompanyInfo ? [selectedCompanyInfo] : []}
+                          data={
+                            selectedCompanyInfo ? [selectedCompanyInfo] : []
+                          }
                           fetchData={async (query) => {
                             let q = supabase
                               .from("companies")
@@ -1130,10 +1134,10 @@ export default function QuotationsPage() {
                               .contains("type", ["Customer"])
                               .limit(8)
                             if (query) {
-                              const searchStr = constructMultiWordSearch(query, [
-                                "name",
-                                "details->>contact_person",
-                              ])
+                              const searchStr = constructMultiWordSearch(
+                                query,
+                                ["name", "details->>contact_person"]
+                              )
                               if (searchStr) q = q.or(searchStr)
                             }
                             const { data } = await q
@@ -1174,7 +1178,10 @@ export default function QuotationsPage() {
                           <Select
                             value={formData.delivery_address}
                             onValueChange={(val) =>
-                              setFormData({ ...formData, delivery_address: val })
+                              setFormData({
+                                ...formData,
+                                delivery_address: val,
+                              })
                             }
                           >
                             <SelectTrigger className="h-13 w-full">
@@ -1224,10 +1231,10 @@ export default function QuotationsPage() {
                                 .select("id, sku, name, base_price")
                                 .limit(8)
                               if (query) {
-                                const searchStr = constructMultiWordSearch(query, [
-                                  "sku",
-                                  "name",
-                                ])
+                                const searchStr = constructMultiWordSearch(
+                                  query,
+                                  ["sku", "name"]
+                                )
                                 if (searchStr) q = q.or(searchStr)
                               }
                               // q = q.or(
@@ -1253,8 +1260,8 @@ export default function QuotationsPage() {
                                   selectedProductInfo.name
                                   ? `${selectedProductInfo.sku} - ${selectedProductInfo.name}`
                                   : selectedProductInfo.name ||
-                                  selectedProductInfo.sku ||
-                                  ""
+                                    selectedProductInfo.sku ||
+                                    ""
                                 : ""
                             }
                             searchColumns={["sku", "name"]}
@@ -1327,7 +1334,9 @@ export default function QuotationsPage() {
                     <div className="space-y-4 md:col-span-3">
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                         <div className="grid gap-2">
-                          <Label htmlFor="minorder">{dict.LABEL_MIN_ORDER}</Label>
+                          <Label htmlFor="minorder">
+                            {dict.LABEL_MIN_ORDER}
+                          </Label>
                           <NumberInput
                             id="minorder"
                             value={formData.minimum_order}
@@ -1389,8 +1398,9 @@ export default function QuotationsPage() {
                         <div className="space-y-2">
                           {formData.tax_details.map((tax, idx) => {
                             const calculatedAmount =
-                              totals.appliedTaxes.find((t) => t.name === tax.name)
-                                ?.amount || 0
+                              totals.appliedTaxes.find(
+                                (t) => t.name === tax.name
+                              )?.amount || 0
                             return (
                               <div
                                 key={idx}
@@ -1425,9 +1435,9 @@ export default function QuotationsPage() {
                                             prev.map((gt) =>
                                               gt.name === tax.name
                                                 ? {
-                                                  ...gt,
-                                                  value: taxSettings.value,
-                                                }
+                                                    ...gt,
+                                                    value: taxSettings.value,
+                                                  }
                                                 : gt
                                             )
                                           )
@@ -1452,7 +1462,7 @@ export default function QuotationsPage() {
                                       containerClassName="h-8 bg-muted/50"
                                       disabled
                                       value={tax.rate}
-                                      onChange={() => { }}
+                                      onChange={() => {}}
                                       rightBadge="%"
                                     />
                                   </div>
@@ -1479,7 +1489,9 @@ export default function QuotationsPage() {
                         </div>
 
                         <div className="flex items-center justify-between border-t pt-2 font-mono text-lg font-bold">
-                          <span>{dict.LABEL_GRAND_TOTAL || "Grand Total"}:</span>
+                          <span>
+                            {dict.LABEL_GRAND_TOTAL || "Grand Total"}:
+                          </span>
                           <span className="text-primary">
                             {SITE_CONFIG.currencySymbol}{" "}
                             {Math.round(totals.grandTotal).toLocaleString()}
@@ -1523,7 +1535,10 @@ export default function QuotationsPage() {
                       label={dict.LABEL_TERMS}
                       value={formData.terms_conditions}
                       onChange={(val) =>
-                        setFormData({ ...formData, terms_conditions: val || "" })
+                        setFormData({
+                          ...formData,
+                          terms_conditions: val || "",
+                        })
                       }
                       isEnabled={formData.is_terms_enabled}
                       readOnly={viewOnly}
@@ -1574,10 +1589,10 @@ export default function QuotationsPage() {
                                     bank_accounts: checked
                                       ? [...prev.bank_accounts, bank]
                                       : prev.bank_accounts.filter(
-                                        (b: any) =>
-                                          b.account_number !==
-                                          bank.account_number
-                                      ),
+                                          (b: any) =>
+                                            b.account_number !==
+                                            bank.account_number
+                                        ),
                                   }))
                                 }}
                               />
@@ -1682,7 +1697,6 @@ export default function QuotationsPage() {
                   <Button
                     type="submit"
                     form="quotation-form"
-                    onClick={() => handleSave()}
                     disabled={isSaving || (editingItem ? !canEdit : !canInsert)}
                   >
                     {isSaving ? (
@@ -1860,10 +1874,10 @@ export default function QuotationsPage() {
                       lang === "id" ? "id-ID" : "en-US"
                     ).format(q.minimum_order)}
                   </TableCell>
-                  <TableCell className="align-middle text-center">
+                  <TableCell className="text-center align-middle">
                     <div
                       className={cn(
-                        "inline-flex items-center justify-center w-20 rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                        "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
                         statusStyles[q.status]
                       )}
                     >

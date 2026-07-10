@@ -59,6 +59,20 @@ export async function POST(request: Request) {
         numberField: "do_number",
         select: "*",
       },
+      payment: {
+        table: "payments",
+        numberField: "payment_number",
+        select: `
+          id,
+          payment_number,
+          payment_date,
+          amount,
+          payment_method,
+          reference_number,
+          note,
+          invoice:invoices(id, invoice_number, bank_accounts, company:companies(name, details))
+        `,
+      },
     }
 
     const docConfig = config[type]

@@ -112,6 +112,18 @@ export default function DeliveryOrdersPage() {
     id: string
     name: string
   } | null>(null)
+  const [deliveryConfirm, setDeliveryConfirm] = useState<{
+    id: string
+    do_number: string
+    quantity: number
+  } | null>(null)
+  const [deliveryFormData, setDeliveryFormData] = useState<{
+    received_quantity: number
+    delivered_date: string
+  }>({
+    received_quantity: 0,
+    delivered_date: format(new Date(), "yyyy-MM-dd"),
+  })
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
@@ -157,6 +169,7 @@ export default function DeliveryOrdersPage() {
     product_id: "",
     do_date: format(new Date(), "yyyy-MM-dd"),
     quantity: 0,
+    received_quantity: 0 as number,
     driver_info: { name: "", phone: "" },
     vehicle_id: "",
     vehicle_number: "",
@@ -304,8 +317,8 @@ export default function DeliveryOrdersPage() {
           .eq("supplier_id", formData.supplier_id)
           .eq("product_id", formData.product_id)
           .single()
-        console.log("data:", data);
-        console.log("error:", error);
+        console.log("data:", data)
+        console.log("error:", error)
         if (error && error.code !== "PGRST116") {
           console.error("Error fetching stock:", error)
         }
@@ -350,6 +363,13 @@ export default function DeliveryOrdersPage() {
         sealNumberCache.current[c.compartment_number] = c.seal_number
     }
   }, [formData.compartment_details])
+
+  // Clear seal numbers cache on dialog close
+  useEffect(() => {
+    if (!isOpen) {
+      sealNumberCache.current = {}
+    }
+  }, [isOpen])
 
   // When vehicle changes, auto-fill compartments
   const handleVehicleSelect = (vId: string, vehicle?: any) => {
@@ -424,6 +444,7 @@ export default function DeliveryOrdersPage() {
         product_id: item.product_id,
         do_date: item.do_date,
         quantity: item.quantity,
+        received_quantity: item.received_quantity || 0,
         driver_info: item.driver_info || {
           name: item.driver_name || "",
           phone: item.driver_phone || "",
@@ -462,6 +483,7 @@ export default function DeliveryOrdersPage() {
         product_id: "",
         do_date: format(new Date(), "yyyy-MM-dd"),
         quantity: 0,
+        received_quantity: 0,
         driver_info: { name: "", phone: "" },
         vehicle_id: "",
         vehicle_number: "",
@@ -478,7 +500,8 @@ export default function DeliveryOrdersPage() {
   // Actions
   const handleSave = async () => {
     // Check if note is empty and disable if so
-    const isNoteEmpty = !formData.note || formData.note.replace(/<[^>]*>/g, "").trim() === ""
+    const isNoteEmpty =
+      !formData.note || formData.note.replace(/<[^>]*>/g, "").trim() === ""
     if (isNoteEmpty) {
       setFormData((prev) => ({ ...prev, is_note_enabled: false }))
     }
@@ -692,6 +715,62 @@ export default function DeliveryOrdersPage() {
     }
   }
 
+  const handleOpenDeliveryConfirm = (item: any) => {
+    setDeliveryConfirm({
+      id: item.id,
+      do_number: item.do_number,
+      quantity: item.quantity,
+    })
+    setDeliveryFormData({
+      received_quantity: item.received_quantity || item.quantity,
+      delivered_date: item.delivered_date || format(new Date(), "yyyy-MM-dd"),
+    })
+  }
+
+  const handleConfirmDelivery = async () => {
+    if (!deliveryConfirm) return
+    const { id, do_number } = deliveryConfirm
+    const { received_quantity, delivered_date } = deliveryFormData
+    const docLabel = `[${do_number}]`
+    const item = orders.find((o) => o.id === id)
+    const companyName = item?.company?.name || ""
+    try {
+      const { error } = await supabase
+        .from("delivery_orders")
+        .update({
+          status: "Delivered",
+          received_quantity,
+          delivered_date,
+        })
+        .eq("id", id)
+      if (error) throw error
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === id
+            ? { ...o, status: "Delivered", received_quantity, delivered_date }
+            : o
+        )
+      )
+      notify.success(
+        dict.MSG_DO_STATUS_UPDATED.replace("%data%", docLabel),
+        dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", "[Delivered]").replace(
+          "%company%",
+          `[${companyName}]`
+        ),
+        undefined,
+        true
+      )
+    } catch (err: any) {
+      notify.error(
+        dict.MSG_UPDATE_FAILED.replace("%data%", docLabel),
+        err.message
+      )
+    } finally {
+      setDeliveryConfirm(null)
+    }
+  }
+
   const handlePrint = async (o: any) => {
     if (!companyInfo) {
       notify.error(dict.MSG_SAVE_FAILED, "Company information not loaded yet.")
@@ -705,11 +784,11 @@ export default function DeliveryOrdersPage() {
     const contacts = o.company?.details?.contact_persons?.length
       ? o.company.details.contact_persons
       : [
-        {
-          name: o.company?.details?.contact_person || "-",
-          email: o.company?.details?.email || o.company?.email || "",
-        },
-      ]
+          {
+            name: o.company?.details?.contact_person || "-",
+            email: o.company?.details?.email || o.company?.email || "",
+          },
+        ]
     setPreviewDoc({
       id: o.id,
       title: o.do_number,
@@ -733,9 +812,9 @@ export default function DeliveryOrdersPage() {
         .single()
       const ccList = ccData?.value
         ? ccData.value
-          .split(",")
-          .map((email: string) => email.trim())
-          .filter((e: string) => e !== "")
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
         : []
       const pdfDataUri = await generateStandardDeliveryOrderPDF(
         companyInfo,
@@ -757,10 +836,10 @@ export default function DeliveryOrdersPage() {
         "Valued Customer"
       const deliveryDate = doRecord.do_date
         ? new Date(doRecord.do_date).toLocaleDateString("en-GB", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-        })
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })
         : "-"
       const vehicleNumber =
         doRecord.vehicle?.license_number || doRecord.vehicle_number || "-"
@@ -957,12 +1036,14 @@ export default function DeliveryOrdersPage() {
                   handleSave()
                 }}
                 id="do-form"
-                className="max-h-[70vh] overflow-y-auto relative"
+                className="relative max-h-[70vh] overflow-y-auto"
               >
-                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
-                  {viewOnly && (
-                    <div className="absolute inset-0 z-20"></div>
+                <div
+                  className={cn(
+                    `relative flex w-full flex-col gap-6 p-5 ${viewOnly ? "rounded-b-xl border-2 border-orange-500" : ""}`
                   )}
+                >
+                  {viewOnly && <div className="absolute inset-0 z-20"></div>}
                   <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
                     {/* Group 1: SO Information */}
                     <div className="space-y-6 lg:col-span-1">
@@ -1002,11 +1083,12 @@ export default function DeliveryOrdersPage() {
                                 data={
                                   selectedPOInfo
                                     ? [
-                                      {
-                                        ...selectedPOInfo,
-                                        company_name: selectedCompanyInfo?.name,
-                                      },
-                                    ]
+                                        {
+                                          ...selectedPOInfo,
+                                          company_name:
+                                            selectedCompanyInfo?.name,
+                                        },
+                                      ]
                                     : []
                                 }
                                 fetchData={async (query) => {
@@ -1018,21 +1100,24 @@ export default function DeliveryOrdersPage() {
                                     .in("status", ["Approved", "Partial"])
                                     .limit(8)
                                   if (query) {
-                                    const soSearch = constructMultiWordSearch(query, ["so_number"])
-                                    const companySearch = constructMultiWordSearch(query, ["name"])
+                                    const soSearch = constructMultiWordSearch(
+                                      query,
+                                      ["so_number"]
+                                    )
+                                    const companySearch =
+                                      constructMultiWordSearch(query, ["name"])
                                     const { data: companies } = companySearch
                                       ? await supabase
-                                        .from("companies")
-                                        .select("id")
-                                        .contains("type", ["Customer"])
-                                        .or(companySearch)
+                                          .from("companies")
+                                          .select("id")
+                                          .contains("type", ["Customer"])
+                                          .or(companySearch)
                                       : { data: [] }
                                     const companyIds = (companies || []).map(
                                       (c: any) => c.id
                                     )
                                     const orConditions: string[] = []
-                                    if (soSearch)
-                                      orConditions.push(soSearch)
+                                    if (soSearch) orConditions.push(soSearch)
                                     if (companyIds.length > 0)
                                       orConditions.push(
                                         `company_id.in.(${companyIds.join(",")})`
@@ -1083,7 +1168,7 @@ export default function DeliveryOrdersPage() {
                             disabled={true}
                             fetchData={async () => []}
                             value={formData.company_id}
-                            onSelect={() => { }}
+                            onSelect={() => {}}
                             keyField="id"
                             displayField="name"
                             defaultDisplay={selectedCompanyInfo?.name || ""}
@@ -1095,14 +1180,14 @@ export default function DeliveryOrdersPage() {
                         </div>
 
                         <div className="grid gap-2">
-                          <Label className="text-xs">{dict.LABEL_SO_DATE}</Label>
+                          <Label>{dict.LABEL_SO_DATE}</Label>
                           <Input
                             value={
                               isFromSO && selectedPOInfo?.so_date
                                 ? format(
-                                  new Date(selectedPOInfo.so_date),
-                                  "dd MMM yyyy"
-                                )
+                                    new Date(selectedPOInfo.so_date),
+                                    "dd MMM yyyy"
+                                  )
                                 : ""
                             }
                             disabled
@@ -1120,7 +1205,7 @@ export default function DeliveryOrdersPage() {
                             disabled={true} // Disabled as it's from SO
                             fetchData={async () => []}
                             value={formData.product_id}
-                            onSelect={() => { }}
+                            onSelect={() => {}}
                             keyField="id"
                             displayField={(p) => `${p.sku} - ${p.name}`}
                             defaultDisplay={
@@ -1129,8 +1214,8 @@ export default function DeliveryOrdersPage() {
                                   selectedProductInfo.name
                                   ? `${selectedProductInfo.sku} - ${selectedProductInfo.name}`
                                   : selectedProductInfo.name ||
-                                  selectedProductInfo.sku ||
-                                  ""
+                                    selectedProductInfo.sku ||
+                                    ""
                                 : ""
                             }
                             searchColumns={[]}
@@ -1145,7 +1230,7 @@ export default function DeliveryOrdersPage() {
                             <Label>{dict.LABEL_SO_TOTAL_QTY}</Label>
                             <NumberInput
                               value={selectedPOInfo?.quantity || 0}
-                              onChange={() => { }}
+                              onChange={() => {}}
                               disabled
                               rightBadge="L"
                             />
@@ -1179,50 +1264,46 @@ export default function DeliveryOrdersPage() {
                           </div>
                         </div>
 
-                        <div className="grid gap-2">
-                          <Label className="flex items-center gap-2">
-                            <MapPin className="size-4" />{" "}
-                            {dict.LABEL_DELIVERY_ADDRESS}
-                          </Label>
-                          {isFromSO &&
-                            selectedCompanyInfo?.details?.addresses?.length > 0 ? (
-                            <div className="rounded-md border border-input bg-muted px-3 py-2">
-                              {(() => {
-                                const addrs = selectedCompanyInfo.details
-                                  .addresses as {
-                                    label: string
-                                    address: string
-                                  }[]
-                                const matched = addrs.find(
-                                  (a: any) =>
-                                    a.address === formData.delivery_address
-                                )
-                                return matched ? (
-                                  <div className="flex flex-col">
-                                    <span className="text-xs font-medium">
-                                      {matched.label}
+                        {formData.status === "Delivered" && (
+                          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+                            <div className="grid gap-2">
+                              <div className="flex items-center justify-between">
+                                <Label htmlFor="received_qty">
+                                  {dict.LABEL_QTY_RECEIVED}
+                                </Label>
+                                {formData.received_quantity !==
+                                  formData.quantity &&
+                                  formData.received_quantity > 0 && (
+                                    <span
+                                      className={cn(
+                                        "rounded px-2 text-[10px] font-bold",
+                                        formData.received_quantity <
+                                          formData.quantity
+                                          ? "bg-rose-100 text-rose-700"
+                                          : "bg-emerald-100 text-emerald-700"
+                                      )}
+                                    >
+                                      {formData.received_quantity <
+                                      formData.quantity
+                                        ? "Shortage"
+                                        : "Overage"}
                                     </span>
-                                    <span className="text-[10px] text-muted-foreground">
-                                      {matched.address}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">
-                                    {formData.delivery_address ||
-                                      dict.PLACEHOLDER_FROM_SO}
-                                  </span>
-                                )
-                              })()}
+                                  )}
+                              </div>
+                              <NumberInput
+                                id="received_qty"
+                                value={formData.received_quantity || 0}
+                                onChange={(val) =>
+                                  setFormData({
+                                    ...formData,
+                                    received_quantity: val,
+                                  })
+                                }
+                                rightBadge="L"
+                              />
                             </div>
-                          ) : (
-                            <Input
-                              value={formData.delivery_address}
-                              disabled={true}
-                              className="h-12 bg-muted"
-                              placeholder={dict.PLACEHOLDER_FROM_SO}
-                            />
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1236,9 +1317,7 @@ export default function DeliveryOrdersPage() {
                           </h3>
 
                           <div className="grid gap-2">
-                            <Label className="text-xs">
-                              {dict.LABEL_DO_DATE}
-                            </Label>
+                            <Label>{dict.LABEL_DO_DATE}</Label>
                             <Input
                               type="date"
                               value={formData.do_date}
@@ -1249,6 +1328,52 @@ export default function DeliveryOrdersPage() {
                                 })
                               }
                             />
+                          </div>
+
+                          <div className="grid gap-2">
+                            <Label className="flex items-center gap-2">
+                              <MapPin className="size-4" />{" "}
+                              {dict.LABEL_DELIVERY_ADDRESS}
+                            </Label>
+                            {isFromSO &&
+                            selectedCompanyInfo?.details?.addresses?.length >
+                              0 ? (
+                              <div className="rounded-md border border-input bg-muted px-3 py-2">
+                                {(() => {
+                                  const addrs = selectedCompanyInfo.details
+                                    .addresses as {
+                                    label: string
+                                    address: string
+                                  }[]
+                                  const matched = addrs.find(
+                                    (a: any) =>
+                                      a.address === formData.delivery_address
+                                  )
+                                  return matched ? (
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-medium">
+                                        {matched.label}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {matched.address}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground">
+                                      {formData.delivery_address ||
+                                        dict.PLACEHOLDER_FROM_SO}
+                                    </span>
+                                  )
+                                })()}
+                              </div>
+                            ) : (
+                              <Input
+                                value={formData.delivery_address}
+                                disabled={true}
+                                className="h-12 bg-muted"
+                                placeholder={dict.PLACEHOLDER_FROM_SO}
+                              />
+                            )}
                           </div>
 
                           <div className="grid gap-2">
@@ -1266,7 +1391,10 @@ export default function DeliveryOrdersPage() {
                                   .contains("type", ["Transporter"])
                                   .limit(8)
                                 if (query) {
-                                  const searchStr = constructMultiWordSearch(query, ["name"])
+                                  const searchStr = constructMultiWordSearch(
+                                    query,
+                                    ["name"]
+                                  )
                                   if (searchStr) q = q.or(searchStr)
                                 }
                                 const { data } = await q
@@ -1274,12 +1402,17 @@ export default function DeliveryOrdersPage() {
                               }}
                               value={formData.transporter_id}
                               onSelect={(val, item) => {
-                                setFormData({ ...formData, transporter_id: val })
+                                setFormData({
+                                  ...formData,
+                                  transporter_id: val,
+                                })
                                 setSelectedTransporterInfo(item)
                               }}
                               keyField="id"
                               displayField="name"
-                              defaultDisplay={selectedTransporterInfo?.name || ""}
+                              defaultDisplay={
+                                selectedTransporterInfo?.name || ""
+                              }
                               searchColumns={["name"]}
                               visualColumns={[
                                 {
@@ -1303,39 +1436,43 @@ export default function DeliveryOrdersPage() {
                               data={
                                 formData.driver_info?.name
                                   ? [
-                                    {
-                                      name: formData.driver_info.name,
-                                      phone: formData.driver_info.phone,
-                                    },
-                                  ]
+                                      {
+                                        name: formData.driver_info.name,
+                                        phone: formData.driver_info.phone,
+                                      },
+                                    ]
                                   : []
                               }
                               fetchData={async (query) => {
                                 let q = supabase
                                   .from("delivery_orders")
                                   .select("driver_info")
-                                  .limit(50)
+                                  .order("created_at", { ascending: false })
+                                  .limit(200)
                                 if (query) {
-                                  const searchStr = constructMultiWordSearch(query, [
-                                    "driver_info->>name",
-                                    "driver_info->>phone",
-                                  ])
+                                  const searchStr = constructMultiWordSearch(
+                                    query,
+                                    [
+                                      "driver_info->>name",
+                                      "driver_info->>phone",
+                                    ]
+                                  )
                                   if (searchStr) q = q.or(searchStr)
                                 }
                                 const { data } = await q
                                 const uniqueDrivers = new Map()
-                                  ; (data || []).forEach((d: any) => {
-                                    if (
-                                      d.driver_info &&
-                                      d.driver_info.name &&
-                                      !uniqueDrivers.has(d.driver_info.name)
-                                    ) {
-                                      uniqueDrivers.set(
-                                        d.driver_info.name,
-                                        d.driver_info
-                                      )
-                                    }
-                                  })
+                                ;(data || []).forEach((d: any) => {
+                                  if (
+                                    d.driver_info &&
+                                    d.driver_info.name &&
+                                    !uniqueDrivers.has(d.driver_info.name)
+                                  ) {
+                                    uniqueDrivers.set(
+                                      d.driver_info.name,
+                                      d.driver_info
+                                    )
+                                  }
+                                })
                                 return Array.from(uniqueDrivers.values()).slice(
                                   0,
                                   8
@@ -1448,19 +1585,26 @@ export default function DeliveryOrdersPage() {
                             <LiveSearch
                               key={`supplier-search-${formData.product_id || "no-prod"}`}
                               data={
-                                selectedSupplierInfo ? [selectedSupplierInfo] : []
+                                selectedSupplierInfo
+                                  ? [selectedSupplierInfo]
+                                  : []
                               }
                               fetchData={async (query) => {
                                 if (!formData.product_id) return []
                                 let q = supabase
                                   .from("supplier_stock_summary")
-                                  .select("supplier_id, name, product_id, current_stock")
+                                  .select(
+                                    "supplier_id, name, product_id, current_stock"
+                                  )
                                   .eq("product_id", formData.product_id)
                                   .gt("current_stock", 0)
                                   .order("current_stock", { ascending: false })
                                   .limit(8)
                                 if (query) {
-                                  const searchStr = constructMultiWordSearch(query, ["name"])
+                                  const searchStr = constructMultiWordSearch(
+                                    query,
+                                    ["name"]
+                                  )
                                   if (searchStr) q = q.or(searchStr)
                                 }
                                 // q = q.or(
@@ -1545,10 +1689,10 @@ export default function DeliveryOrdersPage() {
                                   .select("*")
                                   .limit(8)
                                 if (query) {
-                                  const searchStr = constructMultiWordSearch(query, [
-                                    "license_number",
-                                    "vehicle_type",
-                                  ])
+                                  const searchStr = constructMultiWordSearch(
+                                    query,
+                                    ["license_number", "vehicle_type"]
+                                  )
                                   if (searchStr) q = q.or(searchStr)
                                 }
                                 const { data } = await q
@@ -1658,7 +1802,6 @@ export default function DeliveryOrdersPage() {
                   <Button
                     type="submit"
                     form="do-form"
-                    onClick={() => handleSave()}
                     disabled={isSaving || (editingItem ? !canEdit : !canInsert)}
                   >
                     {isSaving ? (
@@ -1741,10 +1884,10 @@ export default function DeliveryOrdersPage() {
                         sortLevels.map((l) =>
                           l.id === level.id
                             ? {
-                              ...l,
-                              direction:
-                                l.direction === "asc" ? "desc" : "asc",
-                            }
+                                ...l,
+                                direction:
+                                  l.direction === "asc" ? "desc" : "asc",
+                              }
                             : l
                         )
                       )
@@ -1818,6 +1961,9 @@ export default function DeliveryOrdersPage() {
               <TableHead className="text-right">
                 {dict.LABEL_QUANTITY}
               </TableHead>
+              <TableHead className="text-right">
+                {dict.LABEL_QTY_RECEIVED}
+              </TableHead>
               <TableHead className="text-center">{dict.LABEL_STATUS}</TableHead>
               <TableHead className="text-right"> </TableHead>
             </TableRow>
@@ -1825,14 +1971,14 @@ export default function DeliveryOrdersPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="p-0">
+                <TableCell colSpan={8} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
             ) : orders.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   className="py-10 text-center text-muted-foreground"
                 >
                   {dict.NO_DATA}
@@ -1863,10 +2009,37 @@ export default function DeliveryOrdersPage() {
                   <TableCell className="text-right font-mono text-sm">
                     {o.quantity.toLocaleString()}
                   </TableCell>
-                  <TableCell className="align-middle text-center">
+                  <TableCell className="text-right font-mono text-sm">
+                    {o.received_quantity != null &&
+                    o.received_quantity !== o.quantity ? (
+                      <div className="flex flex-col items-end">
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          {o.received_quantity.toLocaleString()}
+                        </span>
+                        {o.received_quantity < o.quantity && (
+                          <span className="text-[11px] text-rose-700">
+                            -{" "}
+                            {(
+                              ((o.quantity - o.received_quantity) /
+                                o.quantity) *
+                              100
+                            ).toFixed(1)}
+                            %
+                          </span>
+                        )}
+                      </div>
+                    ) : o.received_quantity != null ? (
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        {o.received_quantity.toLocaleString()}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center align-middle">
                     <div
                       className={cn(
-                        "inline-flex items-center justify-center w-20 rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                        "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
                         statusStyles[o.status] || statusStyles.Draft
                       )}
                     >
@@ -1924,9 +2097,7 @@ export default function DeliveryOrdersPage() {
                                   Shipped
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  onClick={() =>
-                                    updateStatus(o.id, "Delivered")
-                                  }
+                                  onClick={() => handleOpenDeliveryConfirm(o)}
                                   className="font-medium text-emerald-600 dark:text-emerald-400"
                                   disabled={!canEdit}
                                 >
@@ -1966,7 +2137,7 @@ export default function DeliveryOrdersPage() {
 
             {/* Infinite Scroll Sentinel & Loader */}
             <TableRow ref={observerTarget} className="border-0">
-              <TableCell colSpan={7} className="overflow-hidden border-0 p-0">
+              <TableCell colSpan={8} className="overflow-hidden border-0 p-0">
                 {loadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
@@ -2015,6 +2186,96 @@ export default function DeliveryOrdersPage() {
           onClose={() => setPreviewDoc(null)}
         />
       )}
+
+      <Dialog
+        open={deliveryConfirm !== null}
+        onOpenChange={(open) => !open && setDeliveryConfirm(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              <CheckCircle2 className="mr-2 inline-block size-5" />
+              {dict.MSG_CONFIRM_DELIVERY}
+            </DialogTitle>
+            <DialogDescription />
+          </DialogHeader>
+          {deliveryConfirm && (
+            <div className="relative flex w-full flex-col gap-6 p-5">
+              <div className="rounded-md border bg-muted/50 px-4 py-2">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">
+                      {dict.LABEL_DO_NUMBER}
+                    </span>
+                    <p className="font-mono font-semibold">
+                      {deliveryConfirm.do_number}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">
+                      {dict.LABEL_QTY_SHIPPED}
+                    </span>
+                    <p className="font-mono font-semibold">
+                      {deliveryConfirm.quantity.toLocaleString()} L
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="received_qty">
+                    {dict.LABEL_QTY_RECEIVED} *
+                  </Label>
+                  <NumberInput
+                    id="received_qty"
+                    value={deliveryFormData.received_quantity}
+                    onChange={(val) =>
+                      setDeliveryFormData((prev) => ({
+                        ...prev,
+                        received_quantity: val,
+                      }))
+                    }
+                    rightBadge="L"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="delivered_date">
+                    {dict.LABEL_DELIVERY_DATE} *
+                  </Label>
+                  <Input
+                    id="delivered_date"
+                    type="date"
+                    value={deliveryFormData.delivered_date}
+                    onChange={(e) =>
+                      setDeliveryFormData((prev) => ({
+                        ...prev,
+                        delivered_date: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeliveryConfirm(null)}>
+              <X data-icon="inline-start" />
+              {dict.BUTTON_CANCEL}
+            </Button>
+            <Button
+              onClick={handleConfirmDelivery}
+              disabled={
+                deliveryFormData.received_quantity <= 0 ||
+                !deliveryFormData.delivered_date
+              }
+            >
+              <CheckCircle2 data-icon="inline-start" />
+              {dict.LABEL_VERIFY || "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <DeleteConfirmationDialog
         isOpen={deleteConfirm !== null}

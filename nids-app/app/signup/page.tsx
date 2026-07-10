@@ -50,7 +50,7 @@ export default function SignupPage() {
         // If it already has a +, just keep digits after it
         formattedPhone = "+" + trimmed.replace(/\D/g, "")
       } else {
-        let digits = trimmed.replace(/\D/g, "")
+        const digits = trimmed.replace(/\D/g, "")
         if (digits.startsWith("0")) {
           formattedPhone = "+62" + digits.substring(1)
         } else if (digits.startsWith("62")) {

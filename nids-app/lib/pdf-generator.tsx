@@ -1,4 +1,4 @@
-﻿import React from "react"
+import React from "react"
 import {
   Document,
   Page,
@@ -142,9 +142,24 @@ export interface DeliveryOrderData {
   compartments?: DeliveryOrderCompartment[]
 }
 
-function stripHtml(html: string): string {
-  if (!html) return ""
-  return html.replace(/<[^>]*>?/gm, "").replace(/&nbsp;/g, " ")
+export interface PaymentData {
+  id: string
+  payment_number: string
+  payment_date: string
+  company_name: string
+  invoice_number: string
+  amount: number
+  payment_method: string
+  reference_number?: string
+  note?: string
+  bank_accounts: {
+    name: string
+    bank_name?: string
+    account_number: string
+    account_name: string
+    branch: string
+  }[]
+  qr_code_url?: string
 }
 
 function createPDFElement(
@@ -222,8 +237,8 @@ function parseHtmlToComponents(htmlString: string): React.ReactNode[] {
         const top = stack.pop()!
         const marker =
           tag === "li" &&
-            stack.length > 0 &&
-            stack[stack.length - 1].tag === "ol"
+          stack.length > 0 &&
+          stack[stack.length - 1].tag === "ol"
             ? `${stack[stack.length - 1].olIndex || 1}. `
             : "• "
         if (
@@ -523,13 +538,13 @@ const QuotationDocument = ({
     quotation_number: data.quotation_number,
     quotation_date: data.quotation_date
       ? format(new Date(data.quotation_date), "dd MMMM yyyy", {
-        locale: dateLocaleId,
-      })
+          locale: dateLocaleId,
+        })
       : "",
     expiry_date: data.expiry_date
       ? format(new Date(data.expiry_date), "dd MMMM yyyy", {
-        locale: dateLocaleId,
-      })
+          locale: dateLocaleId,
+        })
       : "",
     company_name: data.company_name,
     contact_person: data.contact_person || "",
@@ -680,7 +695,7 @@ const QuotationDocument = ({
                 <Text style={{ fontWeight: "bold" }}>
                   {formatNumber(
                     data.base_price -
-                    Math.round(data.base_price * (d.value / 100))
+                      Math.round(data.base_price * (d.value / 100))
                   )}
                 </Text>
               </View>
@@ -1121,8 +1136,8 @@ const DeliveryOrderDocument = ({
               Palembang,{" "}
               {data.do_date
                 ? format(new Date(data.do_date), "dd MMMM yyyy", {
-                  locale: dateLocaleId,
-                })
+                    locale: dateLocaleId,
+                  })
                 : "-"}
             </Text>
           </View>
@@ -1220,7 +1235,9 @@ const DeliveryOrderDocument = ({
             </View>
             <View style={[a5Styles.cell, { flex: 1, alignItems: "center" }]}>
               {(data.compartments || []).map((c, i) => (
-                <Text style={{ height: "20" }}>{c.seal_number}</Text>
+                <Text key={i} style={{ height: "20" }}>
+                  {c.seal_number}
+                </Text>
               ))}
             </View>
             <View style={[a5Styles.cell, { flex: 3, borderRight: 0 }]}>
@@ -1413,6 +1430,166 @@ const DeliveryOrderDocument = ({
           </View>
         </View>
         <Image src={company.logo_url} style={a5Styles.backgroundImage} />
+      </Page>
+    </Document>
+  )
+}
+
+const PaymentDocument = ({
+  company,
+  data,
+}: {
+  company: CompanyInfo
+  data: PaymentData
+}) => {
+  return (
+    <Document>
+      <Page size="A4" style={a4Styles.page}>
+        <View style={a4Styles.header}>
+          {company.logo_url && (
+            <Image src={company.logo_url} style={a4Styles.logo} />
+          )}
+          <View style={a4Styles.companyInfo}>
+            <Text style={a4Styles.companyName}>{company.name}</Text>
+            <Text>{company.address}</Text>
+            <Text>Email : {company.email}</Text>
+          </View>
+        </View>
+        <View style={a4Styles.blueLine} />
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <View style={a4Styles.row}>
+            <Text style={a4Styles.label}>No</Text>
+            <Text style={a4Styles.colon}>:</Text>
+            <Text>{data.payment_number}</Text>
+          </View>
+          <View style={a4Styles.row}>
+            <Text>
+              Palembang,{" "}
+              {format(new Date(data.payment_date), "dd MMMM yyyy", {
+                locale: dateLocaleId,
+              })}
+            </Text>
+          </View>
+        </View>
+        <View style={a4Styles.row}>
+          <Text style={a4Styles.label}>Perihal</Text>
+          <Text style={a4Styles.colon}>:</Text>
+          <Text>Bukti Pembayaran / Payment Receipt</Text>
+        </View>
+        <View style={a4Styles.section}>
+          <Text style={{ marginBottom: 5 }}>Kepada Yth.</Text>
+          <Text style={{ fontWeight: "bold" }}>{data.company_name}</Text>
+        </View>
+        <View style={a4Styles.table}>
+          <View style={a4Styles.tableRow}>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 180 }]}>
+              <Text>Item</Text>
+            </View>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { flex: 1 }]}>
+              <Text>Value</Text>
+            </View>
+          </View>
+          <View style={a4Styles.tableRow}>
+            <View style={[a4Styles.cell, { width: 180 }]}>
+              <Text>No. Invoice / Invoice Number</Text>
+            </View>
+            <View style={[a4Styles.cell, { flex: 1 }]}>
+              <Text style={{ fontWeight: "bold" }}>{data.invoice_number}</Text>
+            </View>
+          </View>
+          <View style={a4Styles.tableRow}>
+            <View style={[a4Styles.cell, { width: 180 }]}>
+              <Text>Tanggal Bayar / Payment Date</Text>
+            </View>
+            <View style={[a4Styles.cell, { flex: 1 }]}>
+              <Text>
+                {format(new Date(data.payment_date), "dd MMMM yyyy", {
+                  locale: dateLocaleId,
+                })}
+              </Text>
+            </View>
+          </View>
+          <View style={a4Styles.tableRow}>
+            <View style={[a4Styles.cell, { width: 180 }]}>
+              <Text>Metode Bayar / Payment Method</Text>
+            </View>
+            <View style={[a4Styles.cell, { flex: 1 }]}>
+              <Text>{data.payment_method}</Text>
+            </View>
+          </View>
+          {data.reference_number && (
+            <View style={a4Styles.tableRow}>
+              <View style={[a4Styles.cell, { width: 180 }]}>
+                <Text>No. Referensi / Reference</Text>
+              </View>
+              <View style={[a4Styles.cell, { flex: 1 }]}>
+                <Text>{data.reference_number}</Text>
+              </View>
+            </View>
+          )}
+          <View style={a4Styles.tableRow}>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 180 }]}>
+              <Text style={{ fontWeight: "bold" }}>Jumlah / Amount</Text>
+            </View>
+            <View
+              style={[
+                a4Styles.cell,
+                a4Styles.headerCell,
+                a4Styles.right,
+                { flex: 1 },
+              ]}
+            >
+              <Text style={{ fontWeight: "bold", fontSize: 12 }}>
+                {formatNumber(data.amount)}
+              </Text>
+            </View>
+          </View>
+        </View>
+        {data.note && (
+          <View style={a4Styles.section}>
+            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>
+              Catatan / Note
+            </Text>
+            <Text>{data.note}</Text>
+          </View>
+        )}
+        {data.bank_accounts && data.bank_accounts.length > 0 && (
+          <View style={a4Styles.section}>
+            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>
+              Rekening Pembayaran / Payment Account
+            </Text>
+            {data.bank_accounts.map((b, i) => (
+              <Text key={i} style={{ fontSize: 9 }}>
+                {b.name} - {b.bank_name} {b.branch ? `(${b.branch})` : ""} :{" "}
+                {b.account_number} a.n. {b.account_name}
+              </Text>
+            ))}
+          </View>
+        )}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginTop: 20,
+          }}
+        >
+          <View style={{ alignItems: "center" }}>
+            <Text style={{ fontSize: 9 }}>Pemberi,</Text>
+            <View style={{ height: 50 }} />
+            <Text style={{ fontSize: 9 }}>( _________________________ )</Text>
+          </View>
+          <View style={{ alignItems: "center" }}>
+            <Text style={{ fontSize: 9 }}>Penerima,</Text>
+            <View style={{ height: 50 }} />
+            <Text style={{ fontSize: 9 }}>( _________________________ )</Text>
+          </View>
+        </View>
+        {data.qr_code_url && (
+          <View style={a4Styles.qrContainer}>
+            <Image src={data.qr_code_url} style={a4Styles.qrImage} />
+            <Text style={a4Styles.qrLabel}>Scan to verify</Text>
+          </View>
+        )}
       </Page>
     </Document>
   )
@@ -1700,12 +1877,40 @@ async function generateInvoicePDFReact(
   return blob
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function calculateBilledQuantity(doInfo: any): number {
+  if (!doInfo) return 0
+  const qtySent = Number(doInfo.quantity) || 0
+  const qtyReceived =
+    doInfo.received_quantity !== null && doInfo.received_quantity !== undefined
+      ? Number(doInfo.received_quantity)
+      : null
+
+  if (qtyReceived === null) {
+    return qtySent
+  }
+
+  if (qtyReceived > qtySent) {
+    return qtySent
+  }
+
+  const shrinkageLimitPercent = Number(doInfo.so?.shrinkage_tolerance) || 0
+  const allowedShrinkage = qtySent * (shrinkageLimitPercent / 100)
+  const actualShrinkage = qtySent - qtyReceived
+
+  if (actualShrinkage > allowedShrinkage) {
+    return qtyReceived
+  }
+
+  return qtySent
+}
+
 export async function generateStandardInvoicePDF(
   companyInfo: any,
   inv: any,
   options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
 ) {
-  const quantity = inv.do?.quantity || inv.quantity || 0
+  const quantity = calculateBilledQuantity(inv.do) || inv.quantity || 0
   const unitPrice = inv.do?.so?.unit_price || 0
   const deliveryPricePerLitre = inv.do?.so?.delivery_price_per_litre || 0
   const subtotal = quantity * unitPrice + quantity * deliveryPricePerLitre
@@ -1971,6 +2176,63 @@ export async function generateStandardDeliveryOrderPDF(
         seal_number: c.seal_number || "",
         quantity: c.quantity || 0,
       })),
+    },
+    options
+  )
+}
+
+async function generatePaymentPDFReact(
+  company: CompanyInfo,
+  data: PaymentData,
+  options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
+) {
+  const blob = await pdf(
+    <PaymentDocument company={company} data={data} />
+  ).toBlob()
+  if (options.save) {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `Payment_${data.payment_number}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    return null
+  }
+  if (options.output === "datauri") {
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result as string)
+      reader.readAsDataURL(blob)
+    })
+  }
+  return blob
+}
+
+export async function generateStandardPaymentPDF(
+  companyInfo: any,
+  payment: any,
+  options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
+) {
+  return await generatePaymentPDFReact(
+    {
+      name: companyInfo?.name || "PT Anugerah Buana Sriwijaya",
+      address: companyInfo?.address || "",
+      email: companyInfo?.email || "",
+      logo_url: companyInfo?.logo_url || "/images/company-logo.jpg",
+    },
+    {
+      id: payment.id,
+      payment_number: payment.payment_number,
+      payment_date: payment.payment_date,
+      company_name: payment.invoice?.company?.name || "-",
+      invoice_number: payment.invoice?.invoice_number || "-",
+      amount: payment.amount || 0,
+      payment_method: payment.payment_method || "Bank Transfer",
+      reference_number: payment.reference_number,
+      note: payment.note || "",
+      bank_accounts: payment.invoice?.bank_accounts || [],
     },
     options
   )

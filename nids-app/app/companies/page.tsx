@@ -1,6 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  startTransition,
+} from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
@@ -62,14 +68,13 @@ import { notify } from "@/lib/notifications"
 import { usePersistedState } from "@/hooks/use-persisted-state"
 import { ButtonLoader } from "@/components/button-loader"
 import { useDebounce } from "@/hooks/use-debounce"
-import { Badge } from "@/components/ui/badge"
 
 const PAGE_SIZE = 50
 
 export default function CompaniesPage() {
-  const { dict, config, lang } = useDictionary()
+  const { dict } = useDictionary()
   const supabase = createClient()
-  const { hasPermission, profile, loading: authLoading } = useAuth()
+  const { hasPermission, loading: authLoading } = useAuth()
 
   const [companies, setCompanies] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -238,12 +243,16 @@ export default function CompaniesPage() {
       debouncedSearchQuery,
       typeFilter,
       dict.MSG_DATA_FETCH_FAILED,
+      fetchStats,
     ]
   )
 
   // Initial fetch and reset when filters change
   useEffect(() => {
-    fetchCompanies(true)
+    startTransition(() => {
+      fetchCompanies(true)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchQuery, typeFilter])
 
   // Infinite Scroll Observer
@@ -592,18 +601,20 @@ export default function CompaniesPage() {
               <form
                 onSubmit={handleSubmit}
                 id="company-form"
-                className="max-h-[70vh] overflow-y-auto relative"
+                className="relative max-h-[70vh] overflow-y-auto"
               >
-                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
-                  {viewOnly && (
-                    <div className="absolute inset-0 z-20"></div>
+                <div
+                  className={cn(
+                    `relative flex w-full flex-col gap-6 p-5 ${viewOnly ? "rounded-b-xl border-2 border-orange-500" : ""}`
                   )}
+                >
+                  {viewOnly && <div className="absolute inset-0 z-20"></div>}
                   {/* Basic Info */}
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="flex flex-col gap-2 md:col-span-2">
                       <Label htmlFor="name">
                         {dict.LABEL_COMPANY_NAME}
-                        <span className="text-destructive ml-0.5">*</span>
+                        <span className="ml-0.5 text-destructive">*</span>
                       </Label>
                       <div className="flex items-center gap-3">
                         <Input
@@ -638,7 +649,10 @@ export default function CompaniesPage() {
                       <Label>{dict.LABEL_TYPE}</Label>
                       <div className="flex flex-wrap gap-8">
                         {["Customer", "Supplier", "Transporter"].map((type) => (
-                          <div key={type} className="flex items-center space-x-2">
+                          <div
+                            key={type}
+                            className="flex items-center space-x-2"
+                          >
                             <Checkbox
                               id={`type-${type}`}
                               checked={formData.types.includes(type)}
@@ -894,7 +908,11 @@ export default function CompaniesPage() {
                               <Input
                                 value={addr.address}
                                 onChange={(e) =>
-                                  updateAddress(index, "address", e.target.value)
+                                  updateAddress(
+                                    index,
+                                    "address",
+                                    e.target.value
+                                  )
                                 }
                                 placeholder="Jln. Raya..."
                                 className="h-9"

@@ -1,7 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useMemo } from "react"
-import { Input } from "./ui/input"
+import React, { useState, useEffect, useRef, useMemo, startTransition } from "react"
 import { useDictionary } from "./dictionary-provider"
 import { cn } from "@/lib/utils"
 
@@ -75,14 +74,11 @@ export function NumberInput({
           .replaceAll(separators.thousand, "")
           .replace(separators.decimal, ".")
       )
-
-      // Only update if the numeric value is actually different
-      // This prevents stripping trailing zeros or decimal points while typing
       if (isNaN(currentParsed) || currentParsed !== value) {
-        setDisplayValue(formatted)
+        startTransition(() => { setDisplayValue(formatted) })
+      } else {
+        startTransition(() => { setDisplayValue("") })
       }
-    } else {
-      setDisplayValue("")
     }
   }, [value, locale, separators])
 
@@ -91,11 +87,8 @@ export function NumberInput({
     if (inputRef.current && cursorRef.current.position !== null) {
       const el = inputRef.current
       const pos = cursorRef.current.position
-
-      // Adjust position if length changed (e.g. thousand separator added)
       const diff = displayValue.length - cursorRef.current.value.length
       const newPos = Math.max(0, pos + diff)
-
       el.setSelectionRange(newPos, newPos)
       cursorRef.current.position = null
     }

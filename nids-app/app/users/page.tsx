@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, startTransition } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { useDictionary } from "@/components/dictionary-provider"
 import { createClient } from "@/lib/supabase"
@@ -20,12 +20,10 @@ import {
   ShieldX,
   Save,
   X,
-  Clock,
   Pencil,
   UserCog,
   AlertCircle,
   Users,
-  UserPlus,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -51,7 +49,6 @@ import { SectionLoader } from "@/components/section-loader"
 import { ButtonLoader } from "@/components/button-loader"
 import { usePersistedState } from "@/hooks/use-persisted-state"
 
-import { formatDateTime } from "@/lib/formatters"
 import { cn } from "@/lib/utils"
 import { notify } from "@/lib/notifications"
 
@@ -118,7 +115,6 @@ export default function UsersPage() {
   // Permission Checks
   const canView = hasPermission("users", "view")
   const canEdit = hasPermission("users", "edit")
-  const canDelete = hasPermission("users", "delete")
 
   const fetchStats = useCallback(async () => {
     try {
@@ -147,7 +143,7 @@ export default function UsersPage() {
     } catch (err) {
       console.error("Fetch Users Stats Error:", err)
     }
-  }, [])
+  }, [setStats])
 
   const fetchData = useCallback(async () => {
     try {
@@ -191,11 +187,13 @@ export default function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }, [setEditingUser])
+  }, [setEditingUser, fetchStats])
 
   useEffect(() => {
     if (profile && canView) {
-      fetchData()
+      startTransition(() => {
+        fetchData()
+      })
     }
   }, [profile, canView, fetchData])
 
@@ -357,7 +355,7 @@ export default function UsersPage() {
       if (trimmed.startsWith("+")) {
         formattedPhone = "+" + trimmed.replace(/\D/g, "")
       } else {
-        let digits = trimmed.replace(/\D/g, "")
+        const digits = trimmed.replace(/\D/g, "")
         if (digits.startsWith("0")) {
           formattedPhone = "+62" + digits.substring(1)
         } else if (digits.startsWith("62")) {
@@ -586,7 +584,7 @@ export default function UsersPage() {
                 <div className="flex flex-col gap-2">
                   <Label>
                     {dict.LABEL_FULL_NAME}
-                    <span className="text-destructive ml-0.5">*</span>
+                    <span className="ml-0.5 text-destructive">*</span>
                   </Label>
                   <Input
                     value={editingUser?.full_name || ""}
@@ -601,7 +599,7 @@ export default function UsersPage() {
                 <div className="flex flex-col gap-2">
                   <Label>
                     {dict.LABEL_PHONE}
-                    <span className="text-destructive ml-0.5">*</span>
+                    <span className="ml-0.5 text-destructive">*</span>
                   </Label>
                   <Input
                     value={editingUser?.phone || ""}
@@ -614,7 +612,7 @@ export default function UsersPage() {
               <div className="flex flex-col gap-2">
                 <Label>
                   {dict.LABEL_ROLE}
-                  <span className="text-destructive ml-0.5">*</span>
+                  <span className="ml-0.5 text-destructive">*</span>
                 </Label>
                 <Select
                   value={editingUser?.role}

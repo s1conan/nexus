@@ -442,181 +442,183 @@ export default function FundersPage() {
               <form
                 onSubmit={handleSubmit}
                 id="funder-form"
-                className="max-h-[70vh] overflow-y-auto relative"
+                className="relative max-h-[70vh] overflow-y-auto"
               >
-                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
-                  {viewOnly && (
-                    <div className="absolute inset-0 z-20"></div>
+                <div
+                  className={cn(
+                    `relative flex w-full flex-col gap-6 p-5 ${viewOnly ? "rounded-b-xl border-2 border-orange-500" : ""}`
                   )}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {/* Name */}
-                  <div className="flex flex-col gap-2 md:col-span-2">
-                    <Label htmlFor="name">{dict.LABEL_NAME}</Label>
-                    <div className="flex items-center gap-3">
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, name: e.target.value })
-                        }
-                        required
-                        className="flex-1"
-                      />
-                      <div className="flex min-w-[60px] flex-col items-center gap-0.5">
-                        <Switch
-                          id="is_active"
-                          checked={formData.is_active}
-                          onCheckedChange={(checked) =>
-                            setFormData({ ...formData, is_active: checked })
+                >
+                  {viewOnly && <div className="absolute inset-0 z-20"></div>}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {/* Name */}
+                    <div className="flex flex-col gap-2 md:col-span-2">
+                      <Label htmlFor="name">{dict.LABEL_NAME}</Label>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          id="name"
+                          value={formData.name}
+                          onChange={(e) =>
+                            setFormData({ ...formData, name: e.target.value })
+                          }
+                          required
+                          className="flex-1"
+                        />
+                        <div className="flex min-w-[60px] flex-col items-center gap-0.5">
+                          <Switch
+                            id="is_active"
+                            checked={formData.is_active}
+                            onCheckedChange={(checked) =>
+                              setFormData({ ...formData, is_active: checked })
+                            }
+                          />
+                          <span className="mt-1.5 text-[10px] leading-none font-bold text-muted-foreground uppercase">
+                            {formData.is_active
+                              ? dict.LABEL_IS_ACTIVE
+                              : dict.LABEL_IS_INACTIVE}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ID Number */}
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="id_number">{dict.LABEL_ID_NUMBER}</Label>
+                      <div className="relative">
+                        <Fingerprint className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
+                        <Input
+                          id="id_number"
+                          className="pl-9"
+                          value={formData.id_number}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              id_number: e.target.value,
+                            })
                           }
                         />
-                        <span className="mt-1.5 text-[10px] leading-none font-bold text-muted-foreground uppercase">
-                          {formData.is_active
-                            ? dict.LABEL_IS_ACTIVE
-                            : dict.LABEL_IS_INACTIVE}
-                        </span>
+                      </div>
+                    </div>
+
+                    {/* Phone */}
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="phone">{dict.LABEL_PHONE}</Label>
+                      <div className="relative">
+                        <Phone className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
+                        <Input
+                          id="phone"
+                          className="pl-9"
+                          value={formData.phone}
+                          onChange={(e) =>
+                            setFormData({ ...formData, phone: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bank Accounts */}
+                    <div className="flex flex-col gap-4 rounded-lg border bg-muted/5 p-4 md:col-span-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="flex items-center gap-2">
+                          <CreditCard className="size-4" />
+                          {dict.SETTINGS_TAB_BANKS}
+                        </Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={addBankAccount}
+                          className="h-8"
+                        >
+                          <Plus className="size-4" />
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-col gap-4">
+                        {formData.bank_accounts.map((bank, index) => (
+                          <div
+                            key={index}
+                            className="group/bank flex flex-col gap-3 rounded-md border bg-background p-3"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+                                {dict.LABEL_BANK_ACCOUNTS} #{index + 1}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  "size-7 transition-colors",
+                                  formData.bank_accounts.length > 1
+                                    ? "text-destructive hover:bg-destructive/10"
+                                    : "text-muted-foreground/20"
+                                )}
+                                disabled={formData.bank_accounts.length <= 1}
+                                onClick={() => removeBankAccount(index)}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-[10px] font-bold tracking-tighter text-muted-foreground uppercase">
+                                  {dict.SETTINGS_LABEL_BANK_NAME}
+                                </Label>
+                                <Input
+                                  value={bank.bank_name}
+                                  onChange={(e) =>
+                                    updateBankAccount(
+                                      index,
+                                      "bank_name",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="e.g. BCA, Mandiri"
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-[10px] font-bold tracking-tighter text-muted-foreground uppercase">
+                                  {dict.SETTINGS_LABEL_ACC_NUM}
+                                </Label>
+                                <Input
+                                  value={bank.account_number}
+                                  onChange={(e) =>
+                                    updateBankAccount(
+                                      index,
+                                      "account_number",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="h-8 font-mono text-sm"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1.5 md:col-span-2">
+                                <Label className="text-[10px] font-bold tracking-tighter text-muted-foreground uppercase">
+                                  {dict.SETTINGS_LABEL_ACC_HOLDER}
+                                </Label>
+                                <Input
+                                  value={bank.account_holder}
+                                  onChange={(e) =>
+                                    updateBankAccount(
+                                      index,
+                                      "account_holder",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
-
-                  {/* ID Number */}
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="id_number">{dict.LABEL_ID_NUMBER}</Label>
-                    <div className="relative">
-                      <Fingerprint className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
-                      <Input
-                        id="id_number"
-                        className="pl-9"
-                        value={formData.id_number}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            id_number: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  {/* Phone */}
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="phone">{dict.LABEL_PHONE}</Label>
-                    <div className="relative">
-                      <Phone className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
-                      <Input
-                        id="phone"
-                        className="pl-9"
-                        value={formData.phone}
-                        onChange={(e) =>
-                          setFormData({ ...formData, phone: e.target.value })
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  {/* Bank Accounts */}
-                  <div className="flex flex-col gap-4 rounded-lg border bg-muted/5 p-4 md:col-span-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="flex items-center gap-2">
-                        <CreditCard className="size-4" />
-                        {dict.SETTINGS_TAB_BANKS}
-                      </Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={addBankAccount}
-                        className="h-8"
-                      >
-                        <Plus className="size-4" />
-                      </Button>
-                    </div>
-
-                    <div className="flex flex-col gap-4">
-                      {formData.bank_accounts.map((bank, index) => (
-                        <div
-                          key={index}
-                          className="group/bank flex flex-col gap-3 rounded-md border bg-background p-3"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                              {dict.LABEL_BANK_ACCOUNTS} #{index + 1}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className={cn(
-                                "size-7 transition-colors",
-                                formData.bank_accounts.length > 1
-                                  ? "text-destructive hover:bg-destructive/10"
-                                  : "text-muted-foreground/20"
-                              )}
-                              disabled={formData.bank_accounts.length <= 1}
-                              onClick={() => removeBankAccount(index)}
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            <div className="flex flex-col gap-1.5">
-                              <Label className="text-[10px] font-bold tracking-tighter text-muted-foreground uppercase">
-                                {dict.SETTINGS_LABEL_BANK_NAME}
-                              </Label>
-                              <Input
-                                value={bank.bank_name}
-                                onChange={(e) =>
-                                  updateBankAccount(
-                                    index,
-                                    "bank_name",
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="e.g. BCA, Mandiri"
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              <Label className="text-[10px] font-bold tracking-tighter text-muted-foreground uppercase">
-                                {dict.SETTINGS_LABEL_ACC_NUM}
-                              </Label>
-                              <Input
-                                value={bank.account_number}
-                                onChange={(e) =>
-                                  updateBankAccount(
-                                    index,
-                                    "account_number",
-                                    e.target.value
-                                  )
-                                }
-                                className="h-8 font-mono text-sm"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-1.5 md:col-span-2">
-                              <Label className="text-[10px] font-bold tracking-tighter text-muted-foreground uppercase">
-                                {dict.SETTINGS_LABEL_ACC_HOLDER}
-                              </Label>
-                              <Input
-                                value={bank.account_holder}
-                                onChange={(e) =>
-                                  updateBankAccount(
-                                    index,
-                                    "account_holder",
-                                    e.target.value
-                                  )
-                                }
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
-              </div>
-            </form>
+              </form>
               {!viewOnly && (
                 <DialogFooter className="px-5 pb-5">
                   <Button

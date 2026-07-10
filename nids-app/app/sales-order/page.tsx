@@ -56,6 +56,7 @@ import { Label } from "@/components/ui/label"
 import { cn, constructMultiWordSearch } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
+import { FundersDialog } from "@/components/funders-dialog"
 import { notify } from "@/lib/notifications"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { LiveSearch } from "@/components/live-search"
@@ -125,6 +126,8 @@ export default function SalesOrdersPage() {
     note: "",
     is_note_enabled: true,
     tax_details: [] as any[],
+    shrinkage_tolerance: 0,
+    funders: [] as { funder_id: string; funder_name: string; amount: number }[],
   }))
 
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
@@ -137,6 +140,7 @@ export default function SalesOrdersPage() {
     id: string
     so_number: string
   } | null>(null)
+  const [fundersDialogOpen, setFundersDialogOpen] = useState(false)
 
   const statusStyles: Record<string, string> = {
     Default:
@@ -215,6 +219,8 @@ export default function SalesOrdersPage() {
         tax_details: mergedTaxes,
         // Also take delivery address if available from quotation
         delivery_address: quote.delivery_address || prev.delivery_address,
+        // Also take shrinkage tolerance from quotation
+        shrinkage_tolerance: quote.shrinkage_tolerance ?? 0,
         discount: 0,
         term_of_payment: "",
         po_number: prev.po_number,
@@ -236,6 +242,7 @@ export default function SalesOrdersPage() {
         unit_price: 0,
         delivery_price_per_litre: 0,
         delivery_address: "",
+        shrinkage_tolerance: 0,
         discount: 0,
         term_of_payment: "",
         po_number: "",
@@ -385,11 +392,11 @@ export default function SalesOrdersPage() {
       const contacts = o.company?.details?.contact_persons?.length
         ? o.company.details.contact_persons
         : [
-          {
-            name: o.company?.details?.contact_person || "-",
-            email: o.company?.details?.email || o.company?.email || "",
-          },
-        ]
+            {
+              name: o.company?.details?.contact_person || "-",
+              email: o.company?.details?.email || o.company?.email || "",
+            },
+          ]
       setPreviewDoc({
         id: o.id,
         title: o.so_number,
@@ -475,10 +482,12 @@ export default function SalesOrdersPage() {
         delivery_address: item.delivery_address || "",
         discount: item.discount || 0,
         delivery_price_per_litre: item.delivery_price_per_litre || 0,
+        shrinkage_tolerance: item.shrinkage_tolerance ?? 0,
         status: item.status,
         note: item.note || "",
         is_note_enabled: item.is_note_enabled ?? true,
         tax_details: mergedTaxes,
+        funders: item.funders || [],
       })
     } else {
       if (!canInsert) return
@@ -491,8 +500,8 @@ export default function SalesOrdersPage() {
       setFormData({
         so_number: "", // Will be auto-generated on save if empty
         po_number: "",
-        company_id: "",
         quotation_id: "",
+        company_id: "",
         product_id: "",
         so_date: format(new Date(), "yyyy-MM-dd"),
         delivery_date: format(
@@ -505,6 +514,7 @@ export default function SalesOrdersPage() {
         delivery_address: "",
         discount: 0,
         delivery_price_per_litre: 0,
+        shrinkage_tolerance: 0,
         status: "Draft",
         note: "",
         is_note_enabled: true,
@@ -513,6 +523,7 @@ export default function SalesOrdersPage() {
           rate: gt.value,
           enabled: false,
         })),
+        funders: [],
       })
     }
     setIsOpen(true)
@@ -589,7 +600,9 @@ export default function SalesOrdersPage() {
           payload.delivery_address !== (editingItem.delivery_address || "") ||
           Number(payload.discount) !== Number(editingItem.discount || 0) ||
           Number(payload.delivery_price_per_litre) !==
-          Number(editingItem.delivery_price_per_litre || 0) ||
+            Number(editingItem.delivery_price_per_litre || 0) ||
+          Number(payload.shrinkage_tolerance) !==
+            Number(editingItem.shrinkage_tolerance ?? 0) ||
           payload.note !== (editingItem.note || "") ||
           payload.is_note_enabled !== (editingItem.is_note_enabled ?? true) ||
           JSON.stringify(
@@ -599,13 +612,27 @@ export default function SalesOrdersPage() {
               enabled: t.enabled,
             }))
           ) !==
+            JSON.stringify(
+              (editingItem.tax_details || []).map((t: any) => ({
+                name: t.name,
+                rate: t.rate,
+                enabled: t.enabled,
+              }))
+            ) ||
           JSON.stringify(
-            (editingItem.tax_details || []).map((t: any) => ({
-              name: t.name,
-              rate: t.rate,
-              enabled: t.enabled,
+            payload.funders?.map((f: any) => ({
+              funder_id: f.funder_id,
+              funder_name: f.funder_name,
+              amount: f.amount,
             }))
-          )
+          ) !==
+            JSON.stringify(
+              (editingItem.funders || []).map((f: any) => ({
+                funder_id: f.funder_id,
+                funder_name: f.funder_name,
+                amount: f.amount,
+              }))
+            )
 
         if (hasDataChanged) {
           payload.status = "Draft"
@@ -833,12 +860,14 @@ export default function SalesOrdersPage() {
 
               <form
                 onSubmit={handleSubmit}
-                className="max-h-[70vh] overflow-y-auto relative"
+                className="relative max-h-[70vh] overflow-y-auto"
               >
-                <div className={cn(`flex flex-col p-5 gap-6 relative w-full ${viewOnly ? "rounded-bl-xl border-2 border-orange-500" : ""}`)}>
-                  {viewOnly && (
-                    <div className="absolute inset-0 z-20"></div>
+                <div
+                  className={cn(
+                    `relative flex w-full flex-col gap-6 p-5 ${viewOnly ? "rounded-b-xl border-2 border-orange-500" : ""}`
                   )}
+                >
+                  {viewOnly && <div className="absolute inset-0 z-20"></div>}
                   <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                     <div className="space-y-4">
                       <div className="grid gap-2">
@@ -861,8 +890,9 @@ export default function SalesOrdersPage() {
 
                       <div className="grid gap-2">
                         <Label htmlFor="ponum">
-                          {dict.LABEL_SO_NUMBER?.replace("SO", "PO") || "PO Number"}
-                          <span className="text-destructive ml-0.5">*</span>
+                          {dict.LABEL_SO_NUMBER?.replace("SO", "PO") ||
+                            "PO Number"}
+                          <span className="ml-0.5 text-destructive">*</span>
                         </Label>
                         <Input
                           id="ponum"
@@ -901,20 +931,18 @@ export default function SalesOrdersPage() {
                                   )
                                   .eq("status", "Accepted")
                                 if (query) {
-                                  const quotationSearch = constructMultiWordSearch(
-                                    query,
-                                    ["quotation_number"]
-                                  )
-                                  const companySearch = constructMultiWordSearch(
-                                    query,
-                                    ["name"]
-                                  )
+                                  const quotationSearch =
+                                    constructMultiWordSearch(query, [
+                                      "quotation_number",
+                                    ])
+                                  const companySearch =
+                                    constructMultiWordSearch(query, ["name"])
                                   const { data: companies } = companySearch
                                     ? await supabase
-                                      .from("companies")
-                                      .select("id")
-                                      .contains("type", ["Customer"])
-                                      .or(companySearch)
+                                        .from("companies")
+                                        .select("id")
+                                        .contains("type", ["Customer"])
+                                        .or(companySearch)
                                     : { data: [] }
                                   const companyIds = (companies || []).map(
                                     (c: any) => c.id
@@ -943,7 +971,10 @@ export default function SalesOrdersPage() {
                                   ? `${selectedQuotationInfo.quotation_number} - ${selectedQuotationInfo.company?.name || ""}`
                                   : ""
                               }
-                              searchColumns={["quotation_number", "company.name"]}
+                              searchColumns={[
+                                "quotation_number",
+                                "company.name",
+                              ]}
                               visualColumns={[
                                 {
                                   key: "quotation_number",
@@ -967,11 +998,13 @@ export default function SalesOrdersPage() {
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_COMPANY_NAME}</Label>
                         <LiveSearch
-                          data={selectedCompanyInfo ? [selectedCompanyInfo] : []}
+                          data={
+                            selectedCompanyInfo ? [selectedCompanyInfo] : []
+                          }
                           disabled={true}
                           fetchData={async () => []}
                           value={formData.company_id}
-                          onSelect={() => { }}
+                          onSelect={() => {}}
                           keyField="id"
                           displayField="name"
                           defaultDisplay={selectedCompanyInfo?.name || ""}
@@ -985,7 +1018,9 @@ export default function SalesOrdersPage() {
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_SKU}</Label>
                         <LiveSearch
-                          data={selectedProductInfo ? [selectedProductInfo] : []}
+                          data={
+                            selectedProductInfo ? [selectedProductInfo] : []
+                          }
                           disabled={isFromQuotation}
                           fetchData={async (query) => {
                             let q = supabase
@@ -993,10 +1028,10 @@ export default function SalesOrdersPage() {
                               .select("id, sku, name")
                               .limit(8)
                             if (query) {
-                              const searchStr = constructMultiWordSearch(query, [
-                                "sku",
-                                "name",
-                              ])
+                              const searchStr = constructMultiWordSearch(
+                                query,
+                                ["sku", "name"]
+                              )
                               if (searchStr) q = q.or(searchStr)
                             }
                             const { data } = await q
@@ -1015,8 +1050,8 @@ export default function SalesOrdersPage() {
                                 selectedProductInfo.name
                                 ? `${selectedProductInfo.sku} - ${selectedProductInfo.name}`
                                 : selectedProductInfo.name ||
-                                selectedProductInfo.sku ||
-                                ""
+                                  selectedProductInfo.sku ||
+                                  ""
                               : ""
                           }
                           searchColumns={["sku", "name"]}
@@ -1078,7 +1113,10 @@ export default function SalesOrdersPage() {
                           <Select
                             value={formData.delivery_address}
                             onValueChange={(val) =>
-                              setFormData({ ...formData, delivery_address: val })
+                              setFormData({
+                                ...formData,
+                                delivery_address: val,
+                              })
                             }
                             disabled={isFromQuotation}
                           >
@@ -1117,6 +1155,22 @@ export default function SalesOrdersPage() {
                           />
                         )}
                       </div>
+
+                      <div className="flex items-center justify-between">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setFundersDialogOpen(true)}
+                        >
+                          {dict.LABEL_MANAGE_FUNDERS}
+                          {formData.funders.length > 0 && (
+                            <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+                              {formData.funders.length}
+                            </span>
+                          )}
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="space-y-6">
@@ -1153,9 +1207,10 @@ export default function SalesOrdersPage() {
                           <div className="grid gap-2">
                             <Label htmlFor="top">
                               {dict.LABEL_TERM_OF_PAYMENT}
-                              <span className="text-destructive ml-0.5">*</span>
+                              <span className="ml-0.5 text-destructive">*</span>
                             </Label>
-                            {isFromQuotation && availableDiscounts.length > 0 ? (
+                            {isFromQuotation &&
+                            availableDiscounts.length > 0 ? (
                               <Select
                                 value={formData.term_of_payment}
                                 onValueChange={(val) => {
@@ -1231,14 +1286,22 @@ export default function SalesOrdersPage() {
                               disabled={isFromQuotation}
                             />
                           </div>
-                          <div className="flex grid flex-col justify-end gap-2">
-                            <Label className="mb-2">{dict.LABEL_SUBTOTAL}</Label>
-                            <div className="flex flex-row justify-between font-mono text-sm font-bold">
-                              <div>{SITE_CONFIG.currencySymbol}</div>
-                              <div>
-                                {Math.round(totals.subtotal).toLocaleString()}
-                              </div>
-                            </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="shrinkage">
+                              {dict.LABEL_SHRINKAGE_TOLERANCE}
+                            </Label>
+                            <NumberInput
+                              id="shrinkage"
+                              value={formData.shrinkage_tolerance}
+                              onChange={(val) =>
+                                setFormData({
+                                  ...formData,
+                                  shrinkage_tolerance: val,
+                                })
+                              }
+                              rightBadge="%"
+                              disabled={isFromQuotation}
+                            />
                           </div>
                         </div>
 
@@ -1270,7 +1333,9 @@ export default function SalesOrdersPage() {
                                       id={`tax-${idx}`}
                                       checked={tax.enabled}
                                       onCheckedChange={(val) => {
-                                        const newTaxes = [...formData.tax_details]
+                                        const newTaxes = [
+                                          ...formData.tax_details,
+                                        ]
                                         newTaxes[idx].enabled = val
                                         setFormData({
                                           ...formData,
@@ -1290,7 +1355,7 @@ export default function SalesOrdersPage() {
                                         containerClassName="h-7 bg-muted/50"
                                         disabled
                                         value={tax.rate}
-                                        onChange={() => { }}
+                                        onChange={() => {}}
                                         rightBadge="%"
                                       />
                                     </div>
@@ -1338,7 +1403,10 @@ export default function SalesOrdersPage() {
                       }
                       isEnabled={formData.is_note_enabled}
                       onToggleEnabled={(val) =>
-                        setFormData((prev) => ({ ...prev, is_note_enabled: val }))
+                        setFormData((prev) => ({
+                          ...prev,
+                          is_note_enabled: val,
+                        }))
                       }
                       placeholder={dict.PLACEHOLDER_EDITOR}
                     />
@@ -1430,10 +1498,10 @@ export default function SalesOrdersPage() {
                     {format(new Date(o.so_date), "dd MMM yyyy")}
                   </TableCell>
                   <TableCell className="text-sm">{o.quantity}</TableCell>
-                  <TableCell className="align-middle text-center">
+                  <TableCell className="text-center align-middle">
                     <div
                       className={cn(
-                        "inline-flex items-center justify-center w-20 rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                        "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
                         statusStyles[o.status] || statusStyles.Default
                       )}
                     >
@@ -1567,6 +1635,15 @@ export default function SalesOrdersPage() {
           onClose={() => setPreviewDoc(null)}
         />
       )}
+      <FundersDialog
+        open={fundersDialogOpen}
+        onOpenChange={setFundersDialogOpen}
+        totalAmount={totals.grandTotal}
+        funders={formData.funders}
+        onFundersChange={(funders) =>
+          setFormData((prev) => ({ ...prev, funders }))
+        }
+      />
       <DeleteConfirmationDialog
         isOpen={deleteConfirm !== null}
         onOpenChange={(open) => !open && setDeleteConfirm(null)}

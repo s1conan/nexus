@@ -25,7 +25,6 @@ import {
   Key,
   Save,
   Banknote,
-  FileText,
   ShoppingBag,
   Receipt,
   Wallet,
@@ -96,23 +95,6 @@ import InvoiceReportPage from "@/app/reports/invoice/page"
 import PaymentsReportPage from "@/app/reports/payments/page"
 import ProfitLossReportPage from "@/app/reports/profit-loss/page"
 
-function TransactionPlaceholder({
-  title,
-  icon: Icon,
-}: {
-  title: string
-  icon: any
-}) {
-  const { dict } = useDictionary()
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
-      <Icon className="size-16 opacity-20" />
-      <h2 className="text-xl font-semibold">{title}</h2>
-      <p className="max-w-xs text-center">{dict.NO_DATA}</p>
-    </div>
-  )
-}
-
 export function MdiLayout() {
   const { dict, config, lang } = useDictionary()
   const { tabs, activeTabId, openTab, closeTab, setActiveTabId, isRestored } =
@@ -160,7 +142,7 @@ export function MdiLayout() {
       } else {
         return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${timeStr}`
       }
-    } catch (e) {
+    } catch {
       return ""
     }
   }
@@ -178,7 +160,7 @@ export function MdiLayout() {
           .from("companies")
           .select("id, name")
 
-        let coMap: Record<string, string> = {}
+        const coMap: Record<string, string> = {}
         if (!coError && companiesData) {
           companiesData.forEach((c: any) => {
             coMap[c.id] = c.name
@@ -191,7 +173,7 @@ export function MdiLayout() {
           .from("invoices")
           .select("id, invoice_number, company_id")
 
-        let invMap: Record<string, { companyId: string; number: string }> = {}
+        const invMap: Record<string, { companyId: string; number: string }> = {}
         if (!invError && invoicesData) {
           invoicesData.forEach((i: any) => {
             invMap[i.id] = { companyId: i.company_id, number: i.invoice_number }
@@ -200,7 +182,7 @@ export function MdiLayout() {
         }
 
         // 3. Fetch audit logs
-        const { data: logsData, error: logsError } = await supabase
+        const { data: logsData } = await supabase
           .from("audit_logs")
           .select("*")
           .eq("changed_by", user.id)
@@ -388,7 +370,7 @@ export function MdiLayout() {
 
     let title = ""
     let description = ""
-    let type = action === "DELETE" ? "deleted" : "success"
+    const type = action === "DELETE" ? "deleted" : "success"
 
     switch (table) {
       case "companies": {
@@ -1129,6 +1111,7 @@ export function MdiLayout() {
       else if (pathname === "/component-test") handleOpenComponentTest()
       else handleOpenDashboard()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRestored, pathname])
 
   const userDisplayName =
@@ -1174,7 +1157,7 @@ export function MdiLayout() {
     activeTabId === "settings"
 
   const renderMenuItems = () => (
-    <>
+    <div className="flex flex-row gap-2">
       <Button
         variant="ghost"
         size="sm"
@@ -1559,11 +1542,11 @@ export function MdiLayout() {
           </DropdownMenuContent>
         </DropdownMenu>
       )}
-    </>
+    </div>
   )
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
+    <div className="mx-auto flex h-screen max-w-[1800px] flex-col overflow-hidden bg-background">
       {/* Top Navbar */}
       <header className="z-50 flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-card px-6 shadow-none">
         <div className="flex items-center gap-6">
