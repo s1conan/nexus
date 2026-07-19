@@ -414,9 +414,10 @@ export default function PaymentsPage() {
       const payload = { ...formData }
 
       if (!editingItem && !payload.payment_number) {
+        // For payments, company is linked through invoice - pass null for now
         const { data, error: rpcError } = await supabase.rpc(
           "generate_document_number",
-          { p_doc_type: "payment" }
+          { p_doc_type: "payment", p_company_id: null }
         )
         if (rpcError) throw rpcError
         payload.payment_number = data

@@ -115,6 +115,7 @@ export default function CompaniesPage() {
 
   const [formData, setFormData] = usePersistedState("companies_form_data", {
     name: "",
+    nickname: "",
     types: [] as string[],
     contact_persons: [{ name: "", email: "", phone: "", description: "" }] as {
       name: string
@@ -200,6 +201,7 @@ export default function CompaniesPage() {
           // Deep filtering in JSONB and text fields
           const searchStr = constructMultiWordSearch(debouncedSearchQuery, [
             "name",
+            "nickname",
             "details->>email",
             "details->>phone",
             "details->>contact_person",
@@ -313,6 +315,7 @@ export default function CompaniesPage() {
 
       setFormData({
         name: company.name,
+        nickname: company.nickname || "",
         types: Array.isArray(company.type) ? company.type : [company.type],
         contact_persons: contact_persons,
         phone: details.phone || "",
@@ -328,6 +331,7 @@ export default function CompaniesPage() {
       setEditingCompany(null)
       setFormData({
         name: "",
+        nickname: "",
         types: ["Customer"],
         contact_persons: [{ name: "", email: "", phone: "", description: "" }],
         phone: "",
@@ -419,6 +423,39 @@ export default function CompaniesPage() {
       notify.error("Validation Error", "Company name is required.")
       return
     }
+    if (!formData.nickname?.trim()) {
+      notify.error("Validation Error", "Nickname is required.")
+      return
+    }
+
+    // Check if nickname already exists for another company
+    const trimmedNickname = formData.nickname.trim()
+    const { data: existingCompany, error: nicknameCheckError } = await supabase
+      .from("companies")
+      .select("id, name")
+      .eq("nickname", trimmedNickname)
+      .neq("id", editingCompany?.id || "")
+      .single()
+
+    if (nicknameCheckError && nicknameCheckError.code !== "PGRST116") {
+      // PGRST116 = no rows returned, which is fine
+      console.error("Nickname check error:", nicknameCheckError)
+    }
+
+    if (existingCompany) {
+      notify.error(
+        dict.ERROR_NICKNAME_EXISTS?.split("%nickname%")[0] ||
+          "Nickname Already Exists",
+        (
+          dict.ERROR_NICKNAME_EXISTS ||
+          "The nickname '%nickname%' is already used by company '%company%'. Please use a different nickname."
+        )
+          .replace("%nickname%", trimmedNickname)
+          .replace("%company%", existingCompany.name)
+      )
+      return
+    }
+
     if (formData.types.length === 0) {
       notify.error(
         dict.ERROR_UNEXPECTED || "Error",
@@ -431,6 +468,7 @@ export default function CompaniesPage() {
 
     const payload = {
       name: formData.name,
+      nickname: trimmedNickname || null,
       type: formData.types,
       is_active: formData.is_active,
       details: {
@@ -686,7 +724,26 @@ export default function CompaniesPage() {
                     {/* Company Contact Info */}
                     <div className="flex flex-col gap-6 rounded-lg border bg-muted/5 p-4 md:col-span-2">
                       <Label>{dict.LABEL_COMPANY_CONTACT_INFO}</Label>
+
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="nickname">
+                            {dict.LABEL_NICKNAME}
+                            <span className="ml-0.5 text-destructive">*</span>
+                          </Label>
+                          <Input
+                            id="nickname"
+                            value={formData.nickname}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                nickname: e.target.value,
+                              })
+                            }
+                            placeholder=""
+                            required
+                          />
+                        </div>
                         <div className="flex flex-col gap-2">
                           <Label htmlFor="phone" className="text-xs">
                             {dict.LABEL_PHONE}
@@ -1069,7 +1126,15 @@ export default function CompaniesPage() {
                               )}
                             />
                             <div>
-                              <div>{company.name}</div>
+                              <div>
+                                {company.name}{" "}
+                                {company.nickname && (
+                                  <span className="ml-1 text-muted-foreground">
+                                    ( {company.nickname} )
+                                  </span>
+                                )}
+                              </div>
+
                               <div className="mt-1 flex items-center gap-2 text-xs font-normal text-muted-foreground">
                                 {details.email && (
                                   <span className="flex items-center gap-1">

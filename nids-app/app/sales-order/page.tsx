@@ -676,7 +676,7 @@ export default function SalesOrdersPage() {
         if (!payload.so_number) {
           const { data, error: rpcError } = await supabase.rpc(
             "generate_document_number",
-            { p_doc_type: "sales-order" }
+            { p_doc_type: "sales-order", p_company_id: payload.company_id || null }
           )
           if (rpcError) throw rpcError
           payload.so_number = data

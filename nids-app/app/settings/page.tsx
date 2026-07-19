@@ -1,6 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, startTransition } from "react"
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  startTransition,
+} from "react"
 import { useAuth } from "@/components/auth-provider"
 import { useDictionary } from "@/components/dictionary-provider"
 import { createClient } from "@/lib/supabase"
@@ -726,12 +732,38 @@ export default function SettingsPage() {
     )
     res = res.replace("{DD}", now.getDate().toString().padStart(2, "0"))
 
-    const seqMatch = res.match(/\{SEQ:([0-9]+)\}/)
+    // Replace {CUS} and {SUP} with sample placeholder for preview
+    res = res.replace("{CUS}", "XXX")
+    res = res.replace("{SUP}", "XXX")
+
+    // Handle SEQ format: {SEQ:N} or {SEQ:N,Y} or {SEQ:N,M} or {SEQ:N,D}
+    const seqMatch = res.match(/\{SEQ:([0-9]+)(?:,([YMD]))?\}/)
     if (seqMatch) {
       const padding = parseInt(seqMatch[1])
       res = res.replace(seqMatch[0], "1".padStart(padding, "0"))
     }
     return res
+  }
+
+  const getSeqResetLabel = (template: string) => {
+    const match = template.match(/\{SEQ:[0-9]+(?:,([YMD]))?\}/)
+    if (!match) return "Y"
+    if (match[1]) return match[1]
+    return "Y"
+  }
+
+  const getSeqResetDescription = (template: string) => {
+    const reset = getSeqResetLabel(template)
+    switch (reset) {
+      case "Y":
+        return "Yearly"
+      case "M":
+        return "Monthly"
+      case "D":
+        return "Daily"
+      default:
+        return "Yearly"
+    }
   }
 
   if (authLoading) {
@@ -1059,11 +1091,16 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {Object.entries(numberingFormats).map(([k, v]) => (
                 <Card key={k} className="gap-3 space-y-1 rounded border p-4">
-                  <Label className="flex justify-between font-bold capitalize">
+                  <Label className="flex items-center justify-between font-bold capitalize">
                     <span>{k.replace("-", " ")}</span>
-                    <span className="rounded bg-muted p-1 font-mono text-[10px] text-muted-foreground">
-                      {previewFormat(v)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                        {getSeqResetDescription(v)}
+                      </span>
+                      <span className="rounded bg-muted p-1 font-mono text-[10px] text-muted-foreground">
+                        {previewFormat(v)}
+                      </span>
+                    </div>
                   </Label>
                   <Input
                     value={v}
@@ -1078,7 +1115,10 @@ export default function SettingsPage() {
                   />
                   <p className="text-[10px] text-muted-foreground italic">
                     Placeholders: {"{YYYY}"}, {"{YY}"}, {"{MM}"}, {"{MMM}"},{" "}
-                    {"{DD}"}, {"{SEQ:N}"}
+                    {"{DD}"}, {"{SEQ:N}"}, {"{SEQ:N,Y}"}, {"{SEQ:N,M}"},{" "}
+                    {"{SEQ:N,D}"}, {"{CUS}"}, {"{SUP}"}
+                    <br />
+                    SEQ: N=padding, Y=yearly reset, M=monthly reset, D=daily reset
                   </p>
                 </Card>
               ))}

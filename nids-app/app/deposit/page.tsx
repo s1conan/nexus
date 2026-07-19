@@ -64,6 +64,7 @@ import { RichTextEditor } from "@/components/rich-text-editor"
 import { LiveSearch } from "@/components/live-search"
 import { format } from "date-fns"
 import { ButtonLoader } from "@/components/button-loader"
+import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 
 const PAGE_SIZE = 50
 
@@ -85,6 +86,11 @@ export default function DepositsPage() {
   const [isOpen, setIsOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<any>(null)
   const [viewOnly, setViewOnly] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    id: string
+    deposit_number: string
+    company_name: string
+  } | null>(null)
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
@@ -376,7 +382,7 @@ export default function DepositsPage() {
         if (!payload.deposit_number) {
           const { data, error: rpcError } = await supabase.rpc(
             "generate_document_number",
-            { p_doc_type: "deposit" }
+            { p_doc_type: "deposit", p_company_id: payload.company_id || null }
           )
           if (rpcError) throw rpcError
           payload.deposit_number = data
@@ -430,8 +436,6 @@ export default function DepositsPage() {
   const handleDelete = async (id: string) => {
     const item = deposits.find((d) => d.id === id)
     if (!item) return
-    const docLabel = `[${item.deposit_number}]`
-    const companyName = item.company?.name || ""
 
     // Block deletion of Accepted deposits whose inventory is already used
     if (item.status === "Accepted") {
@@ -439,18 +443,31 @@ export default function DepositsPage() {
       if (inUse) {
         notify.error(
           dict.MSG_DEPOSIT_DELETE_BLOCKED,
-          dict.MSG_DEPOSIT_INVENTORY_IN_USE.replace("%data%", docLabel)
+          dict.MSG_DEPOSIT_INVENTORY_IN_USE.replace("%data%", `[${item.deposit_number}]`)
         )
         return
       }
     }
 
-    if (!confirm(dict.MSG_DELETE_CONFIRM || "Are you sure?")) return
+    setDeleteConfirm({
+      id: item.id,
+      deposit_number: item.deposit_number,
+      company_name: item.company?.name || "",
+    })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return
+    const docLabel = `[${deleteConfirm.deposit_number}]`
+    const companyName = deleteConfirm.company_name
     try {
-      const { error } = await supabase.from("deposits").delete().eq("id", id)
+      const { error } = await supabase
+        .from("deposits")
+        .delete()
+        .eq("id", deleteConfirm.id)
       if (error) throw error
 
-      setDeposits((prev) => prev.filter((d) => d.id !== id))
+      setDeposits((prev) => prev.filter((d) => d.id !== deleteConfirm.id))
       notify.deleted(
         dict.MSG_DEPOSIT_DELETED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "deposit").replace(
@@ -470,6 +487,8 @@ export default function DepositsPage() {
       } else {
         notify.error(dict.MSG_SAVE_FAILED.replace("%data%", docLabel), msg)
       }
+    } finally {
+      setDeleteConfirm(null)
     }
   }
 
@@ -1153,6 +1172,21 @@ export default function DepositsPage() {
           </TableBody>
         </Table>
       </Card>
+
+      <DeleteConfirmationDialog
+        isOpen={deleteConfirm !== null}
+        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+        title={dict.TITLE_DELETE || "Confirm Delete"}
+        description={
+          dict.MSG_DELETE_CONFIRM?.split("%data%")[0] ||
+          "Are you sure you want to delete this deposit? This action cannot be undone."
+        }
+        dataName={deleteConfirm ? `${deleteConfirm.deposit_number} - ${deleteConfirm.company_name}` : ""}
+        confirmText={dict.BUTTON_DELETE || "Delete"}
+        cancelText={dict.BUTTON_CANCEL || "Cancel"}
+        variant="destructive"
+      />
     </div>
   )
 }

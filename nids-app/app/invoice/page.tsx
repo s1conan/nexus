@@ -640,7 +640,7 @@ export default function InvoicePage() {
       if (!editingItem && !payload.invoice_number) {
         const { data, error: rpcError } = await supabase.rpc(
           "generate_document_number",
-          { p_doc_type: "invoice" }
+          { p_doc_type: "invoice", p_company_id: payload.company_id || null }
         )
         if (rpcError) throw rpcError
         payload.invoice_number = data

@@ -85,6 +85,7 @@ import { NumberInput } from "@/components/number-input"
 import { useDebounce } from "@/hooks/use-debounce"
 import { Switch } from "@/components/ui/switch"
 import dynamic from "next/dynamic"
+import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
@@ -125,6 +126,11 @@ export default function QuotationsPage() {
   const [isSortOpen, setIsSortOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<any>(null)
   const [viewOnly, setViewOnly] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    id: string
+    quotation_number: string
+    company_name: string
+  } | null>(null)
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("")
@@ -616,7 +622,7 @@ export default function QuotationsPage() {
         if (!payload.quotation_number) {
           const { data, error: rpcError } = await supabase.rpc(
             "generate_document_number",
-            { p_doc_type: "quotation" }
+            { p_doc_type: "quotation", p_company_id: payload.company_id || null }
           )
           if (rpcError) throw rpcError
           payload.quotation_number = data
@@ -655,14 +661,25 @@ export default function QuotationsPage() {
       return
     }
     if (!item) return
-    const docLabel = `[${item.quotation_number}]`
-    const companyName = item.company?.name || ""
-    if (!confirm(dict.MSG_DELETE_CONFIRM)) return
+    setDeleteConfirm({
+      id: item.id,
+      quotation_number: item.quotation_number,
+      company_name: item.company?.name || "",
+    })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return
+    const docLabel = `[${deleteConfirm.quotation_number}]`
+    const companyName = deleteConfirm.company_name
     try {
-      const { error } = await supabase.from("quotations").delete().eq("id", id)
+      const { error } = await supabase
+        .from("quotations")
+        .delete()
+        .eq("id", deleteConfirm.id)
       if (error) throw error
 
-      setQuotations((prev) => prev.filter((q) => q.id !== id))
+      setQuotations((prev) => prev.filter((q) => q.id !== deleteConfirm.id))
       notify.deleted(
         dict.MSG_QUOTATION_DELETED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "quotation").replace(
@@ -678,6 +695,8 @@ export default function QuotationsPage() {
         dict.MSG_SAVE_FAILED.replace("%data%", docLabel),
         err.message
       )
+    } finally {
+      setDeleteConfirm(null)
     }
   }
 
@@ -2052,6 +2071,21 @@ export default function QuotationsPage() {
           onClose={() => setPreviewDoc(null)}
         />
       )}
+
+      <DeleteConfirmationDialog
+        isOpen={deleteConfirm !== null}
+        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+        title={dict.TITLE_DELETE || "Confirm Delete"}
+        description={
+          dict.MSG_DELETE_CONFIRM?.split("%data%")[0] ||
+          "Are you sure you want to delete this quotation? This action cannot be undone."
+        }
+        dataName={deleteConfirm ? `${deleteConfirm.quotation_number} - ${deleteConfirm.company_name}` : ""}
+        confirmText={dict.BUTTON_DELETE || "Delete"}
+        cancelText={dict.BUTTON_CANCEL || "Cancel"}
+        variant="destructive"
+      />
     </div>
   )
 }

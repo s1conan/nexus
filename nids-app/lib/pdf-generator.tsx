@@ -1127,7 +1127,7 @@ const DeliveryOrderDocument = ({
 }) => {
   return (
     <Document>
-      <Page size="A5" orientation="landscape" style={a5Styles.page}>
+      <Page size="A4" orientation="landscape" style={a5Styles.page}>
         <View>
           <Text style={a5Styles.title}>SURAT JALAN / DELIVERY ORDER</Text>
           <View style={a5Styles.subTitle}>

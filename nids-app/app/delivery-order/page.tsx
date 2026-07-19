@@ -132,6 +132,7 @@ export default function DeliveryOrdersPage() {
   const [sortLevels, setSortLevels] = useState<SortLevel[]>([
     { id: "1", column: "created_at", direction: "desc" },
   ])
+  const [pendingPOFilter, setPendingPOFilter] = useState(false)
 
   const observerTarget = useRef(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -240,6 +241,11 @@ export default function DeliveryOrdersPage() {
           if (searchStr) query = query.or(searchStr)
         }
 
+        // Pending PO filter: Delivered DOs without SO
+        if (pendingPOFilter) {
+          query = query.eq("status", "Delivered").is("so_id", null)
+        }
+
         const { data, error } = await query
         if (error) throw error
 
@@ -269,6 +275,7 @@ export default function DeliveryOrdersPage() {
       offset,
       debouncedSearchQuery,
       sortLevels,
+      pendingPOFilter,
       dict.MSG_DATA_FETCH_FAILED,
     ]
   )
@@ -508,7 +515,6 @@ export default function DeliveryOrdersPage() {
 
     // Field validation
     const errors: string[] = []
-    if (!formData.so_id) errors.push(dict.MSG_SO_REQUIRED)
     if (!formData.company_id) errors.push("Perusahaan harus dipilih.")
     if (!formData.product_id) errors.push("Produk harus dipilih.")
     if (!formData.quantity || formData.quantity <= 0)
@@ -518,11 +524,6 @@ export default function DeliveryOrdersPage() {
     if (!formData.vehicle_id) errors.push("Kendaraan harus dipilih.")
     if (availableStock !== null && formData.quantity > availableStock) {
       errors.push("Stok dari supplier tidak mencukupi.")
-    }
-    if (remainingSOQty !== null && formData.quantity > remainingSOQty) {
-      errors.push(
-        `Jumlah melebihi sisa SO (${remainingSOQty.toLocaleString()} L).`
-      )
     }
 
     if (errors.length > 0) {
@@ -539,7 +540,7 @@ export default function DeliveryOrdersPage() {
       if (!editingItem && !dbPayload.do_number) {
         const { data, error: rpcError } = await supabase.rpc(
           "generate_document_number",
-          { p_doc_type: "delivery-order" }
+          { p_doc_type: "delivery-order", p_company_id: dbPayload.company_id || null }
         )
         if (rpcError) throw rpcError
         dbPayload.do_number = data
@@ -981,7 +982,40 @@ export default function DeliveryOrdersPage() {
     }
   }
 
+  const handleCompanySelect = (val: string, item: any) => {
+    if (item) {
+      setFormData((prev) => ({
+        ...prev,
+        company_id: val,
+      }))
+      setSelectedCompanyInfo(item)
+      // Clear product since it might not be available for new company
+      setFormData((prev) => ({
+        ...prev,
+        product_id: "",
+      }))
+      setSelectedProductInfo(null)
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        company_id: "",
+        product_id: "",
+        delivery_address: "",
+      }))
+      setSelectedCompanyInfo(null)
+      setSelectedProductInfo(null)
+    }
+  }
+
   const isFromSO = !!formData.so_id
+
+  const companyAddresses = useMemo(() => {
+    if (!selectedCompanyInfo?.details?.addresses) return []
+    return selectedCompanyInfo.details.addresses as {
+      label: string
+      address: string
+    }[]
+  }, [selectedCompanyInfo])
 
   return (
     <div className="page-container">
@@ -1073,9 +1107,7 @@ export default function DeliveryOrdersPage() {
                         </div>
 
                         <div className="grid gap-2">
-                          <Label className="font-bold text-primary">
-                            {dict.LABEL_SO_REQUIRED} *
-                          </Label>
+                          <Label>{dict.LABEL_SO_REQUIRED}</Label>
                           <div className="flex gap-2">
                             <div className="flex-1">
                               <LiveSearch
@@ -1165,16 +1197,38 @@ export default function DeliveryOrdersPage() {
                             data={
                               selectedCompanyInfo ? [selectedCompanyInfo] : []
                             }
-                            disabled={true}
-                            fetchData={async () => []}
+                            disabled={isFromSO}
+                            fetchData={async (query) => {
+                              let q = supabase
+                                .from("companies")
+                                .select("id, name, details")
+                                .contains("type", ["Customer"])
+                                .limit(8)
+                              if (query) {
+                                const searchStr = constructMultiWordSearch(
+                                  query,
+                                  ["name"]
+                                )
+                                if (searchStr) q = q.or(searchStr)
+                              }
+                              const { data } = await q
+                              return data || []
+                            }}
                             value={formData.company_id}
-                            onSelect={() => {}}
+                            onSelect={handleCompanySelect}
                             keyField="id"
                             displayField="name"
                             defaultDisplay={selectedCompanyInfo?.name || ""}
-                            searchColumns={[]}
-                            visualColumns={[]}
-                            placeholder={dict.PLACEHOLDER_FROM_SO}
+                            searchColumns={["name"]}
+                            visualColumns={[
+                              {
+                                key: "name",
+                                header: dict.LABEL_COMPANY_NAME,
+                                className: "w-full font-medium",
+                                primary: true,
+                              },
+                            ]}
+                            placeholder={dict.PLACEHOLDER_SELECT_COMPANY}
                             emptyMessage={dict.NO_DATA}
                           />
                         </div>
@@ -1202,10 +1256,30 @@ export default function DeliveryOrdersPage() {
                             data={
                               selectedProductInfo ? [selectedProductInfo] : []
                             }
-                            disabled={true} // Disabled as it's from SO
-                            fetchData={async () => []}
+                            disabled={isFromSO}
+                            fetchData={async (query) => {
+                              let q = supabase
+                                .from("products")
+                                .select("id, sku, name")
+                                .limit(8)
+                              if (query) {
+                                const searchStr = constructMultiWordSearch(
+                                  query,
+                                  ["sku", "name"]
+                                )
+                                if (searchStr) q = q.or(searchStr)
+                              }
+                              const { data } = await q
+                              return data || []
+                            }}
                             value={formData.product_id}
-                            onSelect={() => {}}
+                            onSelect={(val, item) => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                product_id: val,
+                              }))
+                              setSelectedProductInfo(item)
+                            }}
                             keyField="id"
                             displayField={(p) => `${p.sku} - ${p.name}`}
                             defaultDisplay={
@@ -1218,23 +1292,40 @@ export default function DeliveryOrdersPage() {
                                     ""
                                 : ""
                             }
-                            searchColumns={[]}
-                            visualColumns={[]}
-                            placeholder={dict.PLACEHOLDER_FROM_SO}
+                            searchColumns={["sku", "name"]}
+                            visualColumns={[
+                              {
+                                key: "sku",
+                                header: dict.LABEL_SKU,
+                                className: "w-1/3 font-mono",
+                              },
+                              {
+                                key: "name",
+                                header: dict.LABEL_PRODUCT_NAME,
+                                className: "w-2/3 font-medium",
+                                primary: true,
+                              },
+                            ]}
+                            placeholder={dict.PLACEHOLDER_SELECT_PRODUCT}
                             emptyMessage={dict.NO_DATA}
                           />
                         </div>
 
+                        {isFromSO && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                              <Label>{dict.LABEL_SO_TOTAL_QTY}</Label>
+                              <NumberInput
+                                value={selectedPOInfo?.quantity || 0}
+                                onChange={() => {}}
+                                disabled
+                                rightBadge="L"
+                              />
+                            </div>
+                        </div>
+                        )}
+
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="grid gap-2">
-                            <Label>{dict.LABEL_SO_TOTAL_QTY}</Label>
-                            <NumberInput
-                              value={selectedPOInfo?.quantity || 0}
-                              onChange={() => {}}
-                              disabled
-                              rightBadge="L"
-                            />
-                          </div>
                           <div className="grid gap-2">
                             <div className="flex items-center justify-between">
                               <Label htmlFor="qty">
@@ -1366,12 +1457,49 @@ export default function DeliveryOrdersPage() {
                                   )
                                 })()}
                               </div>
+                            ) : companyAddresses.length > 0 ? (
+                              <Select
+                                value={formData.delivery_address}
+                                onValueChange={(val) =>
+                                  setFormData({
+                                    ...formData,
+                                    delivery_address: val,
+                                  })
+                                }
+                                disabled={isFromSO}
+                              >
+                                <SelectTrigger className="h-12 w-full">
+                                  <SelectValue
+                                    placeholder={dict.PLACEHOLDER_SELECT_ADDRESS}
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {companyAddresses.map((addr, idx) => (
+                                    <SelectItem key={idx} value={addr.address}>
+                                      <div className="flex flex-col items-start text-sm">
+                                        <span className="font-semibold">
+                                          {addr.label}
+                                        </span>
+                                        <span className="line-clamp-1 text-xs text-muted-foreground">
+                                          {addr.address}
+                                        </span>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             ) : (
                               <Input
                                 value={formData.delivery_address}
-                                disabled={true}
-                                className="h-12 bg-muted"
-                                placeholder={dict.PLACEHOLDER_FROM_SO}
+                                disabled={isFromSO}
+                                onChange={(e) =>
+                                  setFormData({
+                                    ...formData,
+                                    delivery_address: e.target.value,
+                                  })
+                                }
+                                placeholder={dict.PLACEHOLDER_ENTER_ADDRESS}
+                                className="h-12"
                               />
                             )}
                           </div>
@@ -1944,6 +2072,19 @@ export default function DeliveryOrdersPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-9",
+            pendingPOFilter &&
+              "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+          )}
+          onClick={() => setPendingPOFilter(!pendingPOFilter)}
+        >
+          <AlertCircle className="mr-2 size-4" />
+          {dict.LABEL_PENDING_DO}
+        </Button>
       </div>
 
       {/* Data Area */}

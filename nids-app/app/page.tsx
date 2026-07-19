@@ -220,10 +220,10 @@ export default function LoginPage() {
           <div className="absolute inset-x-0 bottom-0 z-20 p-8 pb-4 text-center">
             <div className="mb-2 flex justify-center">
               <div className="rounded-xl border border-white/20 bg-background/20 p-3 backdrop-blur-md">
-                <LogIn className="size-8 text-foreground shadow-sm" />
+                <LogIn className="size-8 text-foreground" />
               </div>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground drop-shadow-md text-shadow-gray-200 text-shadow-stroke">
+            <h1 className="text-3xl font-bold tracking-tight text-black drop-shadow-md text-shadow-gray-200 text-shadow-stroke">
               {config.brandName}
             </h1>
             <p className="mt-1 text-sm text-pretty text-foreground">

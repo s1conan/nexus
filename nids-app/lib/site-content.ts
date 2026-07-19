@@ -196,9 +196,12 @@ export const SITE_CONTENT = {
     LABEL_LINK_TO_DO: "Link to DO",
     BUTTON_EDIT_INVOICE: "Edit Invoice",
     PLACEHOLDER_SELECT_DO: "Search DO number...",
-    BILLING_NOTE_EXCEEDS_SENT: "Received quantity exceeds sent quantity. Billed quantity is capped at sent quantity.",
-    BILLING_NOTE_EXCEEDS_TOLERANCE: "Loss exceeds shrinkage tolerance. Billing actual received quantity.",
-    BILLING_NOTE_WITHIN_TOLERANCE: "Loss is within shrinkage tolerance. Billing original sent quantity.",
+    BILLING_NOTE_EXCEEDS_SENT:
+      "Received quantity exceeds sent quantity. Billed quantity is capped at sent quantity.",
+    BILLING_NOTE_EXCEEDS_TOLERANCE:
+      "Loss exceeds shrinkage tolerance. Billing actual received quantity.",
+    BILLING_NOTE_WITHIN_TOLERANCE:
+      "Loss is within shrinkage tolerance. Billing original sent quantity.",
     LABEL_PRODUCT: "Product",
     LABEL_TOTAL: "Total",
     LABEL_TAX_INCLUDED: "Include Tax (PPN)",
@@ -244,11 +247,13 @@ export const SITE_CONTENT = {
     LABEL_TRANSPORTER: "Transporter",
     LABEL_DRIVER_PHONE: "Driver Phone",
     PLACEHOLDER_SELECT_SO: "Select Sales Order...",
+    PLACEHOLDER_SELECT_COMPANY: "Select Company...",
     PLACEHOLDER_SELECT_TRANSPORTER: "Select Transporter...",
     PLACEHOLDER_SELECT_SUPPLIER: "Select Supplier...",
     PLACEHOLDER_SELECT_DRIVER: "Select or enter driver...",
     PLACEHOLDER_ENTER_DRIVER_PHONE: "Enter driver phone",
     PLACEHOLDER_SELECT_VEHICLE: "Select a vehicle...",
+    PLACEHOLDER_SELECT_PRODUCT: "Select product...",
     PLACEHOLDER_FROM_SO: "From SO...",
     MSG_NO_ACCEPTED_SO: "No accepted SO found.",
     MSG_NO_VEHICLES: "No vehicles found.",
@@ -304,16 +309,21 @@ export const SITE_CONTENT = {
     LABEL_MANAGE_FUNDERS: "Manage Funders",
 
     DASHBOARD_TITLE: "Executive Dashboard",
-    LABEL_TOTAL_REVENUE: "Total Revenue",
+    LABEL_THIS_WEEK: "this week",
+    LABEL_NEW_QUOTATIONS: "New Quotations",
+    LABEL_EXPIRING_QUOTATIONS: "Expiring Soon",
+    LABEL_PENDING_SO: "Pending Sales Orders",
+    LABEL_UNDELIVERED_DO: "Undelivered DOs",
+    LABEL_OVERDUE_INVOICES: "Overdue Invoices",
+    LABEL_DUE_SOON_INVOICES: "Due Soon",
+    LABEL_PENDING_PAYMENTS: "Pending Payments",
+    LABEL_PENDING_DO: "Pending PO",
     LABEL_ACTIVE_COMPANIES: "Active",
-    LABEL_TOTAL_PRODUCTS: "Total Products",
-    LABEL_FROM_LAST_MONTH: "from last month",
-    LABEL_NEW_THIS_MONTH: "new this month",
-    LABEL_PRODUCTS_IN_STOCK: "Oil grades in stock",
 
     // Labels
     LABEL_NAME: "Name",
     LABEL_COMPANY_NAME: "Company Name",
+    LABEL_NICKNAME: "Nickname",
     LABEL_PRODUCT_NAME: "Product Name",
     LABEL_SKU: "SKU",
     LABEL_TYPE: "Type",
@@ -403,7 +413,7 @@ export const SITE_CONTENT = {
     LABEL_PHONE_SHORT: "Phone",
     LABEL_ROLE: "Role",
     LABEL_APPROVED: "Approved",
-    LABEL_PENDING: "Pending",
+    LABEL_PENDING: "Inactive",
     LABEL_ACTIVE: "Active",
     LABEL_DEACTIVATED: "Deactivated",
     LABEL_MODULE: "Module",
@@ -430,6 +440,8 @@ export const SITE_CONTENT = {
     ERROR_TIMEOUT:
       "Request timed out. Please check your connection and try again.",
     ERROR_VERIFY_STATUS: "Unable to verify account status.",
+    ERROR_NICKNAME_EXISTS:
+      'The nickname "%nickname%" is already used by company "%company%". Please use a different nickname.',
 
     // Additional Labels
     LABEL_NO_AUTH: "No Auth",
@@ -717,9 +729,12 @@ export const SITE_CONTENT = {
     LABEL_LINK_TO_DO: "Tautkan ke DO",
     BUTTON_EDIT_INVOICE: "Edit Faktur",
     PLACEHOLDER_SELECT_DO: "Cari nomor DO...",
-    BILLING_NOTE_EXCEEDS_SENT: "Jumlah diterima melebihi jumlah dikirim. Jumlah ditagih dibatasi pada jumlah dikirim.",
-    BILLING_NOTE_EXCEEDS_TOLERANCE: "Susut melebihi toleransi. Menagih jumlah aktual yang diterima.",
-    BILLING_NOTE_WITHIN_TOLERANCE: "Susut dalam batas toleransi. Menagih jumlah awal yang dikirim.",
+    BILLING_NOTE_EXCEEDS_SENT:
+      "Jumlah diterima melebihi jumlah dikirim. Jumlah ditagih dibatasi pada jumlah dikirim.",
+    BILLING_NOTE_EXCEEDS_TOLERANCE:
+      "Susut melebihi toleransi. Menagih jumlah aktual yang diterima.",
+    BILLING_NOTE_WITHIN_TOLERANCE:
+      "Susut dalam batas toleransi. Menagih jumlah awal yang dikirim.",
     LABEL_PRODUCT: "Produk",
     LABEL_TOTAL: "Total",
     LABEL_TAX_INCLUDED: "Termasuk Pajak (PPN)",
@@ -765,11 +780,13 @@ export const SITE_CONTENT = {
     LABEL_TRANSPORTER: "Transporter",
     LABEL_DRIVER_PHONE: "Telepon Sopir",
     PLACEHOLDER_SELECT_SO: "Pilih Pesanan Penjualan...",
+    PLACEHOLDER_SELECT_COMPANY: "Pilih Perusahaan...",
     PLACEHOLDER_SELECT_TRANSPORTER: "Pilih Transporter...",
     PLACEHOLDER_SELECT_SUPPLIER: "Pilih Supplier...",
     PLACEHOLDER_SELECT_DRIVER: "Pilih atau ketik sopir...",
     PLACEHOLDER_ENTER_DRIVER_PHONE: "Masukkan telepon sopir",
     PLACEHOLDER_SELECT_VEHICLE: "Pilih kendaraan...",
+    PLACEHOLDER_SELECT_PRODUCT: "Pilih produk...",
     PLACEHOLDER_FROM_SO: "Dari SO...",
     MSG_NO_ACCEPTED_SO: "SO yang diterima tidak ditemukan.",
     MSG_NO_VEHICLES: "Kendaraan tidak ditemukan.",
@@ -826,16 +843,21 @@ export const SITE_CONTENT = {
     LABEL_MANAGE_FUNDERS: "Kelola Funder",
 
     DASHBOARD_TITLE: "Dasbor Eksekutif",
-    LABEL_TOTAL_REVENUE: "Total Pendapatan",
+    LABEL_THIS_WEEK: "minggu ini",
+    LABEL_NEW_QUOTATIONS: "Penawaran Baru",
+    LABEL_EXPIRING_QUOTATIONS: "Akan Kedaluwarsa",
+    LABEL_PENDING_SO: "SO Tertunda",
+    LABEL_UNDELIVERED_DO: "SJ Belum Terkirim",
+    LABEL_OVERDUE_INVOICES: "Faktur Jatuh Tempo",
+    LABEL_DUE_SOON_INVOICES: "Jatuh Tempo Soon",
+    LABEL_PENDING_PAYMENTS: "Pembayaran Tertunda",
+    LABEL_PENDING_DO: "PO Tertunda",
     LABEL_ACTIVE_COMPANIES: "Aktif",
-    LABEL_TOTAL_PRODUCTS: "Total Produk",
-    LABEL_FROM_LAST_MONTH: "dari bulan lalu",
-    LABEL_NEW_THIS_MONTH: "baru bulan ini",
-    LABEL_PRODUCTS_IN_STOCK: "Varian oli tersedia",
 
     // Labels
     LABEL_NAME: "Nama",
     LABEL_COMPANY_NAME: "Nama Perusahaan",
+    LABEL_NICKNAME: "Kode Panggilan",
     LABEL_PRODUCT_NAME: "Nama Produk",
     LABEL_SKU: "SKU",
     LABEL_TYPE: "Tipe",
@@ -925,7 +947,7 @@ export const SITE_CONTENT = {
     LABEL_PHONE_SHORT: "Telepon",
     LABEL_ROLE: "Peran",
     LABEL_APPROVED: "Disetujui",
-    LABEL_PENDING: "Tertunda",
+    LABEL_PENDING: "Non-Aktif",
     LABEL_ACTIVE: "Aktif",
     LABEL_DEACTIVATED: "Dinonaktifkan",
     LABEL_MODULE: "Modul",
@@ -954,6 +976,8 @@ export const SITE_CONTENT = {
     ERROR_TIMEOUT:
       "Permintaan kehabisan waktu. Silakan periksa koneksi Anda dan coba lagi.",
     ERROR_VERIFY_STATUS: "Tidak dapat memverifikasi status akun.",
+    ERROR_NICKNAME_EXISTS:
+      'Nama panggilan "%nickname%" sudah digunakan oleh perusahaan "%company%". Silakan gunakan nama panggilan yang berbeda.',
 
     // Additional Labels
     LABEL_NO_AUTH: "Belum Ada Akun",
