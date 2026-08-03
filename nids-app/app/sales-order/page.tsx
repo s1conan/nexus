@@ -405,6 +405,7 @@ export default function SalesOrdersPage() {
         pdf: dataUri,
         customerEmail: contacts[0]?.email || "",
         contacts: contacts,
+        ccEmails: o.company?.details?.cc_emails || "",
         raw: o,
       })
     } catch (err: any) {

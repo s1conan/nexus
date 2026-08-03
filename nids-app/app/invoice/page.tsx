@@ -918,6 +918,7 @@ export default function InvoicePage() {
         pdf: dataUri,
         customerEmail: contacts[0]?.email || "",
         contacts: contacts,
+        ccEmails: q.company?.details?.cc_emails || "",
         raw: q,
       })
     } catch (err: any) {
@@ -950,12 +951,19 @@ export default function InvoicePage() {
         .eq("category", "email")
         .eq("name", "cc_invoice")
         .single()
-      const ccList = ccData?.value
+      const globalCcList = ccData?.value
         ? ccData.value
             .split(",")
             .map((email: string) => email.trim())
             .filter((e: string) => e !== "")
         : []
+      const companyCcList = doc.ccEmails
+        ? doc.ccEmails
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const ccList = [...new Set([...globalCcList, ...companyCcList])]
       const pdfDataUri = await generateStandardInvoicePDF(companyInfo, inv, {
         save: false,
         output: "datauri",

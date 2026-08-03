@@ -46,6 +46,7 @@ type Doc = {
   id?: string
   customerEmail?: string
   contacts?: { name: string; email?: string }[]
+  ccEmails?: string
   raw?: any
 }
 
@@ -89,6 +90,7 @@ export default function Gallery({
   // Email Selection Dialog State
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false)
   const [selectedEmail, setSelectedEmail] = useState("")
+  const [ccEmails, setCcEmails] = useState("")
 
   // PDF State
   const [numPages, setNumPages] = useState<number | null>(null)
@@ -221,6 +223,7 @@ export default function Gallery({
     if (availableContacts.length > 0) {
       // Pre-select the first available email
       setSelectedEmail(availableContacts[0].email || "")
+      setCcEmails(activeDoc.ccEmails || "")
       setIsEmailDialogOpen(true)
     } else {
       // Fallback to original behavior if no contacts array is provided
@@ -228,6 +231,7 @@ export default function Gallery({
         notify.error("Customer email not found.")
         return
       }
+      setCcEmails(activeDoc.ccEmails || "")
       if (confirm(`${labels.confirmEmail} ${activeDoc.customerEmail}?`)) {
         sendEmailDirectly(activeDoc.customerEmail)
       }
@@ -238,7 +242,7 @@ export default function Gallery({
     if (!activeDoc || !onSendEmail) return
     try {
       setIsSending(true)
-      await onSendEmail({ ...activeDoc, customerEmail: emailToUse })
+      await onSendEmail({ ...activeDoc, customerEmail: emailToUse, ccEmails })
     } catch (error) {
       console.error("Failed to send email:", error)
     } finally {
@@ -542,6 +546,23 @@ export default function Gallery({
                   </div>
                 </div>
               ))}
+
+            {/* CC Emails - small subtle editable textarea */}
+            <div className="mt-1 flex flex-col gap-1">
+              <label className="text-[10px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                CC Emails
+              </label>
+              <textarea
+                value={ccEmails}
+                onChange={(e) => setCcEmails(e.target.value)}
+                placeholder="email1@example.com, email2@example.com"
+                rows={2}
+                className="w-full resize-none rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/40 focus:bg-muted/50 focus:ring-1 focus:ring-primary/20"
+              />
+              <span className="text-[9px] text-muted-foreground/50">
+                Comma-separated. These will be CC&apos;d on this email.
+              </span>
+            </div>
           </div>
           <DialogFooter>
             <Button

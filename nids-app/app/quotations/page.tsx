@@ -763,6 +763,7 @@ export default function QuotationsPage() {
         pdf: dataUri,
         customerEmail: contacts[0]?.email || "",
         contacts: contacts,
+        ccEmails: q.company?.details?.cc_emails || "",
         raw: q,
       })
     } catch (err: any) {
@@ -792,12 +793,19 @@ export default function QuotationsPage() {
         .eq("category", "email")
         .eq("name", "cc_quotation")
         .single()
-      const ccList = ccData?.value
+      const globalCcList = ccData?.value
         ? ccData.value
             .split(",")
             .map((email: string) => email.trim())
             .filter((e: string) => e !== "")
         : []
+      const companyCcList = doc.ccEmails
+        ? doc.ccEmails
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const ccList = [...new Set([...globalCcList, ...companyCcList])]
       const pdfDataUri = await generateStandardQuotationPDF(companyInfo, q, {
         save: false,
         output: "datauri",

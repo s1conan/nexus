@@ -32,8 +32,8 @@ export async function sendEmail({
     category === "auth"
       ? process.env.RESEND_FROM_EMAIL_AUTH ||
         process.env.RESEND_FROM_EMAIL ||
-        "Nexus <onboarding@resend.dev>"
-      : from || process.env.RESEND_FROM_EMAIL || "Nexus <onboarding@resend.dev>"
+        "Nexus <onboarding@nids.anugerahbuanasriwijaya.co.id>"
+      : from || process.env.RESEND_FROM_EMAIL || "Nexus <onboarding@nids.anugerahbuanasriwijaya.co.id>"
   try {
     const { data, error } = await resend.emails.send({
       from: from || defaultFrom,

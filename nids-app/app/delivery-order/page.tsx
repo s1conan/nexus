@@ -798,6 +798,7 @@ export default function DeliveryOrdersPage() {
       pdf: dataUri,
       customerEmail: contacts[0]?.email || "",
       contacts: contacts,
+      ccEmails: o.company?.details?.cc_emails || "",
       raw: o,
     })
   }
@@ -811,12 +812,19 @@ export default function DeliveryOrdersPage() {
         .eq("category", "email")
         .eq("name", "cc_quotation")
         .single()
-      const ccList = ccData?.value
+      const globalCcList = ccData?.value
         ? ccData.value
             .split(",")
             .map((email: string) => email.trim())
             .filter((e: string) => e !== "")
         : []
+      const companyCcList = doc.ccEmails
+        ? doc.ccEmails
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const ccList = [...new Set([...globalCcList, ...companyCcList])]
       const pdfDataUri = await generateStandardDeliveryOrderPDF(
         companyInfo,
         doRecord,
