@@ -219,6 +219,18 @@ function createPDFElement(
   }
 }
 
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, "\u00A0")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(Number(num)))
+}
+
 function parseHtmlToComponents(htmlString: string): React.ReactNode[] {
   const parts: React.ReactNode[] = []
   const regex = /(<[^>]+>|[^<]+)/g
@@ -273,7 +285,7 @@ function parseHtmlToComponents(htmlString: string): React.ReactNode[] {
         stack.push({ tag, children: [], olIndex: tag === "ol" ? 1 : undefined })
       }
     } else if (token.trim()) {
-      const textElement = <Text key={key++}>{token}</Text>
+      const textElement = <Text key={key++}>{decodeHtmlEntities(token)}</Text>
       if (stack.length > 0) {
         stack[stack.length - 1].children.push(textElement)
       } else {
@@ -534,6 +546,13 @@ const QuotationDocument = ({
   company: CompanyInfo
   data: QuotationData
 }) => {
+  const discountColumnWidth = Math.max(
+    65,
+    Math.max(
+      ...data.discounts.map((d) => `${d.label} ${d.value}%`.length),
+      10
+    ) * 6
+  )
   const replacements: Record<string, string> = {
     quotation_number: data.quotation_number,
     quotation_date: data.quotation_date
@@ -621,18 +640,22 @@ const QuotationDocument = ({
         )}
         <View style={a4Styles.table}>
           <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 140 }]}>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 170 }]}>
               <Text style={{ alignItems: "center" }}>
                 Price Components (per Liter)
               </Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 40 }]}>
+            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 30 }]}>
               <Text>%</Text>
             </View>
             {data.discounts.map((d, i) => (
               <View
                 key={i}
-                style={[a4Styles.cell, a4Styles.headerCell, { width: 65 }]}
+                style={[
+                  a4Styles.cell,
+                  a4Styles.headerCell,
+                  { width: discountColumnWidth },
+                ]}
               >
                 <Text>
                   {d.label} {d.value}%
@@ -641,30 +664,34 @@ const QuotationDocument = ({
             ))}
           </View>
           <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 140 }]}>
+            <View style={[a4Styles.cell, { width: 170 }]}>
               <Text>Harga Dasar Pertamina</Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.center, { width: 40 }]}>
+            <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
               <Text> </Text>
             </View>
             {data.discounts.map((_, i) => (
               <View
                 key={i}
-                style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+                style={[
+                  a4Styles.cell,
+                  a4Styles.right,
+                  { width: discountColumnWidth },
+                ]}
               >
                 <Text>{formatNumber(data.base_price)}</Text>
               </View>
             ))}
           </View>
           <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 140 }]}>
+            <View style={[a4Styles.cell, { width: 170 }]}>
               <Text>Discount</Text>
             </View>
             <View
               style={[
                 a4Styles.cell,
                 a4Styles.center,
-                { width: 40, height: 50 },
+                { width: 30, height: 50 },
               ]}
             >
               <Text> </Text>
@@ -672,7 +699,11 @@ const QuotationDocument = ({
             {data.discounts.map((d, i) => (
               <View
                 key={i}
-                style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+                style={[
+                  a4Styles.cell,
+                  a4Styles.right,
+                  { width: discountColumnWidth },
+                ]}
               >
                 <Text>
                   {formatNumber(Math.round(data.base_price * (d.value / 100)))}
@@ -681,16 +712,20 @@ const QuotationDocument = ({
             ))}
           </View>
           <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 140 }]}>
+            <View style={[a4Styles.cell, { width: 170 }]}>
               <Text>Harga Dasar PT. ABS</Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.center, { width: 40 }]}>
+            <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
               <Text> </Text>
             </View>
             {data.discounts.map((d, i) => (
               <View
                 key={i}
-                style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+                style={[
+                  a4Styles.cell,
+                  a4Styles.right,
+                  { width: discountColumnWidth },
+                ]}
               >
                 <Text style={{ fontWeight: "bold" }}>
                   {formatNumber(
@@ -705,10 +740,10 @@ const QuotationDocument = ({
             ?.filter((t) => t.enabled)
             .map((tax, taxIdx) => (
               <View key={`tax-${taxIdx}`} style={a4Styles.tableRow}>
-                <View style={[a4Styles.cell, { width: 140 }]}>
+                <View style={[a4Styles.cell, { width: 170 }]}>
                   <Text>{tax.name}</Text>
                 </View>
-                <View style={[a4Styles.cell, a4Styles.center, { width: 40 }]}>
+                <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
                   <Text>{tax.rate}%</Text>
                 </View>
                 {data.discounts.map((d, i) => {
@@ -722,7 +757,11 @@ const QuotationDocument = ({
                   return (
                     <View
                       key={i}
-                      style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+                      style={[
+                        a4Styles.cell,
+                        a4Styles.right,
+                        { width: discountColumnWidth },
+                      ]}
                     >
                       <Text>{formatNumber(taxAmount)}</Text>
                     </View>
@@ -732,14 +771,14 @@ const QuotationDocument = ({
             ))}
           {Number(data.delivery_price) > 0 && (
             <View style={a4Styles.tableRow}>
-              <View style={[a4Styles.cell, { width: 140 }]}>
+              <View style={[a4Styles.cell, { width: 170 }]}>
                 <Text>Biaya Pengiriman</Text>
               </View>
               <View
                 style={[
                   a4Styles.cell,
                   a4Styles.center,
-                  { width: 40, height: 22, top: 2 },
+                  { width: 30, height: 22, top: 2 },
                 ]}
               >
                 <Text> </Text>
@@ -747,7 +786,11 @@ const QuotationDocument = ({
               {data.discounts.map((_, i) => (
                 <View
                   key={i}
-                  style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+                  style={[
+                    a4Styles.cell,
+                    a4Styles.right,
+                    { width: discountColumnWidth },
+                  ]}
                 >
                   <Text>{formatNumber(Math.round(data.delivery_price))}</Text>
                 </View>
@@ -755,12 +798,12 @@ const QuotationDocument = ({
             </View>
           )}
           <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 140 }]}>
+            <View style={[a4Styles.cell, { width: 170 }]}>
               <Text style={{ fontWeight: "bold" }}>
                 Total Harga Include Pajak
               </Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.center, { width: 40 }]}>
+            <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
               <Text> </Text>
             </View>
             {data.discounts.map((d, i) => {
@@ -781,7 +824,11 @@ const QuotationDocument = ({
               return (
                 <View
                   key={i}
-                  style={[a4Styles.cell, a4Styles.right, { width: 65 }]}
+                  style={[
+                    a4Styles.cell,
+                    a4Styles.right,
+                    { width: discountColumnWidth },
+                  ]}
                 >
                   <Text style={{ fontWeight: "bold" }}>
                     {formatNumber(total)}
