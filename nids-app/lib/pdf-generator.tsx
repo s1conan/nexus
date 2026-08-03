@@ -851,7 +851,7 @@ const QuotationDocument = ({
             <Image src={company.logo_url} style={a4Styles.stamp} />
             <Image src="/images/ttd-indah.png" style={a4Styles.ttd} />
             <Text style={{ fontWeight: "bold", marginTop: 5 }}>
-              Indah Permatasaris
+              Indah Permatasari
             </Text>
             <Text style={{ fontWeight: "bold", marginTop: 2 }}>
               ( DIREKTUR )
