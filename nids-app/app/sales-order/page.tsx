@@ -1001,16 +1001,58 @@ export default function SalesOrdersPage() {
                           data={
                             selectedCompanyInfo ? [selectedCompanyInfo] : []
                           }
-                          disabled={true}
-                          fetchData={async () => []}
+                          disabled={isFromQuotation}
+                          fetchData={async (query) => {
+                            let q = supabase
+                              .from("companies")
+                              .select("id, name, details")
+                              .contains("type", ["Customer"])
+                              .limit(8)
+                            if (query) {
+                              const searchStr = constructMultiWordSearch(
+                                query,
+                                ["name"]
+                              )
+                              if (searchStr) q = q.or(searchStr)
+                            }
+                            const { data } = await q
+                            return data || []
+                          }}
                           value={formData.company_id}
-                          onSelect={() => {}}
+                          onSelect={(val, item) => {
+                            if (item) {
+                              setFormData((prev) => ({
+                                ...prev,
+                                company_id: val,
+                                product_id: "",
+                              }))
+                              setSelectedCompanyInfo(item)
+                              // Clear product since it might not be available for new company
+                              setSelectedProductInfo(null)
+                            } else {
+                              setFormData((prev) => ({
+                                ...prev,
+                                company_id: "",
+                                product_id: "",
+                                delivery_address: "",
+                              }))
+                              setSelectedCompanyInfo(null)
+                              setSelectedProductInfo(null)
+                            }
+                          }}
                           keyField="id"
                           displayField="name"
                           defaultDisplay={selectedCompanyInfo?.name || ""}
-                          searchColumns={[]}
-                          visualColumns={[]}
-                          placeholder={dict.PLACEHOLDER_SEARCH}
+                          searchColumns={["name"]}
+                          visualColumns={[
+                            {
+                              key: "name",
+                              header: dict.LABEL_COMPANY_NAME,
+                              className: "w-full font-medium",
+                              primary: true,
+                            },
+                          ]}
+                          placeholder={dict.PLACEHOLDER_SELECT_COMPANY}
                           emptyMessage={dict.NO_DATA}
                         />
                       </div>
