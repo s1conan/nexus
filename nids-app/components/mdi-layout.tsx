@@ -24,15 +24,18 @@ import {
   User,
   Key,
   Save,
-  Banknote,
   ShoppingBag,
   Receipt,
   Wallet,
-  ArrowDownToLine,
   ClipboardList,
   Warehouse,
   Activity,
   Bell,
+  Database,
+  FileText,
+  BarChart3,
+  Settings2,
+  Banknote,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -63,13 +66,6 @@ import { Label } from "@/components/ui/label"
 import { ButtonLoader } from "@/components/button-loader"
 
 import { cn } from "@/lib/utils"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet"
 
 // Import components for tabs
 import DashboardPage from "@/app/dashboard/page"
@@ -1133,30 +1129,218 @@ export function MdiLayout() {
     }
   }, [activeTabId])
 
-  const isDashboardActive = activeTabId === "dashboard"
-  const isMasterActive =
-    activeTabId === "companies" ||
-    activeTabId === "products" ||
-    activeTabId === "funders" ||
-    activeTabId === "vehicles"
-  const isTransactionActive = [
-    "deposit",
-    "quotation",
-    "sales-order",
-    "delivery-order",
-    "invoice",
-    "payments",
-  ].includes(activeTabId || "")
-  const isReportsActive =
-    activeTabId === "shipments" ||
-    activeTabId === "inventory" ||
-    activeTabId?.startsWith("report-")
-  const isSystemActive =
-    activeTabId === "users" ||
-    activeTabId === "component-test" ||
-    activeTabId === "settings"
+  // ============================================================
+  // UNIFIED MENU CONFIGURATION
+  // Single source of truth for all menu items
+  // ============================================================
 
-  const renderMenuItems = () => (
+  type MenuItem = {
+    id: string
+    icon: React.ComponentType<{ className?: string }>
+    label: string
+    action: () => void
+    separatorBefore?: boolean
+    itemClassName?: string
+  }
+
+  type MenuGroup = {
+    id: string
+    label: string
+    icon: React.ComponentType<{ className?: string }>
+    items: MenuItem[]
+  }
+
+  const MENU_GROUPS: MenuGroup[] = [
+    {
+      id: "master",
+      label: dict.MENU_GROUP_MASTER,
+      icon: Database,
+      items: [
+        {
+          id: "companies",
+          icon: Building2,
+          label: dict.MENU_COMPANIES,
+          action: handleOpenCompanies,
+        },
+        {
+          id: "products",
+          icon: Package,
+          label: dict.MENU_PRODUCTS,
+          action: handleOpenProducts,
+        },
+        {
+          id: "funders",
+          icon: User,
+          label: dict.MENU_FUNDERS,
+          action: handleOpenFunders,
+        },
+        {
+          id: "vehicles",
+          icon: Truck,
+          label: dict.MENU_VEHICLES,
+          action: handleOpenVehicles,
+        },
+      ],
+    },
+    {
+      id: "transaction",
+      label: dict.MENU_TRANSACTION,
+      icon: FileText,
+      items: [
+        {
+          id: "deposit",
+          icon: Banknote,
+          label: dict.MENU_DEPOSIT,
+          action: handleOpenDeposit,
+        },
+        {
+          id: "quotation",
+          icon: ClipboardList,
+          label: dict.MENU_QUOTATION,
+          action: handleOpenQuotation,
+        },
+        {
+          id: "sales-order",
+          icon: ShoppingBag,
+          label: dict.MENU_SALES_ORDER,
+          action: handleOpenSalesOrder,
+        },
+        {
+          id: "delivery-order",
+          icon: Truck,
+          label: dict.MENU_DELIVERY_ORDER,
+          action: handleOpenDeliveryOrder,
+        },
+        {
+          id: "invoice",
+          icon: Receipt,
+          label: dict.MENU_INVOICE,
+          action: handleOpenInvoice,
+        },
+        {
+          id: "payments",
+          icon: Wallet,
+          label: dict.MENU_PAYMENTS,
+          action: handleOpenPayments,
+        },
+      ],
+    },
+    {
+      id: "reports",
+      label: dict.MENU_GROUP_REPORTS,
+      icon: BarChart3,
+      items: [
+        {
+          id: "inventory",
+          icon: Warehouse,
+          label: dict.MENU_REPORTS_INVENTORY || "Inventory Report",
+          action: handleOpenInventory,
+        },
+        {
+          id: "shipments",
+          icon: Truck,
+          label: dict.MENU_SHIPMENTS,
+          action: handleOpenShipments,
+        },
+        {
+          id: "report-deposit",
+          icon: Banknote,
+          label: dict.MENU_REPORTS_DEPOSIT,
+          action: handleOpenReportDeposit,
+          separatorBefore: true,
+        },
+        {
+          id: "report-quotation",
+          icon: ClipboardList,
+          label: dict.MENU_REPORTS_QUOTATION,
+          action: handleOpenReportQuotation,
+        },
+        {
+          id: "report-po",
+          icon: ShoppingBag,
+          label: dict.MENU_REPORTS_SO,
+          action: handleOpenReportSO,
+        },
+        {
+          id: "report-invoice",
+          icon: Receipt,
+          label: dict.MENU_REPORTS_INVOICE,
+          action: handleOpenReportInvoice,
+        },
+        {
+          id: "report-payments",
+          icon: Wallet,
+          label: dict.MENU_REPORTS_PAYMENTS,
+          action: handleOpenReportPayments,
+        },
+        {
+          id: "report-profit-loss",
+          icon: Activity,
+          label: dict.MENU_REPORTS_PROFIT_LOSS || "Profit & Loss",
+          action: handleOpenReportProfitLoss,
+          separatorBefore: true,
+          itemClassName: "font-semibold text-emerald-600",
+        },
+      ],
+    },
+    {
+      id: "system",
+      label: dict.MENU_GROUP_SYSTEM,
+      icon: Settings2,
+      items: [
+        {
+          id: "users",
+          icon: UserCog,
+          label: dict.MENU_USERS,
+          action: handleOpenUsers,
+        },
+        {
+          id: "settings",
+          icon: Settings,
+          label: dict.MENU_SETTINGS,
+          action: handleOpenSettings,
+        },
+        {
+          id: "component-test",
+          icon: Languages,
+          label: dict.MENU_SHOWCASE,
+          action: handleOpenComponentTest,
+        },
+      ],
+    },
+  ]
+
+  // Helper to get permission key from item id
+  const getItemPermission = (itemId: string): [string, "view"] | null => {
+    const permissionMap: Record<string, [string, "view"]> = {
+      companies: ["companies", "view"],
+      products: ["products", "view"],
+      funders: ["funders", "view"],
+      vehicles: ["vehicles", "view"],
+      deposit: ["deposit", "view"],
+      quotation: ["quotation", "view"],
+      "sales-order": ["sales-order", "view"],
+      "delivery-order": ["delivery-order", "view"],
+      invoice: ["invoice", "view"],
+      payments: ["payments", "view"],
+      inventory: ["inventory", "view"],
+      shipments: ["shipments", "view"],
+      "report-deposit": ["deposit", "view"],
+      "report-quotation": ["quotation", "view"],
+      "report-po": ["sales-order", "view"],
+      "report-invoice": ["invoice", "view"],
+      "report-payments": ["payments", "view"],
+      users: ["users", "view"],
+      settings: ["settings", "view"],
+      "component-test": ["component-test", "view"],
+    }
+    return permissionMap[itemId] || null
+  }
+
+  // ============================================================
+  // DESKTOP MENU (horizontal with dropdown groups)
+  // ============================================================
+  const renderDesktopMenu = () => (
     <div className="flex flex-row gap-2">
       <Button
         variant="ghost"
@@ -1167,7 +1351,7 @@ export function MdiLayout() {
         }}
         className={cn(
           "flex w-full items-center justify-start gap-2 rounded border-0 px-4 py-1.5 text-xs font-medium shadow-none transition-all duration-150 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 md:w-auto md:justify-center md:text-sm",
-          isDashboardActive
+          activeTabId === "dashboard"
             ? "bg-primary/10 font-semibold text-primary"
             : "text-muted-foreground hover:bg-white/10 hover:text-foreground active:bg-white/15"
         )}
@@ -1176,412 +1360,181 @@ export function MdiLayout() {
         <span>{dict.MENU_DASHBOARD}</span>
       </Button>
 
-      {(hasPermission("companies", "view") ||
-        hasPermission("products", "view") ||
-        hasPermission("funders", "view") ||
-        hasPermission("vehicles", "view")) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "flex w-full items-center justify-start gap-2 rounded border-0 px-4 py-1.5 text-xs font-medium shadow-none transition-all duration-150 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 md:w-auto md:justify-center md:text-sm",
-                isMasterActive
-                  ? "bg-primary/10 font-semibold text-primary"
-                  : "text-muted-foreground active:bg-sidebar-accent/80"
-              )}
-            >
-              <MenuIcon className="size-4" />
-              <span>{dict.MENU_GROUP_MASTER}</span>
-              <ChevronDown className="size-3 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            className="min-w-full rounded-lg border border-border/60 bg-popover p-1 shadow-none"
-          >
-            {hasPermission("companies", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenCompanies()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Building2 className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_COMPANIES}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("products", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenProducts()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Package className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_PRODUCTS}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("funders", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenFunders()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <User className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_FUNDERS}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("vehicles", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenVehicles()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Truck className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_VEHICLES}</span>
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      {MENU_GROUPS.map((group) => {
+        const visibleItems = group.items.filter((item) => {
+          const perm = getItemPermission(item.id)
+          return perm ? hasPermission(perm[0], perm[1]) : true
+        })
+        if (visibleItems.length === 0) return null
 
-      {(hasPermission("deposit", "view") ||
-        hasPermission("quotation", "view") ||
-        hasPermission("sales-order", "view") ||
-        hasPermission("delivery-order", "view") ||
-        hasPermission("invoice", "view") ||
-        hasPermission("payments", "view")) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "flex items-center justify-start gap-2 rounded border-0 px-4 py-1.5 text-xs font-medium shadow-none transition-all duration-150 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 md:justify-center md:text-sm",
-                isTransactionActive
-                  ? "bg-primary/10 font-semibold text-primary"
-                  : "text-muted-foreground active:bg-white/15"
-              )}
-            >
-              <Banknote className="size-4" />
-              <span>{dict.MENU_TRANSACTION}</span>
-              <ChevronDown className="size-3 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            className="w-full min-w-full rounded-lg border border-border/60 bg-popover p-1 shadow-none"
-          >
-            {hasPermission("deposit", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenDeposit()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <ArrowDownToLine className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_DEPOSIT}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("quotation", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenQuotation()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <ClipboardList className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_QUOTATION}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("sales-order", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenSalesOrder()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <ShoppingBag className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_SALES_ORDER}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("delivery-order", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenDeliveryOrder()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Truck className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_DELIVERY_ORDER}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("invoice", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenInvoice()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Receipt className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_INVOICE}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("payments", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenPayments()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Wallet className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_PAYMENTS}</span>
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+        const groupActive = visibleItems.some((item) => activeTabId === item.id)
 
-      {(hasPermission("shipments", "view") ||
-        hasPermission("inventory", "view")) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "flex w-full items-center justify-start gap-2 rounded border-0 px-4 py-1.5 text-xs font-medium shadow-none transition-all duration-150 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 md:w-auto md:justify-center md:text-sm",
-                isReportsActive
-                  ? "bg-primary/10 font-semibold text-primary"
-                  : "text-muted-foreground active:bg-white/15"
-              )}
+        return (
+          <DropdownMenu key={group.id}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "flex w-full items-center justify-start gap-2 rounded border-0 px-4 py-1.5 text-xs font-medium shadow-none transition-all duration-150 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 md:w-auto md:justify-center md:text-sm",
+                  groupActive
+                    ? "bg-primary/10 font-semibold text-primary"
+                    : "text-muted-foreground active:bg-white/15"
+                )}
+              >
+                <group.icon className="size-4" />
+                <span>{group.label}</span>
+                <ChevronDown className="size-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-full min-w-full rounded-lg border border-border/60 bg-popover p-1 shadow-none"
             >
-              <Truck className="size-4" />
-              <span>{dict.MENU_GROUP_REPORTS}</span>
-              <ChevronDown className="size-3 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            className="w-full min-w-full rounded-lg border border-border/60 bg-popover p-1 shadow-none"
-          >
-            {hasPermission("inventory", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenInventory()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Warehouse className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_REPORTS_INVENTORY || "Inventory Report"}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("shipments", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenShipments()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Truck className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_SHIPMENTS}</span>
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator className="my-1 border-border/60" />
-            {hasPermission("deposit", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenReportDeposit()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <ArrowDownToLine className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_REPORTS_DEPOSIT}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("quotation", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenReportQuotation()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <ClipboardList className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_REPORTS_QUOTATION}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("sales-order", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenReportSO()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <ShoppingBag className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_REPORTS_SO}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("invoice", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenReportInvoice()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Receipt className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_REPORTS_INVOICE}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("payments", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenReportPayments()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Wallet className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_REPORTS_PAYMENTS}</span>
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator className="my-1 border-border/60" />
-            <DropdownMenuItem
-              onClick={() => {
-                handleOpenReportProfitLoss()
-                setIsMobileMenuOpen(false)
-              }}
-              className="flex cursor-pointer items-center gap-2 rounded p-2 font-semibold text-emerald-600 transition-colors focus:bg-muted/50"
-            >
-              <Activity className="size-4" />
-              <span>{dict.MENU_REPORTS_PROFIT_LOSS || "Profit & Loss"}</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+              {visibleItems.map((item) => (
+                <React.Fragment key={item.id}>
+                  {item.separatorBefore && (
+                    <DropdownMenuSeparator className="my-1 border-border/60" />
+                  )}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      item.action()
+                      setIsMobileMenuOpen(false)
+                    }}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50",
+                      item.itemClassName
+                    )}
+                  >
+                    <item.icon
+                      className={cn(
+                        "size-4",
+                        !item.itemClassName && "text-muted-foreground"
+                      )}
+                    />
+                    <span>{item.label}</span>
+                  </DropdownMenuItem>
+                </React.Fragment>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      })}
+    </div>
+  )
 
-      {(hasPermission("users", "view") ||
-        hasPermission("component-test", "view") ||
-        hasPermission("settings", "view")) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "flex w-full items-center justify-start gap-2 rounded border-0 px-4 py-1.5 text-xs font-medium shadow-none transition-all duration-150 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 md:w-auto md:justify-center md:text-sm",
-                isSystemActive
-                  ? "bg-primary/10 font-semibold text-primary"
-                  : "text-muted-foreground active:bg-white/15"
-              )}
-            >
-              <UserCog className="size-4" />
-              <span>{dict.MENU_GROUP_SYSTEM}</span>
-              <ChevronDown className="size-3 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            className="w-full min-w-full rounded-lg border border-border/60 bg-popover p-1 shadow-none"
-          >
-            {hasPermission("users", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenUsers()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <UserCog className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_USERS}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("settings", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenSettings()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Settings className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_SETTINGS}</span>
-              </DropdownMenuItem>
-            )}
-            {hasPermission("component-test", "view") && (
-              <DropdownMenuItem
-                onClick={() => {
-                  handleOpenComponentTest()
-                  setIsMobileMenuOpen(false)
-                }}
-                className="flex cursor-pointer items-center gap-2 rounded p-2 transition-colors focus:bg-muted/50"
-              >
-                <Languages className="size-4 text-muted-foreground" />
-                <span>{dict.MENU_SHOWCASE}</span>
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+  // ============================================================
+  // MOBILE MENU (vertical with expanded groups)
+  // ============================================================
+  const renderMobileMenu = () => (
+    <div className="flex flex-col gap-1">
+      {/* Dashboard */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          handleOpenDashboard()
+          setIsMobileMenuOpen(false)
+        }}
+        className={cn(
+          "flex w-full items-center justify-start gap-2 rounded border-0 px-4 py-2.5 text-sm font-medium shadow-none transition-all duration-150 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
+          activeTabId === "dashboard"
+            ? "bg-primary/10 font-semibold text-primary"
+            : "text-muted-foreground hover:bg-white/10 hover:text-foreground active:bg-white/15"
+        )}
+      >
+        <LayoutDashboard className="size-5" />
+        <span>{dict.MENU_DASHBOARD}</span>
+      </Button>
+
+      {/* Expanded Groups */}
+      {MENU_GROUPS.map((group) => {
+        const visibleItems = group.items.filter((item) => {
+          const perm = getItemPermission(item.id)
+          return perm ? hasPermission(perm[0], perm[1]) : true
+        })
+        if (visibleItems.length === 0) return null
+
+        return (
+          <div key={group.id}>
+            {/* Group Header */}
+            <div className="mt-2 flex items-center gap-2 border-b border-border/40 px-4 pb-2">
+              <group.icon className="size-4 text-muted-foreground/60" />
+              <span className="text-[11px] font-semibold tracking-wider text-muted-foreground/60 uppercase">
+                {group.label}
+              </span>
+            </div>
+
+            {/* Group Items */}
+            <div className="flex flex-col gap-1 pl-4">
+              {visibleItems.map((item) => (
+                <Button
+                  key={item.id}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    item.action()
+                    setIsMobileMenuOpen(false)
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-start gap-2 rounded border-0 px-4 py-2 text-sm shadow-none transition-all duration-150 focus:ring-0 focus:outline-none",
+                    activeTabId === item.id
+                      ? "bg-primary/10 font-semibold text-primary"
+                      : "text-muted-foreground hover:bg-white/10 hover:text-foreground",
+                    item.itemClassName
+                  )}
+                >
+                  <item.icon className="size-5" />
+                  <span>{item.label}</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 
   return (
     <div className="mx-auto flex h-screen max-w-[1800px] flex-col overflow-hidden bg-background">
       {/* Top Navbar */}
-      <header className="z-50 flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-card px-6 shadow-none">
-        <div className="flex items-center gap-6">
+      <header className="z-50 flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-card px-4 shadow-none">
+        <div className="flex items-center gap-2">
+          {/* Mobile Menu Trigger - left side */}
+          <div className="md:hidden">
+            <DropdownMenu
+              open={isMobileMenuOpen}
+              onOpenChange={setIsMobileMenuOpen}
+            >
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-md">
+                  <MenuIcon className="size-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                sideOffset={8}
+                className="max-h-[70vh] w-72 overflow-y-auto border border-border/60 bg-background p-2 shadow-lg"
+              >
+                <div className="mb-2 flex items-center gap-2 border-b border-border/60 pb-2">
+                  <div className="text-base font-bold tracking-tight">
+                    {config.brandName}
+                  </div>
+                </div>
+                {renderMobileMenu()}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Brand Name */}
           <div className="cursor-pointer text-lg font-bold tracking-tight transition-opacity hover:opacity-85">
             {config.brandName}
           </div>
 
           {/* Desktop Menu */}
           <nav className="hidden items-center gap-1 md:flex">
-            {renderMenuItems()}
+            {renderDesktopMenu()}
           </nav>
-
-          {/* Mobile Menu Trigger */}
-          <div className="md:hidden">
-            <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-md">
-                  <MenuIcon className="size-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent
-                side="left"
-                className="w-[280px] border-r border-border/60 bg-background p-6 shadow-none"
-              >
-                <SheetHeader className="mb-4 border-b border-border/60 pb-4 text-left">
-                  <SheetTitle className="text-xl font-bold">
-                    {config.brandName}
-                  </SheetTitle>
-                </SheetHeader>
-                <div className="mt-4 flex flex-col gap-2">
-                  {renderMenuItems()}
-                </div>
-              </SheetContent>
-            </Sheet>
-          </div>
         </div>
 
         <div className="flex items-center gap-3">

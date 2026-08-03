@@ -17,9 +17,9 @@ import QRCode from "qrcode"
 Font.register({
   family: "Calibri",
   fonts: [
-    { src: "/fonts/Calibri.ttf", fontWeight: 400 },
-    { src: "/fonts/Calibri-Bold.ttf", fontWeight: 700 },
-    { src: "/fonts/Calibri-Italic.ttf", fontStyle: "italic", fontWeight: 400 },
+    { src: "/fonts/calibri.ttf", fontWeight: 400 },
+    { src: "/fonts/calibrib.ttf", fontWeight: 700 },
+    { src: "/fonts/calibrii.ttf", fontStyle: "italic", fontWeight: 400 },
   ],
 })
 
@@ -809,7 +809,7 @@ const QuotationDocument = ({
             </View>
           </View>
         )}
-        {processedNote && (
+        {data.bank_accounts && data.bank_accounts.length > 0 && (
           <View style={a4Styles.section}>
             <Text style={{ fontWeight: "bold" }}>Metode Pembayaran :</Text>
             <View

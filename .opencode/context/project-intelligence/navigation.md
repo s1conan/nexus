@@ -1,29 +1,24 @@
-<!-- Context: project-intelligence/navigation | Priority: critical | Version: 1.1 | Updated: 2026-06-19 -->
+<!-- Context: project-intelligence/index | Priority: critical | Version: 1.0 | Updated: 2026-07-21 -->
 
-# Project Intelligence Navigation
+# Project Intelligence
 
-Use this map to choose the smallest context file before editing. Start with the critical technical domain for most code changes in this repo.
-
-## Quick Routes
-
-| Need | Read First | Priority |
-| --- | --- | --- |
-| App commands, stack, UI/API patterns, Supabase boundaries | `technical-domain.md` | critical |
-| General OpenCode repo instructions | `../../../AGENTS.md` | critical |
-
-## Deep Dives
+Quick overview of context files available to agents.
 
 | File | Description | Priority |
-| --- | --- | --- |
-| `technical-domain.md` | Tech stack, API/component patterns, naming, standards, security, and codebase references. | critical |
+|------|-------------|----------|
+| [technical-domain.md](technical-domain.md) | Tech stack, code patterns, naming, standards, security | critical |
 
-## 📂 Codebase References
+## Quick Routes
+- **Tech stack**: [technical-domain.md](technical-domain.md) → Primary Stack table
+- **Code patterns**: [technical-domain.md](technical-domain.md) → Code Patterns
+- **Naming conventions**: [technical-domain.md](technical-domain.md) → Naming Conventions
+- **Standards**: [technical-domain.md](technical-domain.md) → Code Standards
+- **Security**: [technical-domain.md](technical-domain.md) → Security Requirements
 
-- `nids-app/package.json` - command and dependency source of truth.
-- `nids-app/app/layout.tsx` - root app wiring.
-- `nids-app/components/mdi-layout.tsx` - authenticated module registry.
-- `AGENTS.md` - compact repository operating instructions.
-
-## Maintenance
-
-Update this file whenever a Project Intelligence context file is created, renamed, removed, or changes priority.
+## Deep Dives
+| Topic | File | Section |
+|-------|------|---------|
+| API / data access | technical-domain.md | Data Access (Direct Supabase) |
+| Component structure | technical-domain.md | Page Component (CRUD Pattern) |
+| Naming rules | technical-domain.md | Naming Conventions |
+| UI conventions | technical-domain.md | Code Standards #1-6 |
