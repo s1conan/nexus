@@ -198,7 +198,7 @@ export default function VerificationPage() {
         ) : (
           <div className="grid animate-in grid-cols-1 gap-6 duration-700 fade-in slide-in-from-bottom-4 lg:grid-cols-3">
             <div className="space-y-6 lg:col-span-1">
-              <Card className="overflow-hidden border-green-200 bg-white shadow-xl">
+              <Card className="overflow-hidden border-green-200 bg-white shadow-xl h-[600px]">
                 <div className="bg-green-600 p-6 text-center text-white">
                   <CheckCircle2 className="mx-auto mb-3 size-12" />
                   <h2 className="text-xl font-bold">
@@ -218,7 +218,7 @@ export default function VerificationPage() {
                         <Label className="text-slate-500">
                           {getDocLabel()}
                         </Label>
-                        <p className="font-mono font-bold text-slate-900">
+                        <p className="font-bold text-slate-900">
                           {verifiedDoc.quotation_number ||
                             verifiedDoc.invoice_number ||
                             verifiedDoc.do_number}

@@ -262,9 +262,12 @@ export function RichTextEditor({
     if (editor) {
       const currentStorage = toStorage(editor.getHTML())
       if (value !== currentStorage) {
-        editor.commands.setContent(
-          fromStorage(value, variables, variableValues)
-        )
+        // Defer setContent to avoid flushSync inside React lifecycle
+        requestAnimationFrame(() => {
+          editor.commands.setContent(
+            fromStorage(value, variables, variableValues)
+          )
+        })
       }
     }
   }, [value, editor, variables, variableValues])

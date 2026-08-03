@@ -404,7 +404,7 @@ export default function QuotationsPage() {
     }))
   }
 
-  const handleOpenDialog = (item: any = null, isViewOnly = false) => {
+  const handleOpenDialog = async (item: any = null, isViewOnly = false) => {
     setViewOnly(isViewOnly)
     if (item) {
       setEditingItem(item)
@@ -475,6 +475,40 @@ export default function QuotationsPage() {
       setSelectedCompanyInfo(null)
       setSelectedProductInfo(null)
 
+      // Fetch the last created quotation to pre-fill rich text fields
+      let lastContent = ""
+      let lastNote = ""
+      let lastTerms = ""
+      let lastClosing = ""
+      let lastIsContentEnabled = true
+      let lastIsNoteEnabled = true
+      let lastIsTermsEnabled = true
+      let lastIsClosingEnabled = true
+
+      try {
+        const { data: lastQuotation } = await supabase
+          .from("quotations")
+          .select(
+            "content, note, terms_conditions, closing_remarks, is_content_enabled, is_note_enabled, is_terms_enabled, is_closing_enabled"
+          )
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (lastQuotation) {
+          lastContent = lastQuotation.content || ""
+          lastNote = lastQuotation.note || ""
+          lastTerms = lastQuotation.terms_conditions || ""
+          lastClosing = lastQuotation.closing_remarks || ""
+          lastIsContentEnabled = lastQuotation.is_content_enabled ?? true
+          lastIsNoteEnabled = lastQuotation.is_note_enabled ?? true
+          lastIsTermsEnabled = lastQuotation.is_terms_enabled ?? true
+          lastIsClosingEnabled = lastQuotation.is_closing_enabled ?? true
+        }
+      } catch {
+        // Silently fail — fields stay empty
+      }
+
       setFormData({
         quotation_number: "", // Will be auto-generated on save if empty
         company_id: "",
@@ -491,14 +525,14 @@ export default function QuotationsPage() {
         minimum_order: 0,
         shrinkage_tolerance: 0,
         status: "Draft",
-        content: "",
-        is_content_enabled: true,
-        note: "",
-        is_note_enabled: true,
-        terms_conditions: "",
-        is_terms_enabled: true,
-        closing_remarks: "",
-        is_closing_enabled: true,
+        content: lastContent,
+        is_content_enabled: lastIsContentEnabled,
+        note: lastNote,
+        is_note_enabled: lastIsNoteEnabled,
+        terms_conditions: lastTerms,
+        is_terms_enabled: lastIsTermsEnabled,
+        closing_remarks: lastClosing,
+        is_closing_enabled: lastIsClosingEnabled,
         discounts: [],
         bank_accounts: [],
         tax_details: globalTaxes.map((gt) => ({

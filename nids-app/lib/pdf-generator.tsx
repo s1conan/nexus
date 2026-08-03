@@ -306,7 +306,7 @@ const a4Styles = StyleSheet.create({
   },
   backgroundImage: {
     position: "absolute",
-    opacity: "0.06",
+    opacity: "0.15",
     top: 85,
     left: 0,
     right: 0,
@@ -353,7 +353,7 @@ const a4Styles = StyleSheet.create({
     height: "19",
   },
   headerCell: {
-    backgroundColor: "#d9f3f8",
+    backgroundColor: "#aaeefc",
     fontWeight: "bold",
     display: "flex",
     textAlign: "center",
@@ -377,7 +377,7 @@ const a4Styles = StyleSheet.create({
     width: 80,
   },
   stamp: {
-    opacity: "0.5",
+    opacity: "0.6",
     width: 70,
     height: 70,
     objectFit: "contain",
