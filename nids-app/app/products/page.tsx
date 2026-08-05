@@ -60,6 +60,7 @@ export default function ProductsPage() {
   const { hasPermission, profile, loading: authLoading } = useAuth()
 
   const [products, setProducts] = useState<any[]>([])
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
@@ -226,6 +227,7 @@ export default function ProductsPage() {
         setProducts((prev) =>
           prev.map((p) => (p.id === editingProduct.id ? data : p))
         )
+        setUpdatedRowId(editingProduct.id)
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`),
           dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace(
@@ -505,8 +507,14 @@ export default function ProductsPage() {
                   products.map((product) => (
                     <TableRow
                       key={product.id}
-                      className="group cursor-pointer"
+                      className={cn(
+                        "group cursor-pointer",
+                        updatedRowId === product.id && "animate-row-highlight"
+                      )}
                       onDoubleClick={() => handleOpenDialog(product, true)}
+                      onAnimationEnd={() => {
+                        if (updatedRowId === product.id) setUpdatedRowId(null)
+                      }}
                     >
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-3">

@@ -29,8 +29,11 @@ import { cn } from "@/lib/utils"
 import { notify } from "@/lib/notifications"
 import { pdfjs, Document, Page } from "react-pdf"
 
-// Configure PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+// Configure PDF.js worker - bundle locally via bundler (no CDN dependency)
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url,
+).toString()
 
 const PDF_OPTIONS = {
   verbosity: 0,

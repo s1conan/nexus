@@ -371,4 +371,27 @@
     color: var(--info-foreground) !important;
     border-color: rgba(77, 159, 196, 0.25) !important;
   }
+
+  /* Row highlight animation for updated table rows */
+  :root {
+    --row-highlight-duration: 3s;
+    --row-highlight-color: oklch(61.141% 0.21201 258.055 / 0.295);
+  }
+
+  .dark {
+    --row-highlight-color: oklch(84.885% 0.1495 81.004 / 0.527);
+  }
+
+  .animate-row-highlight {
+    animation: row-highlight var(--row-highlight-duration) ease-out forwards;
+  }
+}
+
+@keyframes row-highlight {
+  0% {
+    background-color: var(--row-highlight-color);
+  }
+  100% {
+    background-color: transparent;
+  }
 }

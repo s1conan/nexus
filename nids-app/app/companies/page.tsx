@@ -77,6 +77,7 @@ export default function CompaniesPage() {
   const { hasPermission, loading: authLoading } = useAuth()
 
   const [companies, setCompanies] = useState<any[]>([])
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
@@ -504,6 +505,7 @@ export default function CompaniesPage() {
         setCompanies((prev) =>
           prev.map((c) => (c.id === editingCompany.id ? data : c))
         )
+        setUpdatedRowId(editingCompany.id)
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`),
           dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace(
@@ -1139,8 +1141,14 @@ export default function CompaniesPage() {
                     return (
                       <TableRow
                         key={company.id}
-                        className="group cursor-pointer"
+                        className={cn(
+                          "group cursor-pointer",
+                          updatedRowId === company.id && "animate-row-highlight"
+                        )}
                         onDoubleClick={() => handleOpenDialog(company, true)}
+                        onAnimationEnd={() => {
+                          if (updatedRowId === company.id) setUpdatedRowId(null)
+                        }}
                       >
                         <TableCell className="py-3 font-medium">
                           <div className="flex items-center gap-3">

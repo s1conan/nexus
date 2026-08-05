@@ -132,6 +132,7 @@ export default function InvoicePage() {
   const supabase = createClient()
 
   const [invoices, setInvoices] = useState<any[]>([])
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [availableBanks, setAvailableBanks] = useState<any[]>([])
   const [companyInfo, setCompanyInfo] = useState<any>(null)
   const [previewDoc, setPreviewDoc] = useState<any>(null)
@@ -701,6 +702,7 @@ export default function InvoicePage() {
           setInvoices((prev) =>
             prev.map((i) => (i.id === editingItem.id ? updatedRow : i))
           )
+          setUpdatedRowId(editingItem.id)
         } else {
           fetchData(true)
         }
@@ -827,6 +829,7 @@ export default function InvoicePage() {
       setInvoices((prev) =>
         prev.map((i) => (i.id === id ? { ...i, status } : i))
       )
+      setUpdatedRowId(id)
       notify.success(
         dict.MSG_QUOTATION_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -2045,8 +2048,14 @@ export default function InvoicePage() {
                 return (
                   <TableRow
                     key={i.id}
-                    className="group cursor-pointer"
+                    className={cn(
+                      "group cursor-pointer",
+                      updatedRowId === i.id && "animate-row-highlight"
+                    )}
                     onDoubleClick={() => handleOpenDialog(i, true)}
+                    onAnimationEnd={() => {
+                      if (updatedRowId === i.id) setUpdatedRowId(null)
+                    }}
                   >
                     <TableCell className="font-medium">
                       <div className="font-mono text-sm font-bold">

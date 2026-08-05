@@ -74,6 +74,7 @@ export default function DepositsPage() {
   const supabase = createClient()
 
   const [deposits, setDeposits] = useState<any[]>([])
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [appBanks, setAppBanks] = useState<any[]>([])
   const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -363,6 +364,7 @@ export default function DepositsPage() {
           setDeposits((prev) =>
             prev.map((d) => (d.id === editingItem.id ? updatedRow : d))
           )
+          setUpdatedRowId(editingItem.id)
         } else {
           fetchData(true)
         }
@@ -520,6 +522,7 @@ export default function DepositsPage() {
       setDeposits((prev) =>
         prev.map((d) => (d.id === id ? { ...d, status } : d))
       )
+      setUpdatedRowId(id)
       notify.success(
         dict.MSG_DEPOSIT_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -1023,8 +1026,14 @@ export default function DepositsPage() {
               deposits.map((d) => (
                 <TableRow
                   key={d.id}
-                  className="group cursor-pointer"
+                  className={cn(
+                    "group cursor-pointer",
+                    updatedRowId === d.id && "animate-row-highlight"
+                  )}
                   onDoubleClick={() => handleOpenDialog(d, true)}
+                  onAnimationEnd={() => {
+                    if (updatedRowId === d.id) setUpdatedRowId(null)
+                  }}
                 >
                   <TableCell className="font-medium">
                     {d.deposit_number}

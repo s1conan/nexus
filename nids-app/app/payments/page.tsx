@@ -148,6 +148,7 @@ export default function PaymentsPage() {
   const supabase = createClient()
 
   const [payments, setPayments] = useState<PaymentWithRelations[]>([])
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null)
   const [previewDoc, setPreviewDoc] = useState<PreviewDoc | null>(null)
   const [loading, setLoading] = useState(true)
@@ -443,6 +444,7 @@ export default function PaymentsPage() {
           setPayments((prev) =>
             prev.map((p) => (p.id === editingItem.id ? updatedRow : p))
           )
+          setUpdatedRowId(editingItem.id)
         } else {
           fetchData(true)
         }
@@ -530,6 +532,7 @@ export default function PaymentsPage() {
       setPayments((prev) =>
         prev.map((p) => (p.id === id ? { ...p, status } : p))
       )
+      setUpdatedRowId(id)
       notify.success(
         dict.MSG_QUOTATION_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -1026,8 +1029,14 @@ export default function PaymentsPage() {
               payments.map((p) => (
                 <TableRow
                   key={p.id}
-                  className="cursor-pointer"
+                  className={cn(
+                    "cursor-pointer",
+                    updatedRowId === p.id && "animate-row-highlight"
+                  )}
                   onDoubleClick={() => handleOpenDialog(p, true)}
+                  onAnimationEnd={() => {
+                    if (updatedRowId === p.id) setUpdatedRowId(null)
+                  }}
                 >
                   <TableCell className="text-sm">{p.payment_number}</TableCell>
                   <TableCell>

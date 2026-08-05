@@ -60,6 +60,7 @@ export default function FundersPage() {
   const { hasPermission, profile, loading: authLoading } = useAuth()
 
   const [funders, setFunders] = useState<any[]>([])
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
@@ -306,6 +307,7 @@ export default function FundersPage() {
         setFunders((prev) =>
           prev.map((f) => (f.id === editingFunder.id ? data : f))
         )
+        setUpdatedRowId(editingFunder.id)
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`),
           dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace(
@@ -699,8 +701,14 @@ export default function FundersPage() {
                     return (
                       <TableRow
                         key={funder.id}
-                        className="group cursor-pointer"
+                        className={cn(
+                          "group cursor-pointer",
+                          updatedRowId === funder.id && "animate-row-highlight"
+                        )}
                         onDoubleClick={() => handleOpenDialog(funder, true)}
+                        onAnimationEnd={() => {
+                          if (updatedRowId === funder.id) setUpdatedRowId(null)
+                        }}
                       >
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-3">

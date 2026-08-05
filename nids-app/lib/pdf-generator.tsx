@@ -46,7 +46,12 @@ export interface QuotationData {
   min_order: number
   shrinkage?: number
   content: string
-  discounts: { label: string; value: number }[]
+  discounts: {
+    label: string
+    value: number
+    delivery_address?: string
+    delivery_cost?: number
+  }[]
   note: string
   terms_conditions: string
   closing_remarks: string
@@ -215,7 +220,11 @@ function createPDFElement(
         </Text>
       )
     default:
-      return <Text key={key}>{children}</Text>
+      return (
+        <Text key={key} style={a4Styles.innerText}>
+          {children}
+        </Text>
+      )
   }
 }
 
@@ -285,7 +294,11 @@ function parseHtmlToComponents(htmlString: string): React.ReactNode[] {
         stack.push({ tag, children: [], olIndex: tag === "ol" ? 1 : undefined })
       }
     } else if (token.trim()) {
-      const textElement = <Text key={key++}>{decodeHtmlEntities(token)}</Text>
+      const textElement = (
+        <Text key={key++} style={a4Styles.innerText}>
+          {decodeHtmlEntities(token)}
+        </Text>
+      )
       if (stack.length > 0) {
         stack[stack.length - 1].children.push(textElement)
       } else {
@@ -298,7 +311,7 @@ function parseHtmlToComponents(htmlString: string): React.ReactNode[] {
 
 const a4Styles = StyleSheet.create({
   page: {
-    paddingHorizontal: 30,
+    paddingHorizontal: 26,
     paddingVertical: 20,
     fontSize: 10,
     fontFamily: "Calibri",
@@ -334,7 +347,7 @@ const a4Styles = StyleSheet.create({
   colon: { width: 10 },
   section: { marginTop: 9 },
   paragraph: { marginTop: 10, lineHeight: 1, textAlign: "justify" },
-  innerText: { lineHeight: 0.8, margin: 0 },
+  innerText: { lineHeight: 0.8, margin: 0, textAlign: "justify" },
   table: {
     marginTop: 7,
     backgroundColor: "#000",
@@ -553,6 +566,8 @@ const QuotationDocument = ({
       10
     ) * 6
   )
+  const hasDeliveryAddress = data.discounts.some((d) => d.delivery_address)
+  const headerHeight = hasDeliveryAddress ? 28 : 18
   const replacements: Record<string, string> = {
     quotation_number: data.quotation_number,
     quotation_date: data.quotation_date
@@ -639,13 +654,25 @@ const QuotationDocument = ({
           </View>
         )}
         <View style={a4Styles.table}>
-          <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 170 }]}>
+          <View style={[a4Styles.tableRow, { height: headerHeight }]}>
+            <View
+              style={[
+                a4Styles.cell,
+                a4Styles.headerCell,
+                { width: 170, height: headerHeight },
+              ]}
+            >
               <Text style={{ alignItems: "center" }}>
                 Price Components (per Liter)
               </Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 30 }]}>
+            <View
+              style={[
+                a4Styles.cell,
+                a4Styles.headerCell,
+                { width: 30, height: headerHeight },
+              ]}
+            >
               <Text>%</Text>
             </View>
             {data.discounts.map((d, i) => (
@@ -654,12 +681,15 @@ const QuotationDocument = ({
                 style={[
                   a4Styles.cell,
                   a4Styles.headerCell,
-                  { width: discountColumnWidth },
+                  { width: discountColumnWidth, height: headerHeight },
                 ]}
               >
                 <Text>
                   {d.label} {d.value}%
                 </Text>
+                {d.delivery_address && (
+                  <Text style={{ fontSize: 8 }}>({d.delivery_address})</Text>
+                )}
               </View>
             ))}
           </View>
@@ -783,7 +813,7 @@ const QuotationDocument = ({
               >
                 <Text> </Text>
               </View>
-              {data.discounts.map((_, i) => (
+              {data.discounts.map((d, i) => (
                 <View
                   key={i}
                   style={[
@@ -792,7 +822,7 @@ const QuotationDocument = ({
                     { width: discountColumnWidth },
                   ]}
                 >
-                  <Text>{formatNumber(Math.round(data.delivery_price))}</Text>
+                  <Text>{formatNumber(Math.round(d.delivery_cost ?? 0))}</Text>
                 </View>
               ))}
             </View>
@@ -820,7 +850,7 @@ const QuotationDocument = ({
                   })
               }
               const total =
-                baseABS + totalTaxes + Math.round(data.delivery_price)
+                baseABS + totalTaxes + Math.round(d.delivery_cost ?? 0)
               return (
                 <View
                   key={i}

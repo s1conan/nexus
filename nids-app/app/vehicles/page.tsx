@@ -64,6 +64,7 @@ export default function VehiclesPage() {
   const supabase = createClient()
 
   const [vehicles, setVehicles] = useState<any[]>([])
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
@@ -309,6 +310,7 @@ export default function VehiclesPage() {
         setVehicles((prev) =>
           prev.map((v) => (v.id === editingItem.id ? data : v))
         )
+        setUpdatedRowId(editingItem.id)
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace(
             "%data%",
@@ -701,8 +703,14 @@ export default function VehiclesPage() {
                   vehicles.map((v) => (
                     <TableRow
                       key={v.id}
-                      className="group cursor-pointer"
+                      className={cn(
+                        "group cursor-pointer",
+                        updatedRowId === v.id && "animate-row-highlight"
+                      )}
                       onDoubleClick={() => handleOpenDialog(v, true)}
+                      onAnimationEnd={() => {
+                        if (updatedRowId === v.id) setUpdatedRowId(null)
+                      }}
                     >
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-3">

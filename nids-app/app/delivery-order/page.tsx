@@ -96,6 +96,7 @@ export default function DeliveryOrdersPage() {
   const supabase = createClient()
 
   const [orders, setOrders] = useState<any[]>([])
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [companyInfo, setCompanyInfo] = useState<any>(null)
   const [previewDoc, setPreviewDoc] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -573,6 +574,7 @@ export default function DeliveryOrdersPage() {
           setOrders((prev) =>
             prev.map((o) => (o.id === editingItem.id ? updatedRow : o))
           )
+          setUpdatedRowId(editingItem.id)
         } else {
           fetchData(true)
         }
@@ -699,6 +701,7 @@ export default function DeliveryOrdersPage() {
       if (error) throw error
 
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)))
+      setUpdatedRowId(id)
       notify.success(
         dict.MSG_DO_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -2137,8 +2140,14 @@ export default function DeliveryOrdersPage() {
               orders.map((o) => (
                 <TableRow
                   key={o.id}
-                  className="group cursor-pointer"
+                  className={cn(
+                    "group cursor-pointer",
+                    updatedRowId === o.id && "animate-row-highlight"
+                  )}
                   onDoubleClick={() => handleOpenDialog(o, true)}
+                  onAnimationEnd={() => {
+                    if (updatedRowId === o.id) setUpdatedRowId(null)
+                  }}
                 >
                   <TableCell className="font-medium">{o.do_number}</TableCell>
                   <TableCell>{o.company?.name || "-"}</TableCell>

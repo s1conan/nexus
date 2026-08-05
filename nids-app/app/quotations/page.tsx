@@ -25,14 +25,11 @@ import {
   Trash2,
   ChevronDown,
   CheckCircle2,
-  Check,
   ClipboardList,
   Calendar,
   Clock,
   MinusCircle,
   AlertCircle,
-  ArrowUp,
-  ArrowDown,
   ArrowUpAZ,
   ArrowDownZA,
   ArrowUpDown,
@@ -100,7 +97,7 @@ interface SortLevel {
 
 export default function QuotationsPage() {
   const { dict, lang } = useDictionary()
-  const { hasPermission, profile, loading: authLoading } = useAuth()
+  const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
   const [quotations, setQuotations] = useState<any[]>([])
@@ -113,6 +110,7 @@ export default function QuotationsPage() {
   const [hasMore, setHasMore] = useState(true)
   const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
 
   const [stats, setStats] = useState({
     totalQuotations: 0,
@@ -179,7 +177,12 @@ export default function QuotationsPage() {
     is_terms_enabled: true,
     closing_remarks: "",
     is_closing_enabled: true,
-    discounts: [] as { label: string; value: number }[],
+    discounts: [] as {
+      label: string
+      value: number
+      delivery_address: string
+      delivery_cost: number
+    }[],
     bank_accounts: [] as any[],
     tax_details: [] as any[],
   }))
@@ -296,7 +299,7 @@ export default function QuotationsPage() {
 
         // Dynamic sorting
         sortLevels.forEach((level) => {
-          const [relation, col] = level.column.split(".")
+          const [, col] = level.column.split(".")
           if (col) {
             // Relation sorting not supported natively via range easily for joined tables in simple .order
             // For now we sort by top level cols primarily
@@ -344,11 +347,13 @@ export default function QuotationsPage() {
       debouncedSearchQuery,
       sortLevels,
       dict.MSG_DATA_FETCH_FAILED,
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     ]
   )
 
   useEffect(() => {
     fetchData(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchQuery, sortLevels])
 
   // Ordinary Infinite Scroll
@@ -382,6 +387,18 @@ export default function QuotationsPage() {
   }
 
   // Linked Expiry Logic
+  const handleQuotationDateChange = (dateStr: string) => {
+    const newQDate = new Date(dateStr)
+    const eDate = new Date(formData.expiry_date)
+    const diffTime = eDate.getTime() - newQDate.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    setFormData((prev) => ({
+      ...prev,
+      quotation_date: dateStr,
+      expiry_days: diffDays,
+    }))
+  }
+
   const handleDateChange = (dateStr: string) => {
     const qDate = new Date(formData.quotation_date)
     const eDate = new Date(dateStr)
@@ -465,7 +482,12 @@ export default function QuotationsPage() {
         is_terms_enabled: item.is_terms_enabled ?? true,
         closing_remarks: item.closing_remarks || "",
         is_closing_enabled: item.is_closing_enabled ?? true,
-        discounts: item.discounts || [],
+        discounts: (item.discounts || []).map((d: any) => ({
+          label: d.label || "",
+          value: d.value || 0,
+          delivery_address: d.delivery_address || "",
+          delivery_cost: d.delivery_cost || 0,
+        })),
         bank_accounts: initialSelectedBanks,
         tax_details: mergedTaxes,
       })
@@ -635,6 +657,7 @@ export default function QuotationsPage() {
           setQuotations((prev) =>
             prev.map((q) => (q.id === editingItem.id ? updatedRow : q))
           )
+          setUpdatedRowId(editingItem.id)
         } else {
           // Fallback if fetch fails
           fetchData(true)
@@ -656,7 +679,10 @@ export default function QuotationsPage() {
         if (!payload.quotation_number) {
           const { data, error: rpcError } = await supabase.rpc(
             "generate_document_number",
-            { p_doc_type: "quotation", p_company_id: payload.company_id || null }
+            {
+              p_doc_type: "quotation",
+              p_company_id: payload.company_id || null,
+            }
           )
           if (rpcError) throw rpcError
           payload.quotation_number = data
@@ -753,6 +779,7 @@ export default function QuotationsPage() {
       setQuotations((prev) =>
         prev.map((q) => (q.id === id ? { ...q, status } : q))
       )
+      setUpdatedRowId(id)
       notify.success(
         dict.MSG_QUOTATION_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -870,16 +897,7 @@ export default function QuotationsPage() {
           })
         : "-"
       const productName = q.product?.name || q.product_name || "-"
-      const productSku = q.product?.sku || q.product_sku || "-"
       const minOrder = q.minimum_order || q.min_order || 0
-
-      // Strip HTML tags from content for plain text display in email
-      const contentText = q.content
-        ? q.content
-            .replace(/<[^>]*>/g, "")
-            .replace(/&nbsp;/g, " ")
-            .trim()
-        : ""
 
       // Replace variables in note
       const processedNote = q.note
@@ -1356,7 +1374,7 @@ export default function QuotationsPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="h-fit space-y-6 rounded-lg border bg-muted/10 p-4">
+                    <div className="h-fit space-y-10.5 rounded-lg border bg-muted/10 p-4">
                       <div className="grid gap-2">
                         <Label className="flex items-center gap-2">
                           <Calendar className="size-4" />{" "}
@@ -1366,10 +1384,7 @@ export default function QuotationsPage() {
                           type="date"
                           value={formData.quotation_date}
                           onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              quotation_date: e.target.value,
-                            })
+                            handleQuotationDateChange(e.target.value)
                           }
                         />
                       </div>
@@ -1393,7 +1408,7 @@ export default function QuotationsPage() {
                       </div>
                     </div>
                     <div className="space-y-4 md:col-span-3">
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <div className="grid gap-2">
                           <Label htmlFor="minorder">
                             {dict.LABEL_MIN_ORDER}
@@ -1407,7 +1422,7 @@ export default function QuotationsPage() {
                             rightBadge="L"
                           />
                         </div>
-                        <div className="grid gap-2">
+                        {/* <div className="grid gap-2">
                           <Label htmlFor="deliv_price">
                             {dict.LABEL_TRANSPORT_COST}
                           </Label>
@@ -1420,7 +1435,7 @@ export default function QuotationsPage() {
                             leftBadge={SITE_CONFIG.currencySymbol}
                             rightBadge="/ L"
                           />
-                        </div>
+                        </div> */}
                         <div className="grid gap-2">
                           <Label htmlFor="shrinkage">
                             {dict.LABEL_SHRINKAGE_TOLERANCE}
@@ -1450,7 +1465,117 @@ export default function QuotationsPage() {
                           />
                         </div>
                       </div>
-
+                      <div className="h-fit space-y-4 rounded-lg border bg-muted/10 p-4">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-base font-semibold">
+                            {dict.LABEL_DISCOUNT_TERMS}
+                          </Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setFormData({
+                                ...formData,
+                                discounts: [
+                                  ...formData.discounts,
+                                  {
+                                    label: "",
+                                    value: 0,
+                                    delivery_address: "",
+                                    delivery_cost: 0,
+                                  },
+                                ],
+                              })
+                            }
+                          >
+                            <Plus className="size-4" />
+                          </Button>
+                        </div>
+                        <div className="space-y-3">
+                          {formData.discounts.map((d, i) => (
+                            <div
+                              key={i}
+                              className="space-y-2 border-b pb-3 last:border-0"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  className="h-9 w-6/20"
+                                  placeholder={dict.LABEL_DISCOUNT_TERM1}
+                                  value={d.label}
+                                  onChange={(e) => {
+                                    const newD = [...formData.discounts]
+                                    newD[i].label = e.target.value
+                                    setFormData({
+                                      ...formData,
+                                      discounts: newD,
+                                    })
+                                  }}
+                                />
+                                <Input
+                                  className="h-9 w-6/20"
+                                  placeholder={dict.LABEL_DISCOUNT_TERM2}
+                                  value={d.delivery_address}
+                                  onChange={(e) => {
+                                    const newD = [...formData.discounts]
+                                    newD[i].delivery_address = e.target.value
+                                    setFormData({
+                                      ...formData,
+                                      discounts: newD,
+                                    })
+                                  }}
+                                />
+                                <div className="w-3/20 shrink-0">
+                                  <NumberInput
+                                    value={d.value}
+                                    onChange={(val) => {
+                                      const newD = [...formData.discounts]
+                                      newD[i].value = val
+                                      setFormData({
+                                        ...formData,
+                                        discounts: newD,
+                                      })
+                                    }}
+                                    rightBadge="%"
+                                    className="h-9"
+                                  />
+                                </div>
+                                <div className="w-5/20 shrink-0">
+                                  <NumberInput
+                                    value={d.delivery_cost}
+                                    onChange={(val) => {
+                                      const newD = [...formData.discounts]
+                                      newD[i].delivery_cost = val
+                                      setFormData({
+                                        ...formData,
+                                        discounts: newD,
+                                      })
+                                    }}
+                                    leftBadge={SITE_CONFIG.currencySymbol}
+                                    rightBadge="/ L"
+                                    className="h-9"
+                                  />
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="shrink-0 text-destructive"
+                                  onClick={() =>
+                                    setFormData({
+                                      ...formData,
+                                      discounts: formData.discounts.filter(
+                                        (_, idx) => idx !== i
+                                      ),
+                                    })
+                                  }
+                                >
+                                  <MinusCircle className="size-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                       {/* Aligned Tax Section */}
                       <div className="space-y-4 rounded-lg border bg-muted/10 p-4">
                         <Label className="block border-b pb-2 text-xs font-bold tracking-wider text-muted-foreground uppercase">
@@ -1548,16 +1673,6 @@ export default function QuotationsPage() {
                             )
                           })}
                         </div>
-
-                        <div className="flex items-center justify-between border-t pt-2 font-mono text-lg font-bold">
-                          <span>
-                            {dict.LABEL_GRAND_TOTAL || "Grand Total"}:
-                          </span>
-                          <span className="text-primary">
-                            {SITE_CONFIG.currencySymbol}{" "}
-                            {Math.round(totals.grandTotal).toLocaleString()}
-                          </span>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -1626,7 +1741,7 @@ export default function QuotationsPage() {
                       variableValues={variableValues}
                     />
                   </div>
-                  <div className="grid grid-cols-1 gap-6 border-t pt-4 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-6 border-t pt-4">
                     <div className="h-fit space-y-4 rounded-lg border bg-muted/10 p-4">
                       <Label className="text-base font-semibold">
                         {dict.LABEL_BANK_ACCOUNTS}
@@ -1671,75 +1786,6 @@ export default function QuotationsPage() {
                             </div>
                           )
                         })}
-                      </div>
-                    </div>
-                    <div className="h-fit space-y-4 rounded-lg border bg-muted/10 p-4">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-base font-semibold">
-                          {dict.LABEL_DISCOUNT_TERMS}
-                        </Label>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            setFormData({
-                              ...formData,
-                              discounts: [
-                                ...formData.discounts,
-                                { label: "", value: 0 },
-                              ],
-                            })
-                          }
-                        >
-                          <Plus className="size-4" />
-                        </Button>
-                      </div>
-                      <div className="space-y-3">
-                        {formData.discounts.map((d, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center gap-2 border-b pb-3 last:border-0"
-                          >
-                            <Input
-                              className="h-9 flex-1"
-                              placeholder={dict.LABEL_DISCOUNT_NAME}
-                              value={d.label}
-                              onChange={(e) => {
-                                const newD = [...formData.discounts]
-                                newD[i].label = e.target.value
-                                setFormData({ ...formData, discounts: newD })
-                              }}
-                            />
-                            <div className="w-24 shrink-0">
-                              <NumberInput
-                                value={d.value}
-                                onChange={(val) => {
-                                  const newD = [...formData.discounts]
-                                  newD[i].value = val
-                                  setFormData({ ...formData, discounts: newD })
-                                }}
-                                rightBadge="%"
-                                className="h-9"
-                              />
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="shrink-0 text-destructive"
-                              onClick={() =>
-                                setFormData({
-                                  ...formData,
-                                  discounts: formData.discounts.filter(
-                                    (_, idx) => idx !== i
-                                  ),
-                                })
-                              }
-                            >
-                              <MinusCircle className="size-4" />
-                            </Button>
-                          </div>
-                        ))}
                       </div>
                     </div>
                   </div>
@@ -1911,8 +1957,14 @@ export default function QuotationsPage() {
               sortedAndFilteredData.map((q) => (
                 <TableRow
                   key={q.id}
-                  className="group cursor-pointer"
+                  className={cn(
+                    "group cursor-pointer",
+                    updatedRowId === q.id && "animate-row-highlight"
+                  )}
                   onDoubleClick={() => handleOpenDialog(q, true)}
+                  onAnimationEnd={() => {
+                    if (updatedRowId === q.id) setUpdatedRowId(null)
+                  }}
                 >
                   <TableCell className="font-medium">
                     {q.quotation_number}
@@ -2123,7 +2175,11 @@ export default function QuotationsPage() {
           dict.MSG_DELETE_CONFIRM?.split("%data%")[0] ||
           "Are you sure you want to delete this quotation? This action cannot be undone."
         }
-        dataName={deleteConfirm ? `${deleteConfirm.quotation_number} - ${deleteConfirm.company_name}` : ""}
+        dataName={
+          deleteConfirm
+            ? `${deleteConfirm.quotation_number} - ${deleteConfirm.company_name}`
+            : ""
+        }
         confirmText={dict.BUTTON_DELETE || "Delete"}
         cancelText={dict.BUTTON_CANCEL || "Cancel"}
         variant="destructive"

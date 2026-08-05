@@ -79,12 +79,12 @@ const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 const PAGE_SIZE = 50
 
 export default function SalesOrdersPage() {
-  const { dict, lang } = useDictionary()
-  const { hasPermission, profile, loading: authLoading } = useAuth()
+  const { dict } = useDictionary()
+  const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
   const [orders, setOrders] = useState<any[]>([])
-  const [quotations, setQuotations] = useState<any[]>([])
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -276,7 +276,6 @@ export default function SalesOrdersPage() {
           ])
           if (qRes.error) throw qRes.error
           if (tRes.error) throw tRes.error
-          setQuotations(qRes.data || [])
           setGlobalTaxes(tRes.data || [])
           if (cRes.data) {
             const info: any = {}
@@ -337,6 +336,7 @@ export default function SalesOrdersPage() {
 
   useEffect(() => {
     fetchData(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchQuery])
 
   // Ordinary Infinite Scroll
@@ -371,10 +371,6 @@ export default function SalesOrdersPage() {
   const canEdit = hasPermission("sales-order", "edit")
   const canDelete = hasPermission("sales-order", "delete")
   const canPrint = hasPermission("sales-order", "print")
-
-  // Form Validation
-  const isFormValid =
-    !!formData.po_number?.trim() && !!formData.term_of_payment?.trim()
 
   const handlePrint = async (o: any) => {
     if (!companyInfo) {
@@ -658,6 +654,7 @@ export default function SalesOrdersPage() {
           setOrders((prev) =>
             prev.map((o) => (o.id === editingItem.id ? updatedRow : o))
           )
+          setUpdatedRowId(editingItem.id)
         } else {
           fetchData(true)
         }
@@ -787,6 +784,7 @@ export default function SalesOrdersPage() {
       if (error) throw error
 
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)))
+      setUpdatedRowId(id)
       notify.success(
         dict.MSG_SO_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -1264,6 +1262,8 @@ export default function SalesOrdersPage() {
                                     ...formData,
                                     term_of_payment: val,
                                     discount: disc ? disc.value : 0,
+                                    delivery_address: disc?.delivery_address || formData.delivery_address,
+                                    delivery_price_per_litre: disc?.delivery_cost ?? formData.delivery_price_per_litre,
                                   })
                                 }}
                               >
@@ -1532,8 +1532,14 @@ export default function SalesOrdersPage() {
               orders.map((o) => (
                 <TableRow
                   key={o.id}
-                  className="group cursor-pointer"
+                  className={cn(
+                    "group cursor-pointer",
+                    updatedRowId === o.id && "animate-row-highlight"
+                  )}
                   onDoubleClick={() => handleOpenDialog(o, true)}
+                  onAnimationEnd={() => {
+                    if (updatedRowId === o.id) setUpdatedRowId(null)
+                  }}
                 >
                   <TableCell className="font-medium">{o.so_number}</TableCell>
                   <TableCell>{o.company?.name || "-"}</TableCell>

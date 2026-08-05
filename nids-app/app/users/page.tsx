@@ -59,6 +59,7 @@ export default function UsersPage() {
   const { profile, loading: authLoading, hasPermission } = useAuth()
 
   const [users, setUsers] = useState<any[]>([])
+  const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [roles, setRoles] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -402,6 +403,7 @@ export default function UsersPage() {
       }
 
       setIsDialogOpen(false)
+      setUpdatedRowId(editingUser.id)
       await fetchData()
     } catch (err: any) {
       console.error("Users: Save error:", err)
@@ -501,7 +503,16 @@ export default function UsersPage() {
                 const StatusIcon = status.icon
 
                 return (
-                  <TableRow key={u.id} className="group">
+                  <TableRow
+                    key={u.id}
+                    className={cn(
+                      "group",
+                      updatedRowId === u.id && "animate-row-highlight"
+                    )}
+                    onAnimationEnd={() => {
+                      if (updatedRowId === u.id) setUpdatedRowId(null)
+                    }}
+                  >
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
                         <div

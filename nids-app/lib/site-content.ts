@@ -92,9 +92,10 @@ export const SITE_CONTENT = {
     LABEL_DELIVERY_PER_L: "Delivery per L",
     LABEL_BANK_ACCOUNTS: "Bank Accounts",
     LABEL_DISCOUNTS: "Discounts",
-    LABEL_DISCOUNT_NAME: "Discount Name",
+    LABEL_DISCOUNT_TERM1: "Term 1",
+    LABEL_DISCOUNT_TERM2: "Term 2",
     LABEL_DISCOUNT_VALUE: "Value (%)",
-    LABEL_DISCOUNT_TERMS: "Discount Terms",
+    LABEL_DISCOUNT_TERMS: "Discount / Price Terms",
     LABEL_TERM_OF_PAYMENT: "Term of Payment",
     LABEL_TAX_VAT: "Enable Tax (VAT)",
     LABEL_TAX_RATE: "Tax Rate (%)",
@@ -346,7 +347,8 @@ export const SITE_CONTENT = {
     LABEL_COMPANY_CONTACT_INFO: "Company Information",
     LABEL_CC_EMAILS: "CC Emails",
     PLACEHOLDER_CC_EMAILS: "email1@example.com, email2@example.com",
-    TOOLTIP_CC_EMAILS: "These emails will be CC'd on all company-related documents",
+    TOOLTIP_CC_EMAILS:
+      "These emails will be CC'd on all company-related documents",
 
     // General UI
     BUTTON_SAVE: "Save",
@@ -625,9 +627,10 @@ export const SITE_CONTENT = {
     LABEL_DELIVERY_PER_L: "Pengiriman per L",
     LABEL_BANK_ACCOUNTS: "Rekening Bank",
     LABEL_DISCOUNTS: "Diskon",
-    LABEL_DISCOUNT_NAME: "Nama Diskon",
+    LABEL_DISCOUNT_TERM1: "Syarat 1",
+    LABEL_DISCOUNT_TERM2: "Syarat 2",
     LABEL_DISCOUNT_VALUE: "Nilai (%)",
-    LABEL_DISCOUNT_TERMS: "Ketentuan Diskon",
+    LABEL_DISCOUNT_TERMS: "Ketentuan Harga / Diskon",
 
     LABEL_TERM_OF_PAYMENT: "Termin Pembayaran",
     LABEL_TAX_VAT: "Aktifkan Pajak (PPN)",
@@ -883,7 +886,8 @@ export const SITE_CONTENT = {
     LABEL_COMPANY_CONTACT_INFO: "Informasi Perusahaan",
     LABEL_CC_EMAILS: "Email CC",
     PLACEHOLDER_CC_EMAILS: "email1@contoh.com, email2@contoh.com",
-    TOOLTIP_CC_EMAILS: "Email ini akan di-CC pada semua dokumen terkait perusahaan",
+    TOOLTIP_CC_EMAILS:
+      "Email ini akan di-CC pada semua dokumen terkait perusahaan",
 
     // General UI
     BUTTON_SAVE: "Simpan",
