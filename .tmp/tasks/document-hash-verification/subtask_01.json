@@ -1,0 +1,36 @@
+{
+  "id": "document-hash-verification-01",
+  "seq": "01",
+  "title": "Create document-hash.ts — canonical JSON serialization + SHA-256 hash utility",
+  "status": "completed",
+  "agent_id": "coder-agent",
+  "started_at": "2026-08-06T00:00:00Z",
+  "depends_on": [],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/project-intelligence/technical-domain.md",
+    "coding-preferences.md",
+    "AGENTS.md"
+  ],
+  "reference_files": [
+    "nids-app/lib/site-content.ts"
+  ],
+  "acceptance_criteria": [
+    "File created at nids-app/lib/document-hash.ts",
+    "Exports canonicalSerialize<T>(data: T): string — JSON.stringify with sorted keys, stable deterministic output",
+    "Exports computeHash(data: string): Promise<string> — SHA-256 via Web Crypto API (browser), returns hex string",
+    "Exports computeHashSync / computeHashServer(data: string): string — SHA-256 via Node.js crypto module, returns hex string (server-side only)",
+    "Exports getQuotationCanonicalData(row: object): object — extracts whitelisted fields, excludes id, created_at, updated_at, created_by",
+    "Exports getInvoiceCanonicalData(row: object): object — extracts whitelisted fields, excludes id, created_at, updated_at, created_by",
+    "Canonical serialization sorts keys alphabetically at all nesting levels (not just top-level)",
+    "Handles null/undefined values consistently (either omit or use null, but consistent)",
+    "TypeScript compiles with no errors (npx tsc --noEmit from nids-app/)",
+    "No default export — use named exports only"
+  ],
+  "deliverables": [
+    "nids-app/lib/document-hash.ts"
+  ],
+  "completed_at": "2026-08-06T00:00:00Z",
+  "completion_summary": "Created document-hash.ts with canonicalSerialize (deep-sort JSON), computeHash (Web Crypto SHA-256), computeHashServer (Node.js crypto SHA-256), getQuotationCanonicalData (24 whitelist fields), getInvoiceCanonicalData (17 whitelist fields). All named exports, null/undefined omitted, keys sorted at all nesting levels."
+}

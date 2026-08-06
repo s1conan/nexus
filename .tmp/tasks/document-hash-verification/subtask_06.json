@@ -1,0 +1,42 @@
+{
+  "id": "document-hash-verification-06",
+  "seq": "06",
+  "title": "Update verify page — auto-verify from QR hash, show match/mismatch status",
+  "status": "completed",
+  "agent_id": "coder-agent",
+  "started_at": "2026-08-06T00:00:00Z",
+  "completed_at": "2026-08-06T00:00:00Z",
+  "completion_summary": "Updated verify page: auto-verify from QR hash param, hashStatus match/mismatch UI, backward compatible manual flow",
+  "depends_on": ["04", "05"],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/project-intelligence/technical-domain.md",
+    "coding-preferences.md",
+    "AGENTS.md"
+  ],
+  "reference_files": [
+    "nids-app/app/verify/[type]/[id]/page.tsx",
+    "nids-app/lib/site-content.ts"
+  ],
+  "acceptance_criteria": [
+    "Read 'h' query parameter from URL using useSearchParams()",
+    "If hash is present: auto-verify on mount by calling API with { uuid, number: '', type, hash } in a useEffect",
+    "If hash is present: set inputNumber to the document number from API response (pre-filled for display)",
+    "If hash is present and hashMatch is true: show verification card with HashMatched visual (CheckCircle2, green, dict.VERIFY_STATUS_HASH_VERIFIED)",
+    "If hash is present and hashMatch is false: show mismatch warning (AlertTriangle, amber/yellow, dict.VERIFY_STATUS_HASH_MISMATCH + dict.VERIFY_STATUS_HASH_MISMATCH_DESC), still show document details but with warning banner",
+    "If hash is not present: fall back to existing manual number entry flow (no visual change)",
+    "Display hash verification status badge/text near the success/error card",
+    "If hash is present but number/mismatch: user can still manually enter number for secondary verification",
+    "Maintain existing rate limiting logic (extend to auto-verify)",
+    "No hardcoded text — all new labels from site-content.ts",
+    "Surgical edits only — preserve existing layout, styling, language switcher, PDF preview, download button"
+  ],
+  "deliverables": [
+    "nids-app/app/verify/[type]/[id]/page.tsx (updated)"
+  ],
+  "started_at": null,
+  "completed_at": null,
+  "completion_summary": null,
+  "agent_id": null
+}

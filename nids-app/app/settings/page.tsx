@@ -47,6 +47,7 @@ interface CompanyProfile {
   npwp: string | null
   npwp_address: string | null
   logo_url: string | null
+  header_url: string | null
   email: string | null
 }
 
@@ -118,6 +119,7 @@ export default function SettingsPage() {
     npwp: "",
     npwp_address: "",
     logo_url: "",
+    header_url: "",
     email: "",
   })
   const [savingCompany, setSavingCompany] = useState(false)
@@ -155,6 +157,13 @@ export default function SettingsPage() {
     cc_do: "",
     cc_invoice: "",
     cc_payment: "",
+  })
+  const [emailBCCs, setEmailBCCs] = useState<Record<string, string>>({
+    bcc_quotation: "",
+    bcc_po: "",
+    bcc_do: "",
+    bcc_invoice: "",
+    bcc_payment: "",
   })
   const [savingEmailCCs, setSavingEmailCCs] = useState(false)
 
@@ -199,6 +208,7 @@ export default function SettingsPage() {
             { category: "company", name: "npwp", value: "" },
             { category: "company", name: "npwp_address", value: "" },
             { category: "company", name: "logo_url", value: "" },
+            { category: "company", name: "header_url", value: "" },
             { category: "tax", name: "PPN", value: 0.11 },
             { category: "tax", name: "PBBKB", value: 0.075 },
             { category: "tax", name: "PPH22", value: 0.003 },
@@ -239,6 +249,7 @@ export default function SettingsPage() {
             npwp: "",
             npwp_address: "",
             logo_url: "",
+            header_url: "",
           })
           setBankAccounts([])
           setParameters([])
@@ -276,6 +287,11 @@ export default function SettingsPage() {
             (r: AppSettingsRow) =>
               r.category === "company" && r.name === "logo_url"
           )?.value || ""
+        const companyHeaderUrl =
+          data.find(
+            (r: AppSettingsRow) =>
+              r.category === "company" && r.name === "header_url"
+          )?.value || ""
 
         setCompanyInfo({
           name: companyName,
@@ -284,6 +300,7 @@ export default function SettingsPage() {
           npwp: companyNpwp,
           npwp_address: companyNpwpAddress,
           logo_url: companyLogoUrl,
+          header_url: companyHeaderUrl,
         })
 
         const banksList =
@@ -367,6 +384,35 @@ export default function SettingsPage() {
         }
         setEmailCCs(ccs)
 
+        const bccs: Record<string, string> = {
+          bcc_quotation:
+            data.find(
+              (r: AppSettingsRow) =>
+                r.category === "email" && r.name === "bcc_quotation"
+            )?.value || "",
+          bcc_po:
+            data.find(
+              (r: AppSettingsRow) =>
+                r.category === "email" && r.name === "bcc_po"
+            )?.value || "",
+          bcc_do:
+            data.find(
+              (r: AppSettingsRow) =>
+                r.category === "email" && r.name === "bcc_do"
+            )?.value || "",
+          bcc_invoice:
+            data.find(
+              (r: AppSettingsRow) =>
+                r.category === "email" && r.name === "bcc_invoice"
+            )?.value || "",
+          bcc_payment:
+            data.find(
+              (r: AppSettingsRow) =>
+                r.category === "email" && r.name === "bcc_payment"
+            )?.value || "",
+        }
+        setEmailBCCs(bccs)
+
         const formats: Record<string, string> = {
           quotation:
             data.find(
@@ -439,6 +485,11 @@ export default function SettingsPage() {
           value: companyInfo.npwp_address,
         },
         { category: "company", name: "logo_url", value: companyInfo.logo_url },
+        {
+          category: "company",
+          name: "header_url",
+          value: companyInfo.header_url,
+        },
       ]
       const { error } = await supabase
         .from("app_settings")
@@ -659,27 +710,33 @@ export default function SettingsPage() {
     if (!canEdit) return
     try {
       setSavingEmailCCs(true)
-      const updates = Object.entries(emailCCs).map(([k, v]) => ({
+      const ccUpdates = Object.entries(emailCCs).map(([k, v]) => ({
         category: "email",
         name: k,
         value: v,
       }))
+      const bccUpdates = Object.entries(emailBCCs).map(([k, v]) => ({
+        category: "email",
+        name: k,
+        value: v,
+      }))
+      const updates = [...ccUpdates, ...bccUpdates]
       const { error } = await supabase
         .from("app_settings")
         .upsert(updates, { onConflict: "category,name" })
       if (error) throw error
       notify.success(
-        dict.MSG_UPDATE_SUCCESS.replace("%data%", `[Email CC]`),
+        dict.MSG_UPDATE_SUCCESS.replace("%data%", `[Email CC/BCC]`),
         dict.MSG_SUCCESS_UPDATE_DESC_NO_COMPANY.replace(
           "%entity%",
-          "Email CC settings"
+          "Email CC/BCC settings"
         ),
         undefined,
         true
       )
     } catch (error: unknown) {
       notify.error(
-        dict.MSG_SAVE_FAILED.replace("%data%", `[Email CC]`),
+        dict.MSG_SAVE_FAILED.replace("%data%", `[Email CC/BCC]`),
         error instanceof Error ? error.message : String(error)
       )
     } finally {
@@ -863,16 +920,7 @@ export default function SettingsPage() {
                     disabled={!canEdit}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>{dict.SETTINGS_LABEL_NPWP}</Label>
-                  <Input
-                    value={companyInfo.npwp || ""}
-                    onChange={(e) =>
-                      setCompanyInfo({ ...companyInfo, npwp: e.target.value })
-                    }
-                    disabled={!canEdit}
-                  />
-                </div>
+
                 <div className="space-y-2">
                   <Label>{dict.SETTINGS_LABEL_LOGO_URL}</Label>
                   <Input
@@ -881,6 +929,32 @@ export default function SettingsPage() {
                       setCompanyInfo({
                         ...companyInfo,
                         logo_url: e.target.value,
+                      })
+                    }
+                    disabled={!canEdit}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>{dict.SETTINGS_LABEL_HEADER_URL}</Label>
+                  <Input
+                    value={companyInfo.header_url || ""}
+                    onChange={(e) =>
+                      setCompanyInfo({
+                        ...companyInfo,
+                        header_url: e.target.value,
+                      })
+                    }
+                    disabled={!canEdit}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>{dict.SETTINGS_LABEL_SHIPPING_ADDRESS}</Label>
+                  <Textarea
+                    value={companyInfo.address || ""}
+                    onChange={(e) =>
+                      setCompanyInfo({
+                        ...companyInfo,
+                        address: e.target.value,
                       })
                     }
                     disabled={!canEdit}
@@ -900,14 +974,11 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>{dict.SETTINGS_LABEL_SHIPPING_ADDRESS}</Label>
-                  <Textarea
-                    value={companyInfo.address || ""}
+                  <Label>{dict.SETTINGS_LABEL_NPWP}</Label>
+                  <Input
+                    value={companyInfo.npwp || ""}
                     onChange={(e) =>
-                      setCompanyInfo({
-                        ...companyInfo,
-                        address: e.target.value,
-                      })
+                      setCompanyInfo({ ...companyInfo, npwp: e.target.value })
                     }
                     disabled={!canEdit}
                   />
@@ -1055,22 +1126,49 @@ export default function SettingsPage() {
 
         {activeTab === "emails" && (
           <form onSubmit={handleSaveEmailCCs} className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {Object.entries(emailCCs).map(([k, v]) => (
-                <Card key={k} className="space-y-1 rounded border p-4">
-                  <Label className="capitalize">
-                    {k.replace("cc_", "")} CCs
-                  </Label>
-                  <Input
-                    value={v}
-                    onChange={(e) =>
-                      setEmailCCs((prev) => ({ ...prev, [k]: e.target.value }))
-                    }
-                    disabled={!canEdit}
-                  />
-                </Card>
-              ))}
-            </div>
+            {(
+              [
+                { key: "quotation", label: "Quotation" },
+                { key: "po", label: "Sales Order" },
+                { key: "do", label: "Delivery Order" },
+                { key: "invoice", label: "Invoice" },
+                { key: "payment", label: "Payment" },
+              ] as const
+            ).map(({ key, label }) => (
+              <Card key={key} className="space-y-3 rounded border p-4">
+                <h3 className="text-sm font-semibold">{label}</h3>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">CC</Label>
+                    <Input
+                      value={emailCCs[`cc_${key}`]}
+                      onChange={(e) =>
+                        setEmailCCs((prev) => ({
+                          ...prev,
+                          [`cc_${key}`]: e.target.value,
+                        }))
+                      }
+                      disabled={!canEdit}
+                      placeholder="email1@example.com, email2@example.com"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">BCC</Label>
+                    <Input
+                      value={emailBCCs[`bcc_${key}`]}
+                      onChange={(e) =>
+                        setEmailBCCs((prev) => ({
+                          ...prev,
+                          [`bcc_${key}`]: e.target.value,
+                        }))
+                      }
+                      disabled={!canEdit}
+                      placeholder="email1@example.com, email2@example.com"
+                    />
+                  </div>
+                </div>
+              </Card>
+            ))}
             {canEdit && (
               <div className="flex justify-end">
                 <Button type="submit" disabled={savingEmailCCs}>
@@ -1118,7 +1216,8 @@ export default function SettingsPage() {
                     {"{DD}"}, {"{SEQ:N}"}, {"{SEQ:N,Y}"}, {"{SEQ:N,M}"},{" "}
                     {"{SEQ:N,D}"}, {"{CUS}"}, {"{SUP}"}
                     <br />
-                    SEQ: N=padding, Y=yearly reset, M=monthly reset, D=daily reset
+                    SEQ: N=padding, Y=yearly reset, M=monthly reset, D=daily
+                    reset
                   </p>
                 </Card>
               ))}

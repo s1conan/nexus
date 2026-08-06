@@ -5,6 +5,7 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 interface SendEmailOptions {
   to: string | string[]
   cc?: string | string[]
+  bcc?: string | string[]
   subject: string
   html: string
   from?: string
@@ -22,6 +23,7 @@ interface SendEmailOptions {
 export async function sendEmail({
   to,
   cc,
+  bcc,
   subject,
   html,
   from,
@@ -39,6 +41,7 @@ export async function sendEmail({
       from: from || defaultFrom,
       to,
       cc,
+      bcc,
       subject,
       html,
       attachments,

@@ -1,0 +1,39 @@
+{
+  "id": "document-hash-verification",
+  "name": "Document Hash Verification via QR Code",
+  "status": "active",
+  "objective": "Replace QR-based document verification with SHA-256 hash verification — encode content hash in QR URL, server re-computes and compares hashes to prove data integrity",
+  "context_files": [
+    ".opencode/context/project-intelligence/technical-domain.md",
+    "coding-preferences.md",
+    "AGENTS.md",
+    "NIDS-blueprint.md"
+  ],
+  "reference_files": [
+    "nids-app/lib/pdf-generator.tsx",
+    "nids-app/app/api/verify-document/route.ts",
+    "nids-app/app/verify/[type]/[id]/page.tsx",
+    "nids-app/lib/site-content.ts",
+    "quotations_schema.sql",
+    "schema.sql"
+  ],
+  "exit_criteria": [
+    "lib/document-hash.ts canonical serialization + SHA-256 functions for quotation and invoice data",
+    "SQL migration adds content_hash column to quotations and invoices tables",
+    "quotations_schema.sql reflects content_hash column",
+    "PDF generator encodes hash in QR URL as ?h={sha256_hex}",
+    "PDF generator saves hash to DB at generation time",
+    "Verify API accepts hash from QR, recomputes from DB, compares",
+    "Verify API backward compatible — missing ?h= uses old manual-entry flow",
+    "Verify page auto-verifies from QR hash, shows match/mismatch status",
+    "Verify page backward compatible — no hash shows manual number entry",
+    "All labels from site-content.ts with en/id, no hardcoded text",
+    "TypeScript check passes (npx tsc --noEmit)",
+    "Lint passes (npx eslint)",
+    "Build passes (npm run build)"
+  ],
+  "subtask_count": 6,
+  "completed_count": 0,
+  "created_at": "2026-08-05T19:20:00.000Z",
+  "completed_at": null
+}

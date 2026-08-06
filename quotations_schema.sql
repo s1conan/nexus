@@ -45,6 +45,9 @@ CREATE TABLE IF NOT EXISTS public.quotations (
   -- Array of discounts: JSONB array of {label: string, value: number, terms: string}
   discounts JSONB DEFAULT '[]'::jsonb,
   
+  -- Cryptographic hash of canonical document data for QR-based verification
+  content_hash TEXT,
+  
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   created_by UUID REFERENCES auth.users(id)

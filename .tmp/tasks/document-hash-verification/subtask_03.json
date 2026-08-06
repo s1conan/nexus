@@ -1,0 +1,38 @@
+{
+  "id": "document-hash-verification-03",
+  "seq": "03",
+  "title": "Update pdf-generator.tsx — encode content hash in QR URL and save to DB",
+  "status": "completed",
+  "agent_id": "coder-agent",
+  "started_at": "2026-08-06T00:00:00Z",
+  "depends_on": ["01"],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/project-intelligence/technical-domain.md",
+    "coding-preferences.md",
+    "AGENTS.md"
+  ],
+  "reference_files": [
+    "nids-app/lib/pdf-generator.tsx",
+    "nids-app/lib/document-hash.ts"
+  ],
+  "acceptance_criteria": [
+    "Import computeHash and getQuotationCanonicalData / getInvoiceCanonicalData from document-hash.ts",
+    "In generateQuotationPDFReact: before QR generation, call getQuotationCanonicalData + computeHash to get sha256_hex",
+    "In generateInvoicePDFReact: before QR generation, call getInvoiceCanonicalData + computeHash to get sha256_hex",
+    "QR URL format changed to: /verify/{type}/{id}?h={sha256_hex}",
+    "After hash computed, save to DB: supabaseAdmin.from('quotations').update({ content_hash: hash }).eq('id', data.id)",
+    "After hash computed for invoice, save to DB: supabaseAdmin.from('invoices').update({ content_hash: hash }).eq('id', data.id)",
+    "DB save wrapped in try/catch — hash update failure should not block PDF generation",
+    "Import supabaseAdmin from @/lib/supabase-admin for server-side DB writes",
+    "Existing QR rendering code preserved — only URL encoding changes",
+    "Backward compatible: QR without hash still shows old URL format",
+    "Surgical edits only — change only QR URL generation lines and add hash computation block"
+  ],
+  "deliverables": [
+    "nids-app/lib/pdf-generator.tsx (updated)"
+  ],
+  "completed_at": "2026-08-06T00:00:00Z",
+  "completion_summary": "Added hash computation to QR URLs using document-hash, DB save via createClient on download, surgical edits to invoice and quotation QR blocks"
+}

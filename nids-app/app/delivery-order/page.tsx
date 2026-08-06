@@ -802,6 +802,7 @@ export default function DeliveryOrdersPage() {
       customerEmail: contacts[0]?.email || "",
       contacts: contacts,
       ccEmails: o.company?.details?.cc_emails || "",
+      bccEmails: o.company?.details?.bcc_emails || "",
       raw: o,
     })
   }
@@ -828,6 +829,26 @@ export default function DeliveryOrdersPage() {
             .filter((e: string) => e !== "")
         : []
       const ccList = [...new Set([...globalCcList, ...companyCcList])]
+
+      const { data: bccData } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("category", "email")
+        .eq("name", "bcc_do")
+        .single()
+      const globalBccList = bccData?.value
+        ? bccData.value
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const companyBccList = doc.bccEmails
+        ? doc.bccEmails
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const bccList = [...new Set([...globalBccList, ...companyBccList])]
       const pdfDataUri = await generateStandardDeliveryOrderPDF(
         companyInfo,
         doRecord,
@@ -929,6 +950,7 @@ export default function DeliveryOrdersPage() {
         body: JSON.stringify({
           to: doc.customerEmail,
           cc: ccList,
+          bcc: bccList,
           subject: `Delivery Order ${doc.title} - PT Anugerah Buana Sriwijaya`,
           html: emailHtml,
           attachments,

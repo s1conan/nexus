@@ -207,6 +207,7 @@ export const SITE_CONTENT = {
     LABEL_TOTAL: "Total",
     LABEL_TAX_INCLUDED: "Include Tax (PPN)",
     LABEL_TAX_AUTO_CALC: "Calculate tax automatically",
+    LABEL_DELIVERY_TAXABLE: "Include Delivery Fee in Tax (PPN)",
     LABEL_ENABLE_NOTE: "Enable Note",
     LABEL_INTERNAL_NOTE: "Internal Note",
     LABEL_DATES: "Dates",
@@ -349,6 +350,10 @@ export const SITE_CONTENT = {
     PLACEHOLDER_CC_EMAILS: "email1@example.com, email2@example.com",
     TOOLTIP_CC_EMAILS:
       "These emails will be CC'd on all company-related documents",
+    LABEL_BCC_EMAILS: "BCC Emails",
+    PLACEHOLDER_BCC_EMAILS: "email1@example.com, email2@example.com",
+    TOOLTIP_BCC_EMAILS:
+      "These emails will be BCC'd on all company-related documents",
 
     // General UI
     BUTTON_SAVE: "Save",
@@ -492,6 +497,7 @@ export const SITE_CONTENT = {
     SETTINGS_SEC_COMPANY: "Enterprise Identity Specifications",
     SETTINGS_LABEL_NPWP: "NPWP (Tax Number)",
     SETTINGS_LABEL_LOGO_URL: "Brand Logo URL",
+    SETTINGS_LABEL_HEADER_URL: "PDF Header Image URL",
     SETTINGS_LABEL_NPWP_ADDRESS: "NPWP Address",
     SETTINGS_LABEL_SHIPPING_ADDRESS: "Operational / Shipping Office Address",
     SETTINGS_PLACEHOLDER_NPWP_ADDRESS:
@@ -537,6 +543,9 @@ export const SITE_CONTENT = {
     VERIFY_SUCCESS_TITLE: "Authenticity Confirmed",
     VERIFY_SUCCESS_MSG:
       "This is an authentic document issued by PT Anugerah Buana Sriwijaya.",
+    VERIFY_MISMATCH_TITLE: "Authenticity Not Confirmed",
+    VERIFY_MISMATCH_MSG:
+      "This document's data may have been modified since this QR code was generated.",
     VERIFY_ERROR_TITLE: "Verification Failed",
     VERIFY_ERROR_MSG:
       "The quotation number does not match this record. Please check and try again.",
@@ -547,6 +556,17 @@ export const SITE_CONTENT = {
     VERIFY_LABEL_DATE: "Issue Date",
     VERIFY_LABEL_TOTAL: "Grand Total",
     VERIFY_BUTTON_DOWNLOAD_OFFICIAL: "Download Official PDF",
+
+    VERIFY_STATUS_HASH_MATCH: "Hash Matched",
+    VERIFY_STATUS_HASH_MISMATCH: "Hash Mismatch",
+    VERIFY_STATUS_HASH_MISMATCH_DESC:
+      "Document data may have been modified since this QR code was generated.",
+    VERIFY_STATUS_HASH_NOT_AVAILABLE:
+      "Hash verification not available for this document",
+    VERIFY_STATUS_HASH_VERIFIED: "Automatically verified via QR hash",
+    VERIFY_AUTO_VERIFYING: "Verifying document via QR code...",
+    VERIFY_LABEL_INVOICE_NUMBER: "Invoice Number",
+    VERIFY_PLACEHOLDER_INVOICE_NUMBER: "e.g. INV/2026/001",
   },
   id: {
     // Login Page
@@ -745,6 +765,7 @@ export const SITE_CONTENT = {
     LABEL_TOTAL: "Total",
     LABEL_TAX_INCLUDED: "Termasuk Pajak (PPN)",
     LABEL_TAX_AUTO_CALC: "Hitung pajak otomatis",
+    LABEL_DELIVERY_TAXABLE: "Masukkan Biaya Pengiriman dalam Pajak (PPN)",
     LABEL_ENABLE_NOTE: "Aktifkan Catatan",
     LABEL_INTERNAL_NOTE: "Catatan Internal",
     LABEL_DATES: "Tanggal",
@@ -888,6 +909,10 @@ export const SITE_CONTENT = {
     PLACEHOLDER_CC_EMAILS: "email1@contoh.com, email2@contoh.com",
     TOOLTIP_CC_EMAILS:
       "Email ini akan di-CC pada semua dokumen terkait perusahaan",
+    LABEL_BCC_EMAILS: "Email BCC",
+    PLACEHOLDER_BCC_EMAILS: "email1@contoh.com, email2@contoh.com",
+    TOOLTIP_BCC_EMAILS:
+      "Email ini akan di-BCC pada semua dokumen terkait perusahaan",
 
     // General UI
     BUTTON_SAVE: "Simpan",
@@ -1033,6 +1058,7 @@ export const SITE_CONTENT = {
     SETTINGS_SEC_COMPANY: "Spesifikasi Identitas Perusahaan",
     SETTINGS_LABEL_NPWP: "NPWP (Nomor Pajak)",
     SETTINGS_LABEL_LOGO_URL: "URL Logo Brand",
+    SETTINGS_LABEL_HEADER_URL: "URL Gambar Header PDF",
     SETTINGS_LABEL_NPWP_ADDRESS: "Alamat NPWP",
     SETTINGS_LABEL_SHIPPING_ADDRESS: "Alamat Kantor Operasional / Pengiriman",
     SETTINGS_PLACEHOLDER_NPWP_ADDRESS:
@@ -1078,6 +1104,9 @@ export const SITE_CONTENT = {
     VERIFY_SUCCESS_TITLE: "Keaslian Terkonfirmasi",
     VERIFY_SUCCESS_MSG:
       "Ini adalah dokumen asli yang diterbitkan oleh PT Anugerah Buana Sriwijaya.",
+    VERIFY_MISMATCH_TITLE: "Keaslian Tidak Terkonfirmasi",
+    VERIFY_MISMATCH_MSG:
+      "Data dokumen ini mungkin telah dimodifikasi sejak kode QR ini dibuat.",
     VERIFY_ERROR_TITLE: "Verifikasi Gagal",
     VERIFY_ERROR_MSG:
       "Nomor penawaran tidak cocok dengan catatan ini. Silakan periksa dan coba lagi.",
@@ -1088,6 +1117,17 @@ export const SITE_CONTENT = {
     VERIFY_LABEL_DATE: "Tanggal Terbit",
     VERIFY_LABEL_TOTAL: "Total",
     VERIFY_BUTTON_DOWNLOAD_OFFICIAL: "Unduh PDF Resmi",
+
+    VERIFY_STATUS_HASH_MATCH: "Hash Cocok",
+    VERIFY_STATUS_HASH_MISMATCH: "Hash Tidak Cocok",
+    VERIFY_STATUS_HASH_MISMATCH_DESC:
+      "Data dokumen mungkin telah dimodifikasi sejak kode QR ini dibuat.",
+    VERIFY_STATUS_HASH_NOT_AVAILABLE:
+      "Verifikasi hash tidak tersedia untuk dokumen ini",
+    VERIFY_STATUS_HASH_VERIFIED: "Terverifikasi otomatis melalui hash QR",
+    VERIFY_AUTO_VERIFYING: "Memverifikasi dokumen melalui kode QR...",
+    VERIFY_LABEL_INVOICE_NUMBER: "Nomor Faktur",
+    VERIFY_PLACEHOLDER_INVOICE_NUMBER: "misal: INV/2026/001",
   },
 }
 

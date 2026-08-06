@@ -1,0 +1,38 @@
+{
+  "id": "document-hash-verification-02",
+  "seq": "02",
+  "title": "SQL migration — add content_hash column to quotations and invoices, update schema files",
+  "status": "completed",
+  "agent_id": "coder-agent",
+  "started_at": "2026-08-06T00:00:00Z",
+  "completed_at": "2026-08-06T00:00:00Z",
+  "completion_summary": "Created add_content_hash.sql with ALTER TABLE for quotations & invoices; added content_hash TEXT to quotations_schema.sql (after discounts) and schema.sql invoices (after details)",
+  "depends_on": [],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/project-intelligence/technical-domain.md",
+    "coding-preferences.md",
+    "AGENTS.md"
+  ],
+  "reference_files": [
+    "quotations_schema.sql",
+    "schema.sql"
+  ],
+  "acceptance_criteria": [
+    "Create new SQL file: add_content_hash.sql with ALTER TABLE statements for both quotations and invoices",
+    "ALTER TABLE public.quotations ADD COLUMN IF NOT EXISTS content_hash TEXT",
+    "ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS content_hash TEXT",
+    "Add comment explaining the purpose: SHA-256 hash of canonical document data for QR verification",
+    "Update quotations_schema.sql: add content_hash TEXT column in the CREATE TABLE definition",
+    "Update schema.sql: add content_hash TEXT column in the CREATE TABLE invoices definition",
+    "content_hash is nullable — existing rows with NULL hash are backward compatible",
+    "No data loss risk — ADD COLUMN with no NOT NULL constraint",
+    "Surgical edits only — do not rewrite entire schema files"
+  ],
+  "deliverables": [
+    "add_content_hash.sql",
+    "quotations_schema.sql (updated)",
+    "schema.sql (updated)"
+  ]
+}

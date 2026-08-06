@@ -209,6 +209,7 @@ export default function InvoicePage() {
     is_note_enabled: true,
     tax_details: [] as any[],
     bank_accounts: [] as any[],
+    delivery_taxable: false,
   })
 
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
@@ -284,10 +285,12 @@ export default function InvoicePage() {
     const deliveryRate = selectedDOInfo.so?.delivery_price_per_litre || 0
     const deliveryTotal = qty * deliveryRate
     const subtotal = Math.max(0, Math.round(afterDiscount + deliveryTotal))
+    const deliveryTaxable = selectedDOInfo.so?.delivery_taxable ?? false
+    const taxableAmount = afterDiscount + (deliveryTaxable ? deliveryTotal : 0)
 
     const appliedTaxes = (formData.tax_details || []).map((t: any) => {
       const rate = Number(t.rate) || 0
-      const amount = t.enabled ? (subtotal * rate) / 100 : 0
+      const amount = t.enabled ? (Math.max(0, taxableAmount) * rate) / 100 : 0
       return { ...t, amount }
     })
     const taxTotal = appliedTaxes.reduce(
@@ -306,6 +309,7 @@ export default function InvoicePage() {
       afterDiscount,
       deliveryRate,
       deliveryTotal,
+      deliveryTaxable,
       subtotal,
       appliedTaxes,
       taxTotal,
@@ -394,7 +398,7 @@ export default function InvoicePage() {
         let query = supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance)), po:sales_orders(id, so_number, tax_details)"
+            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
           )
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -540,7 +544,7 @@ export default function InvoicePage() {
         supabase
           .from("delivery_orders")
           .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance)"
+            "*, company:companies!delivery_orders_company_id_fkey(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, delivery_taxable)"
           )
           .eq("id", item.do_id)
           .maybeSingle()
@@ -591,6 +595,7 @@ export default function InvoicePage() {
         is_note_enabled: item.is_note_enabled ?? true,
         tax_details: savedTaxes,
         bank_accounts: initialSelectedBanks,
+        delivery_taxable: item.delivery_taxable ?? false,
       })
     } else {
       if (!canInsert) return
@@ -615,6 +620,7 @@ export default function InvoicePage() {
         is_note_enabled: true,
         tax_details: [],
         bank_accounts: [],
+        delivery_taxable: false,
       })
     }
     setIsOpen(true)
@@ -693,7 +699,7 @@ export default function InvoicePage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance)), po:sales_orders(id, so_number, tax_details)"
+            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
           )
           .eq("id", editingItem.id)
           .single()
@@ -922,6 +928,7 @@ export default function InvoicePage() {
         customerEmail: contacts[0]?.email || "",
         contacts: contacts,
         ccEmails: q.company?.details?.cc_emails || "",
+        bccEmails: q.company?.details?.bcc_emails || "",
         raw: q,
       })
     } catch (err: any) {
@@ -967,6 +974,26 @@ export default function InvoicePage() {
             .filter((e: string) => e !== "")
         : []
       const ccList = [...new Set([...globalCcList, ...companyCcList])]
+
+      const { data: bccData } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("category", "email")
+        .eq("name", "bcc_invoice")
+        .single()
+      const globalBccList = bccData?.value
+        ? bccData.value
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const companyBccList = doc.bccEmails
+        ? doc.bccEmails
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const bccList = [...new Set([...globalBccList, ...companyBccList])]
       const pdfDataUri = await generateStandardInvoicePDF(companyInfo, inv, {
         save: false,
         output: "datauri",
@@ -1057,6 +1084,7 @@ export default function InvoicePage() {
         body: JSON.stringify({
           to: doc.customerEmail,
           cc: ccList,
+          bcc: bccList,
           subject: `Invoice ${doc.title} - PT Anugerah Buana Sriwijaya`,
           html: emailHtml,
           attachments,
@@ -1311,7 +1339,7 @@ export default function InvoicePage() {
                               let q = supabase
                                 .from("delivery_orders")
                                 .select(
-                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance)"
+                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, delivery_taxable)"
                                 )
                                 .in("status", ["Shipped", "Delivered"])
                                 .limit(8)
@@ -1377,6 +1405,7 @@ export default function InvoicePage() {
                               issue_date: item.do_date || formData.issue_date,
                               subtotal: calcSubtotal,
                               tax_details: soTaxes,
+                              delivery_taxable: item?.so?.delivery_taxable ?? false,
                             })
                             setSelectedDOInfo(item)
                           }}

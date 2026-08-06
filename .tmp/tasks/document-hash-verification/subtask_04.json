@@ -1,0 +1,41 @@
+{
+  "id": "document-hash-verification-04",
+  "seq": "04",
+  "title": "Update verify-document API — accept hash from QR, recompute from DB, compare",
+  "status": "completed",
+  "agent_id": "coder-agent",
+  "started_at": "2026-08-06T02:30:00Z",
+  "completed_at": "2026-08-06T02:32:00Z",
+  "completion_summary": "Updated verify-document API with hash verification: imports document-hash functions, accepts optional hash field, computes server hash for quotation/invoice types, returns hashMatch/hashProvided/hashComputed, backward compatible when hash absent, error handling via try/catch",
+  "depends_on": ["01"],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/project-intelligence/technical-domain.md",
+    "coding-preferences.md",
+    "AGENTS.md"
+  ],
+  "reference_files": [
+    "nids-app/app/api/verify-document/route.ts",
+    "nids-app/lib/document-hash.ts"
+  ],
+  "acceptance_criteria": [
+    "Request body now accepts optional 'hash' field: { uuid, number, type, hash? }",
+    "If hash is provided: fetch document from DB, call getQuotationCanonicalData / getInvoiceCanonicalData, compute hash server-side with computeHashServer",
+    "Compare provided hash with computed hash — return result with hashMatch: true/false and hashProvided/hashComputed fields",
+    "If hash matches AND number matches: return { success: true, hashMatch: true, document, companyInfo }",
+    "If hash does NOT match but number matches: return { success: true, hashMatch: false, document, companyInfo, hashWarning: '...message...' }",
+    "If hash is not provided: fallback to existing behavior (number-only verification) — fully backward compatible",
+    "Import getQuotationCanonicalData, getInvoiceCanonicalData, computeHashServer from document-hash.ts",
+    "Use dynamic import for document-hash or ensure it works in Node.js runtime (only use computeHashServer, not Web Crypto)",
+    "Hash verification is additive — existing number verification flow untouched when hash absent",
+    "Error handling: hash computation failure returns { hashMatch: false, hashError: '...' } without breaking verification"
+  ],
+  "deliverables": [
+    "nids-app/app/api/verify-document/route.ts (updated)"
+  ],
+  "started_at": null,
+  "completed_at": null,
+  "completion_summary": null,
+  "agent_id": null
+}

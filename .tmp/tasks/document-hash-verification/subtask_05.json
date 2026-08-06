@@ -1,0 +1,41 @@
+{
+  "id": "document-hash-verification-05",
+  "seq": "05",
+  "title": "Update site-content.ts — add hash verification dictionary keys for en and id",
+  "status": "completed",
+  "agent_id": "coder-agent",
+  "started_at": "2026-08-06T00:00:00Z",
+  "completed_at": "2026-08-06T00:00:00Z",
+  "completion_summary": "Added VERIFY_STATUS_HASH_* and VERIFY_LABEL_INVOICE_*/VERIFY_PLACEHOLDER_INVOICE_* keys to both en and id sections in site-content.ts",
+  "depends_on": [],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    ".opencode/context/project-intelligence/technical-domain.md",
+    "coding-preferences.md",
+    "AGENTS.md"
+  ],
+  "reference_files": [
+    "nids-app/lib/site-content.ts"
+  ],
+  "acceptance_criteria": [
+    "Add to en section (after existing VERIFY_ keys, before closing bracket):",
+    "Add to id section (after existing VERIFY_ keys, before closing bracket):",
+    "VERIFY_STATUS_HASH_MATCH: 'Hash Matched' / 'Hash Cocok'",
+    "VERIFY_STATUS_HASH_MISMATCH: 'Hash Mismatch' / 'Hash Tidak Cocok'",
+    "VERIFY_STATUS_HASH_MISMATCH_DESC: 'Document data may have been modified since this QR code was generated.' / 'Data dokumen mungkin telah dimodifikasi sejak kode QR ini dibuat.'",
+    "VERIFY_STATUS_HASH_NOT_AVAILABLE: 'Hash verification not available for this document' / 'Verifikasi hash tidak tersedia untuk dokumen ini'",
+    "VERIFY_STATUS_HASH_VERIFIED: 'Automatically verified via QR hash' / 'Terverifikasi otomatis melalui hash QR'",
+    "VERIFY_LABEL_INVOICE_NUMBER: 'Invoice Number' / 'Nomor Faktur'",
+    "VERIFY_PLACEHOLDER_INVOICE_NUMBER: 'e.g. INV/2026/001' / 'misal: INV/2026/001'",
+    "No other dictionary keys removed or reformatted",
+    "Surgical edits — add keys exactly at the right position, preserve surrounding formatting"
+  ],
+  "deliverables": [
+    "nids-app/lib/site-content.ts (updated)"
+  ],
+  "started_at": null,
+  "completed_at": null,
+  "completion_summary": null,
+  "agent_id": null
+}

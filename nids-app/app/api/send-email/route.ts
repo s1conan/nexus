@@ -3,7 +3,7 @@ import { sendEmail } from "@/lib/email"
 
 export async function POST(request: Request) {
   try {
-    const { to, cc, subject, html, from, attachments } = await request.json()
+    const { to, cc, bcc, subject, html, from, attachments } = await request.json()
 
     if (!to || !subject || !html) {
       return NextResponse.json(
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const result = await sendEmail({ to, cc, subject, html, from, attachments })
+    const result = await sendEmail({ to, cc, bcc, subject, html, from, attachments })
     return NextResponse.json(result)
   } catch (err: any) {
     console.error("API Send Email Error:", err)

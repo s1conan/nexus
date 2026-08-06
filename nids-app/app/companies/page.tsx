@@ -134,6 +134,7 @@ export default function CompaniesPage() {
     city: "",
     other_info: "",
     cc_emails: "",
+    bcc_emails: "",
     is_active: true,
   })
 
@@ -327,6 +328,7 @@ export default function CompaniesPage() {
         city: details.city || "",
         other_info: details.other_info || "",
         cc_emails: details.cc_emails || "",
+        bcc_emails: details.bcc_emails || "",
         is_active: company.is_active ?? true,
       })
     } else {
@@ -344,6 +346,7 @@ export default function CompaniesPage() {
         city: "",
         other_info: "",
         cc_emails: "",
+        bcc_emails: "",
         is_active: true,
       })
     }
@@ -489,6 +492,7 @@ export default function CompaniesPage() {
         city: formData.city,
         other_info: formData.other_info,
         cc_emails: formData.cc_emails,
+        bcc_emails: formData.bcc_emails,
       },
     }
     try {
@@ -823,6 +827,29 @@ export default function CompaniesPage() {
                               }
                               placeholder={dict.PLACEHOLDER_CC_EMAILS}
                               title={dict.TOOLTIP_CC_EMAILS}
+                            />
+                          </div>
+                        </div>
+                        {/* BCC Emails Field - spans 2 columns on desktop */}
+                        <div className="flex flex-col gap-2 md:col-span-2">
+                          <Label htmlFor="bcc_emails" className="text-xs">
+                            {dict.LABEL_BCC_EMAILS}
+                          </Label>
+                          <div className="relative">
+                            <Mail className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
+                            <Input
+                              id="bcc_emails"
+                              type="text"
+                              className="pl-9"
+                              value={formData.bcc_emails}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  bcc_emails: e.target.value,
+                                })
+                              }
+                              placeholder={dict.PLACEHOLDER_BCC_EMAILS}
+                              title={dict.TOOLTIP_BCC_EMAILS}
                             />
                           </div>
                         </div>

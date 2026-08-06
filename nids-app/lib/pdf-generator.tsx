@@ -12,6 +12,13 @@ import {
 import { format } from "date-fns"
 import { id as dateLocaleId } from "date-fns/locale"
 import { formatNumber } from "./formatters"
+import {
+  computeHash,
+  canonicalSerialize,
+  getQuotationCanonicalData,
+  getInvoiceCanonicalData,
+} from "@/lib/document-hash"
+import { createClient } from "@/lib/supabase"
 import QRCode from "qrcode"
 
 Font.register({
@@ -29,6 +36,7 @@ export interface CompanyInfo {
   email: string
   phone?: string
   logo_url?: string
+  header_url?: string
 }
 
 export interface QuotationData {
@@ -63,6 +71,7 @@ export interface QuotationData {
     branch: string
   }[]
   tax_details: { name: string; rate: number; enabled: boolean }[]
+  delivery_taxable?: boolean
   qr_code_url?: string
 }
 
@@ -80,6 +89,7 @@ export interface SalesOrderData {
   discount: number
   delivery_price_per_litre: number
   tax_details: { name: string; rate: number; enabled: boolean }[]
+  delivery_taxable?: boolean
   term_of_payment: string
   delivery_address: string
   note: string
@@ -106,6 +116,7 @@ export interface InvoiceData {
   delivery_price_per_litre: number
   subtotal: number
   tax_details: { name: string; rate: number; enabled: boolean }[]
+  delivery_taxable?: boolean
   total_amount: number
   note: string
   is_note_enabled: boolean
@@ -333,12 +344,18 @@ const a4Styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 5,
   },
-  logo: { width: 70, height: 70, marginRight: 10 },
-  companyInfo: { fontSize: 11, textSpacing: 1, lineHeight: 1.5 },
+  logo: { width: 139, height: 70, marginRight: 1, marginBottom: 3 },
+  companyInfo: {
+    fontSize: 11,
+    textSpacing: 0.9,
+    lineHeight: 1.4,
+    width: 390,
+    alignSelf: "flex-end",
+  },
   companyName: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 8,
+    marginBottom: 15,
     textSpacing: 2,
   },
   blueLine: { height: 2, backgroundColor: "#1e3a8a", marginBottom: 10 },
@@ -604,8 +621,11 @@ const QuotationDocument = ({
     <Document>
       <Page size="A4" style={a4Styles.page}>
         <View style={a4Styles.header}>
-          {company.logo_url && (
-            <Image src={company.logo_url} style={a4Styles.logo} />
+          {(company.header_url || company.logo_url) && (
+            <Image
+              src={company.header_url || company.logo_url}
+              style={a4Styles.logo}
+            />
           )}
           <View style={a4Styles.companyInfo}>
             <Text style={a4Styles.companyName}>{company.name}</Text>
@@ -766,6 +786,34 @@ const QuotationDocument = ({
               </View>
             ))}
           </View>
+          {data.delivery_taxable && Number(data.delivery_price) > 0 && (
+            <View style={a4Styles.tableRow}>
+              <View style={[a4Styles.cell, { width: 170 }]}>
+                <Text>Biaya Pengiriman</Text>
+              </View>
+              <View
+                style={[
+                  a4Styles.cell,
+                  a4Styles.center,
+                  { width: 30, height: 22, top: 2 },
+                ]}
+              >
+                <Text> </Text>
+              </View>
+              {data.discounts.map((d, i) => (
+                <View
+                  key={i}
+                  style={[
+                    a4Styles.cell,
+                    a4Styles.right,
+                    { width: discountColumnWidth },
+                  ]}
+                >
+                  <Text>{formatNumber(Math.round(d.delivery_cost ?? 0))}</Text>
+                </View>
+              ))}
+            </View>
+          )}
           {data.tax_details
             ?.filter((t) => t.enabled)
             .map((tax, taxIdx) => (
@@ -781,8 +829,11 @@ const QuotationDocument = ({
                     data.base_price * (d.value / 100)
                   )
                   const baseABS = data.base_price - discountValue
+                  const taxableBase = data.delivery_taxable
+                    ? baseABS + (d.delivery_cost ?? 0)
+                    : baseABS
                   const taxAmount = Math.round(
-                    baseABS * (Number(tax.rate) / 100)
+                    taxableBase * (Number(tax.rate) / 100)
                   )
                   return (
                     <View
@@ -799,7 +850,7 @@ const QuotationDocument = ({
                 })}
               </View>
             ))}
-          {Number(data.delivery_price) > 0 && (
+          {!data.delivery_taxable && Number(data.delivery_price) > 0 && (
             <View style={a4Styles.tableRow}>
               <View style={[a4Styles.cell, { width: 170 }]}>
                 <Text>Biaya Pengiriman</Text>
@@ -841,16 +892,21 @@ const QuotationDocument = ({
                 data.base_price * (d.value / 100)
               )
               const baseABS = data.base_price - discountValue
+              const deliveryCost = Math.round(d.delivery_cost ?? 0)
+              const taxableBase = data.delivery_taxable
+                ? baseABS + deliveryCost
+                : baseABS
               let totalTaxes = 0
               if (data.tax_details) {
                 data.tax_details
                   .filter((t) => t.enabled)
                   .forEach((tax) => {
-                    totalTaxes += Math.round(baseABS * (Number(tax.rate) / 100))
+                    totalTaxes += Math.round(
+                      taxableBase * (Number(tax.rate) / 100)
+                    )
                   })
               }
-              const total =
-                baseABS + totalTaxes + Math.round(d.delivery_cost ?? 0)
+              const total = baseABS + totalTaxes + deliveryCost
               return (
                 <View
                   key={i}
@@ -958,12 +1014,12 @@ const SalesOrderDocument = ({
   const discountAmount = subtotal * (data.discount / 100)
   const afterDiscount = subtotal - discountAmount
   const deliveryTotal = data.quantity * data.delivery_price_per_litre
+  const taxableAmount =
+    afterDiscount + (data.delivery_taxable ? deliveryTotal : 0)
   const enabledTaxes = data.tax_details.filter((t) => t.enabled)
   const taxLines = enabledTaxes.map((t) => ({
     name: t.name,
-    amount: Math.round(
-      (afterDiscount + deliveryTotal) * (Number(t.rate) / 100)
-    ),
+    amount: Math.round(Math.max(0, taxableAmount) * (Number(t.rate) / 100)),
   }))
   const grandTotal =
     afterDiscount +
@@ -973,8 +1029,11 @@ const SalesOrderDocument = ({
     <Document>
       <Page size="A4" style={a4Styles.page}>
         <View style={a4Styles.header}>
-          {company.logo_url && (
-            <Image src={company.logo_url} style={a4Styles.logo} />
+          {(company.header_url || company.logo_url) && (
+            <Image
+              src={company.header_url || company.logo_url}
+              style={a4Styles.logo}
+            />
           )}
           <View style={a4Styles.companyInfo}>
             <Text style={a4Styles.companyName}>{company.name}</Text>
@@ -1523,8 +1582,11 @@ const PaymentDocument = ({
     <Document>
       <Page size="A4" style={a4Styles.page}>
         <View style={a4Styles.header}>
-          {company.logo_url && (
-            <Image src={company.logo_url} style={a4Styles.logo} />
+          {(company.header_url || company.logo_url) && (
+            <Image
+              src={company.header_url || company.logo_url}
+              style={a4Styles.logo}
+            />
           )}
           <View style={a4Styles.companyInfo}>
             <Text style={a4Styles.companyName}>{company.name}</Text>
@@ -1680,10 +1742,14 @@ const InvoiceDocument = ({
   data: InvoiceData
 }) => {
   const subtotal = data.subtotal
+  const deliveryTotal = data.quantity * data.delivery_price_per_litre
+  const taxableAmount = data.delivery_taxable
+    ? subtotal
+    : subtotal - deliveryTotal
   const enabledTaxes = data.tax_details.filter((t) => t.enabled)
   const taxLines = enabledTaxes.map((t) => ({
     name: t.name,
-    amount: Math.round(subtotal * (Number(t.rate) / 100)),
+    amount: Math.round(Math.max(0, taxableAmount) * (Number(t.rate) / 100)),
   }))
   const grandTotal = subtotal + taxLines.reduce((sum, t) => sum + t.amount, 0)
 
@@ -1691,8 +1757,11 @@ const InvoiceDocument = ({
     <Document>
       <Page size="A4" style={a4Styles.page}>
         <View style={a4Styles.header}>
-          {company.logo_url && (
-            <Image src={company.logo_url} style={a4Styles.logo} />
+          {(company.header_url || company.logo_url) && (
+            <Image
+              src={company.header_url || company.logo_url}
+              style={a4Styles.logo}
+            />
           )}
           <View style={a4Styles.companyInfo}>
             <Text style={a4Styles.companyName}>{company.name}</Text>
@@ -1903,7 +1972,8 @@ const InvoiceDocument = ({
 async function generateInvoicePDFReact(
   company: CompanyInfo,
   data: InvoiceData,
-  options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
+  options: { save?: boolean; output?: "datauri" | "blob" } = { save: true },
+  contentHash?: string
 ) {
   const processedCompany = { ...company }
   let qrCodeDataUrl: string | undefined = undefined
@@ -1913,11 +1983,24 @@ async function generateInvoicePDFReact(
         typeof window !== "undefined"
           ? window.location.origin
           : process.env.NEXT_PUBLIC_APP_URL || ""
-      const verifyUrl = `${origin}/verify/invoice/${data.id}`
+      const verifyUrl = contentHash
+        ? `${origin}/verify/invoice/${data.id}?h=${contentHash}`
+        : `${origin}/verify/invoice/${data.id}`
       qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, {
         margin: 1,
         width: 200,
       })
+      if (options.save && contentHash) {
+        try {
+          const supabase = createClient()
+          await supabase
+            .from("invoices")
+            .update({ content_hash: contentHash })
+            .eq("id", data.id)
+        } catch (dbErr) {
+          console.error("Failed to save content hash to DB:", dbErr)
+        }
+      }
     } catch (err) {
       console.error("Failed to generate QR code:", err)
     }
@@ -1992,12 +2075,24 @@ export async function generateStandardInvoicePDF(
   const deliveryPricePerLitre = inv.do?.so?.delivery_price_per_litre || 0
   const subtotal = quantity * unitPrice + quantity * deliveryPricePerLitre
 
+  // Compute hash from the RAW DB row so it matches server-side verification.
+  let contentHash: string | undefined
+  try {
+    const canonicalData = getInvoiceCanonicalData(
+      inv as unknown as Record<string, unknown>
+    )
+    contentHash = await computeHash(canonicalSerialize(canonicalData))
+  } catch (err) {
+    console.error("Failed to compute content hash:", err)
+  }
+
   return await generateInvoicePDFReact(
     {
       name: companyInfo?.name || "PT Anugerah Buana Sriwijaya",
       address: companyInfo?.address || "",
       email: companyInfo?.email || "",
       logo_url: companyInfo?.logo_url,
+      header_url: companyInfo?.header_url,
     },
     {
       id: inv.id,
@@ -2012,19 +2107,23 @@ export async function generateStandardInvoicePDF(
       delivery_price_per_litre: deliveryPricePerLitre,
       subtotal,
       tax_details: inv.tax_details || [],
+      delivery_taxable:
+        inv.do?.so?.delivery_taxable ?? inv.delivery_taxable ?? false,
       total_amount: inv.total_amount || 0,
       note: inv.is_note_enabled ? inv.note : "",
       is_note_enabled: true,
       bank_accounts: inv.bank_accounts || [],
     },
-    options
+    options,
+    contentHash
   )
 }
 
 async function generateQuotationPDFReact(
   company: CompanyInfo,
   data: QuotationData,
-  options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
+  options: { save?: boolean; output?: "datauri" | "blob" } = { save: true },
+  contentHash?: string
 ) {
   const processedCompany = { ...company }
   let qrCodeDataUrl: string | undefined = undefined
@@ -2034,11 +2133,24 @@ async function generateQuotationPDFReact(
         typeof window !== "undefined"
           ? window.location.origin
           : process.env.NEXT_PUBLIC_APP_URL || ""
-      const verifyUrl = `${origin}/verify/quotation/${data.id}`
+      const verifyUrl = contentHash
+        ? `${origin}/verify/quotation/${data.id}?h=${contentHash}`
+        : `${origin}/verify/quotation/${data.id}`
       qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, {
         margin: 1,
         width: 200,
       })
+      if (options.save && contentHash) {
+        try {
+          const supabase = createClient()
+          await supabase
+            .from("quotations")
+            .update({ content_hash: contentHash })
+            .eq("id", data.id)
+        } catch (dbErr) {
+          console.error("Failed to save content hash to DB:", dbErr)
+        }
+      }
     } catch (err) {
       console.error("Failed to generate QR code:", err)
     }
@@ -2076,12 +2188,26 @@ export async function generateStandardQuotationPDF(
   q: any,
   options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
 ) {
+  // Compute hash from the RAW DB row so it matches server-side verification.
+  // The shaped QuotationData below uses different key names (min_order, shrinkage)
+  // and omits fields, so hashing it would never match the API's raw-row hash.
+  let contentHash: string | undefined
+  try {
+    const canonicalData = getQuotationCanonicalData(
+      q as unknown as Record<string, unknown>
+    )
+    contentHash = await computeHash(canonicalSerialize(canonicalData))
+  } catch (err) {
+    console.error("Failed to compute content hash:", err)
+  }
+
   return await generateQuotationPDFReact(
     {
       name: companyInfo?.name || "PT Anugerah Buana Sriwijaya",
       address: companyInfo?.address || "",
       email: companyInfo?.email || "",
       logo_url: companyInfo?.logo_url,
+      header_url: companyInfo?.header_url,
     },
     {
       id: q.id,
@@ -2104,8 +2230,10 @@ export async function generateStandardQuotationPDF(
       closing_remarks: q.is_closing_enabled ? q.closing_remarks : "",
       bank_accounts: q.bank_accounts || [],
       tax_details: q.tax_details || [],
+      delivery_taxable: q.delivery_taxable ?? false,
     },
-    options
+    options,
+    contentHash
   )
 }
 
@@ -2143,6 +2271,7 @@ export async function generateStandardSalesOrderPDF(
       address: companyInfo?.address || "",
       email: companyInfo?.email || "",
       logo_url: companyInfo?.logo_url,
+      header_url: companyInfo?.header_url,
     },
     {
       id: so.id,
@@ -2158,6 +2287,7 @@ export async function generateStandardSalesOrderPDF(
       discount: so.discount || 0,
       delivery_price_per_litre: so.delivery_price_per_litre || 0,
       tax_details: so.tax_details || [],
+      delivery_taxable: so.delivery_taxable ?? false,
       term_of_payment: so.term_of_payment || "",
       delivery_address: so.delivery_address || "",
       note: so.note || "",
@@ -2227,6 +2357,7 @@ export async function generateStandardDeliveryOrderPDF(
       address: companyInfo?.address || "",
       email: companyInfo?.email || "",
       logo_url: companyInfo?.logo_url || "/images/company-logo.jpg",
+      header_url: companyInfo?.header_url,
     },
     {
       id: doRecord.id,
@@ -2298,6 +2429,7 @@ export async function generateStandardPaymentPDF(
       address: companyInfo?.address || "",
       email: companyInfo?.email || "",
       logo_url: companyInfo?.logo_url || "/images/company-logo.jpg",
+      header_url: companyInfo?.header_url,
     },
     {
       id: payment.id,

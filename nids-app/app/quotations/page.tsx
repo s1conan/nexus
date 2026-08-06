@@ -185,6 +185,7 @@ export default function QuotationsPage() {
     }[],
     bank_accounts: [] as any[],
     tax_details: [] as any[],
+    delivery_taxable: false,
   }))
 
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
@@ -490,6 +491,7 @@ export default function QuotationsPage() {
         })),
         bank_accounts: initialSelectedBanks,
         tax_details: mergedTaxes,
+        delivery_taxable: item.delivery_taxable ?? false,
       })
     } else {
       if (!canInsert) return
@@ -562,6 +564,7 @@ export default function QuotationsPage() {
           rate: gt.value,
           enabled: false,
         })),
+        delivery_taxable: false,
       })
     }
     setIsOpen(true)
@@ -628,7 +631,9 @@ export default function QuotationsPage() {
                 rate: t.rate,
                 enabled: t.enabled,
               }))
-            )
+            ) ||
+          (payload.delivery_taxable ?? false) !==
+            (editingItem.delivery_taxable ?? false)
 
         if (hasDataChanged) {
           payload.status = "Draft"
@@ -825,6 +830,7 @@ export default function QuotationsPage() {
         customerEmail: contacts[0]?.email || "",
         contacts: contacts,
         ccEmails: q.company?.details?.cc_emails || "",
+        bccEmails: q.company?.details?.bcc_emails || "",
         raw: q,
       })
     } catch (err: any) {
@@ -867,6 +873,26 @@ export default function QuotationsPage() {
             .filter((e: string) => e !== "")
         : []
       const ccList = [...new Set([...globalCcList, ...companyCcList])]
+
+      const { data: bccData } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("category", "email")
+        .eq("name", "bcc_quotation")
+        .single()
+      const globalBccList = bccData?.value
+        ? bccData.value
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const companyBccList = doc.bccEmails
+        ? doc.bccEmails
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const bccList = [...new Set([...globalBccList, ...companyBccList])]
       const pdfDataUri = await generateStandardQuotationPDF(companyInfo, q, {
         save: false,
         output: "datauri",
@@ -960,6 +986,7 @@ export default function QuotationsPage() {
         body: JSON.stringify({
           to: doc.customerEmail,
           cc: ccList,
+          bcc: bccList,
           subject: `Quotation ${doc.title} - PT Anugerah Buana Sriwijaya`,
           html: emailHtml,
           attachments,
@@ -1094,16 +1121,16 @@ export default function QuotationsPage() {
   // Calculation logic for Quotation Unit Price
   const totals = useMemo(() => {
     const subtotal = formData.base_price
-    let taxTotal = 0
+    const taxableAmount = subtotal + (formData.delivery_taxable ? formData.delivery_price : 0)
     const appliedTaxes = formData.tax_details.map((t) => {
       if (!t.enabled) return { ...t, amount: 0 }
-      const amt = (subtotal * Number(t.rate)) / 100
-      taxTotal += amt
+      const amt = (taxableAmount * Number(t.rate)) / 100
       return { ...t, amount: amt }
     })
+    const taxTotal = appliedTaxes.reduce((sum, t) => sum + t.amount, 0)
     const grandTotal = subtotal + taxTotal + formData.delivery_price
     return { subtotal, taxTotal, grandTotal, appliedTaxes }
-  }, [formData.base_price, formData.delivery_price, formData.tax_details])
+  }, [formData.base_price, formData.delivery_price, formData.delivery_taxable, formData.tax_details])
 
   if (!canView && !loading && !authLoading) {
     return (
@@ -1581,6 +1608,22 @@ export default function QuotationsPage() {
                         <Label className="block border-b pb-2 text-xs font-bold tracking-wider text-muted-foreground uppercase">
                           {dict.LABEL_TAXES || "Taxes"}
                         </Label>
+                        {/* Delivery Taxable Toggle */}
+                        <div className="flex items-center justify-between rounded border bg-background p-3">
+                          <Label
+                            htmlFor="delivery-taxable"
+                            className="cursor-pointer text-xs font-medium"
+                          >
+                            {dict.LABEL_DELIVERY_TAXABLE || "Include Delivery Fee in Tax (PPN)"}
+                          </Label>
+                          <Switch
+                            id="delivery-taxable"
+                            checked={formData.delivery_taxable}
+                            onCheckedChange={(val) =>
+                              setFormData({ ...formData, delivery_taxable: val })
+                            }
+                          />
+                        </div>
                         <div className="space-y-2">
                           {formData.tax_details.map((tax, idx) => {
                             const calculatedAmount =

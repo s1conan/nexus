@@ -277,6 +277,7 @@ CREATE TABLE invoices (
   amount_due NUMERIC(12,2) DEFAULT 0,
   status TEXT DEFAULT 'Unpaid',
   details JSONB DEFAULT '{}',
+  content_hash TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

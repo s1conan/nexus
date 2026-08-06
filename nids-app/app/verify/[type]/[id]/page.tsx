@@ -1,8 +1,8 @@
 "use client"
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState } from "react"
-import { useParams } from "next/navigation"
-import { createClient } from "@/lib/supabase"
+import { useState, useEffect } from "react"
+import { useParams, useSearchParams } from "next/navigation"
 import { useDictionary } from "@/components/dictionary-provider"
 import {
   Card,
@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import {
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   ShieldCheck,
   Download,
   Languages,
@@ -32,6 +33,9 @@ export default function VerificationPage() {
   const { id: uuid, type } = useParams()
   const { dict, lang, setLanguage } = useDictionary()
 
+  const searchParams = useSearchParams()
+  const hashFromQR = searchParams.get("h")
+
   const [inputNumber, setInputNumber] = useState("")
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -41,6 +45,66 @@ export default function VerificationPage() {
   const [companyInfo, setCompanyInfo] = useState<any>(null)
   const [attempts, setAttempts] = useState(0)
   const [lastAttemptTime, setLastAttemptTime] = useState(0)
+  const [hashStatus, setHashStatus] = useState<
+    "match" | "mismatch" | "error" | null
+  >(null)
+
+  const autoVerifyWithHash = async () => {
+    // Basic Rate Limiting (Client-side)
+    const now = Date.now()
+    if (attempts >= 5 && now - lastAttemptTime < 60000) {
+      setError(dict.VERIFY_ERROR_RATE_LIMIT)
+      return
+    }
+
+    setLoading(true)
+    try {
+      const res = await fetch("/api/verify-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uuid, number: "", type, hash: hashFromQR }),
+      })
+
+      const result = await res.json()
+
+      if (res.ok && result.success) {
+        const q = result.document
+        const cInfo = result.companyInfo
+        setVerifiedDoc(q)
+        setCompanyInfo(cInfo)
+        const docNumber =
+          q.quotation_number || q.invoice_number || q.do_number || ""
+        setInputNumber(docNumber)
+        setAttempts(0)
+
+        if (result.hashMatch !== undefined) {
+          setHashStatus(result.hashMatch ? "match" : "mismatch")
+        }
+
+        if (cInfo && type === "quotation") {
+          const pdfUri = await generateStandardQuotationPDF(cInfo, q, {
+            save: false,
+            output: "datauri",
+          })
+          setPdfData(pdfUri as string)
+        }
+      } else {
+        setAttempts((prev) => prev + 1)
+        setLastAttemptTime(Date.now())
+        throw new Error(result.error || dict.VERIFY_ERROR_MSG)
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!hashFromQR) return
+    autoVerifyWithHash()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,7 +122,12 @@ export default function VerificationPage() {
       const res = await fetch("/api/verify-document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uuid, number: inputNumber, type }),
+        body: JSON.stringify({
+          uuid,
+          number: inputNumber,
+          type,
+          ...(hashFromQR ? { hash: hashFromQR } : {}),
+        }),
       })
 
       const result = await res.json()
@@ -69,6 +138,10 @@ export default function VerificationPage() {
         setVerifiedDoc(q)
         setCompanyInfo(cInfo)
         setAttempts(0)
+
+        if (result.hashMatch !== undefined) {
+          setHashStatus(result.hashMatch ? "match" : "mismatch")
+        }
 
         // Automatically generate PDF preview (Currently only supported for Quotations)
         if (cInfo && type === "quotation") {
@@ -152,6 +225,16 @@ export default function VerificationPage() {
         </div>
 
         {!verifiedDoc ? (
+          hashFromQR && loading ? (
+            <Card className="border-slate-200 shadow-xl">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="size-8 animate-spin text-slate-400" />
+                <p className="mt-4 text-sm text-slate-500">
+                  {dict.VERIFY_AUTO_VERIFYING}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
           <Card className="border-slate-200 shadow-xl">
             <CardHeader>
               <CardTitle className="text-lg font-semibold">
@@ -195,18 +278,65 @@ export default function VerificationPage() {
               </form>
             </CardContent>
           </Card>
+          )
         ) : (
+          <>
+            {hashStatus === "mismatch" && (
+              <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800">
+                <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+                <div>
+                  <p className="font-semibold">
+                    {dict.VERIFY_STATUS_HASH_MISMATCH}
+                  </p>
+                  <p className="mt-1 text-sm text-amber-600">
+                    {dict.VERIFY_STATUS_HASH_MISMATCH_DESC}
+                  </p>
+                </div>
+              </div>
+            )}
           <div className="grid animate-in grid-cols-1 gap-6 duration-700 fade-in slide-in-from-bottom-4 lg:grid-cols-3">
             <div className="space-y-6 lg:col-span-1">
-              <Card className="overflow-hidden border-green-200 bg-white shadow-xl h-[600px]">
-                <div className="bg-green-600 p-6 text-center text-white">
-                  <CheckCircle2 className="mx-auto mb-3 size-12" />
+              <Card
+                className={cn(
+                  "overflow-hidden bg-white shadow-xl h-[600px]",
+                  hashStatus === "mismatch"
+                    ? "border-amber-200"
+                    : "border-green-200"
+                )}
+              >
+                <div
+                  className={cn(
+                    "p-6 text-center text-white",
+                    hashStatus === "mismatch" ? "bg-amber-600" : "bg-green-600"
+                  )}
+                >
+                  {hashStatus === "mismatch" ? (
+                    <AlertTriangle className="mx-auto mb-3 size-12" />
+                  ) : (
+                    <CheckCircle2 className="mx-auto mb-3 size-12" />
+                  )}
                   <h2 className="text-xl font-bold">
-                    {dict.VERIFY_SUCCESS_TITLE}
+                    {hashStatus === "mismatch"
+                      ? dict.VERIFY_MISMATCH_TITLE
+                      : dict.VERIFY_SUCCESS_TITLE}
                   </h2>
-                  <p className="mt-1 text-sm text-green-50/90">
-                    {dict.VERIFY_SUCCESS_MSG}
+                  <p
+                    className={cn(
+                      "mt-1 text-sm",
+                      hashStatus === "mismatch"
+                        ? "text-amber-50/90"
+                        : "text-green-50/90"
+                    )}
+                  >
+                    {hashStatus === "mismatch"
+                      ? dict.VERIFY_MISMATCH_MSG
+                      : dict.VERIFY_SUCCESS_MSG}
                   </p>
+                  {hashStatus === "match" && (
+                    <p className="mt-1 text-xs text-green-100">
+                      {dict.VERIFY_STATUS_HASH_VERIFIED}
+                    </p>
+                  )}
                 </div>
                 <CardContent className="space-y-6 p-6">
                   <div className="space-y-4">
@@ -295,6 +425,7 @@ export default function VerificationPage() {
               </Card>
             </div>
           </div>
+          </>
         )}
 
         <p className="mt-8 text-center text-xs text-slate-400">

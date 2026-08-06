@@ -127,6 +127,7 @@ export default function SalesOrdersPage() {
     is_note_enabled: true,
     tax_details: [] as any[],
     shrinkage_tolerance: 0,
+    delivery_taxable: false,
     funders: [] as { funder_id: string; funder_name: string; amount: number }[],
   }))
 
@@ -165,17 +166,16 @@ export default function SalesOrdersPage() {
     const discountAmount = baseTotal * ((formData.discount || 0) / 100)
     const afterDiscount = baseTotal - discountAmount
     const subtotal = Math.max(0, afterDiscount + deliveryTotal)
-    const taxableAmount = subtotal
+    const taxableAmount = Math.max(0, afterDiscount + (formData.delivery_taxable ? deliveryTotal : 0))
 
-    let taxTotal = 0
     const appliedTaxes = formData.tax_details.map((t) => {
       if (!t.enabled) return { ...t, amount: 0 }
       const amt = (taxableAmount * Number(t.rate)) / 100
-      taxTotal += amt
       return { ...t, amount: amt }
     })
+    const taxTotal = appliedTaxes.reduce((sum, t) => sum + t.amount, 0)
 
-    const grandTotal = taxableAmount + taxTotal
+    const grandTotal = subtotal + taxTotal
     return {
       subtotal,
       deliveryTotal,
@@ -221,6 +221,8 @@ export default function SalesOrdersPage() {
         delivery_address: quote.delivery_address || prev.delivery_address,
         // Also take shrinkage tolerance from quotation
         shrinkage_tolerance: quote.shrinkage_tolerance ?? 0,
+        // Inherit delivery_taxable from quotation
+        delivery_taxable: quote.delivery_taxable ?? false,
         discount: 0,
         term_of_payment: "",
         po_number: prev.po_number,
@@ -243,6 +245,7 @@ export default function SalesOrdersPage() {
         delivery_price_per_litre: 0,
         delivery_address: "",
         shrinkage_tolerance: 0,
+        delivery_taxable: false,
         discount: 0,
         term_of_payment: "",
         po_number: "",
@@ -289,7 +292,7 @@ export default function SalesOrdersPage() {
         let query = supabase
           .from("sales_orders")
           .select(
-            "*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, company:companies!quotations_company_id_fkey(id, name))"
+            "*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, delivery_taxable, company:companies!quotations_company_id_fkey(id, name))"
           )
           .order("created_at", { ascending: false })
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
@@ -402,6 +405,7 @@ export default function SalesOrdersPage() {
         customerEmail: contacts[0]?.email || "",
         contacts: contacts,
         ccEmails: o.company?.details?.cc_emails || "",
+        bccEmails: o.company?.details?.bcc_emails || "",
         raw: o,
       })
     } catch (err: any) {
@@ -485,6 +489,7 @@ export default function SalesOrdersPage() {
         is_note_enabled: item.is_note_enabled ?? true,
         tax_details: mergedTaxes,
         funders: item.funders || [],
+        delivery_taxable: item.delivery_taxable ?? false,
       })
     } else {
       if (!canInsert) return
@@ -521,6 +526,7 @@ export default function SalesOrdersPage() {
           enabled: false,
         })),
         funders: [],
+        delivery_taxable: false,
       })
     }
     setIsOpen(true)
@@ -629,7 +635,9 @@ export default function SalesOrdersPage() {
                 funder_name: f.funder_name,
                 amount: f.amount,
               }))
-            )
+            ) ||
+          (payload.delivery_taxable ?? false) !==
+            (editingItem.delivery_taxable ?? false)
 
         if (hasDataChanged) {
           payload.status = "Draft"
@@ -1352,6 +1360,23 @@ export default function SalesOrdersPage() {
                           <Label className="mb-2 block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
                             {dict.LABEL_TAXES || "Taxes"}
                           </Label>
+                          {/* Delivery Taxable Toggle */}
+                          <div className="flex items-center justify-between rounded border bg-background p-3">
+                            <Label
+                              htmlFor="delivery-taxable"
+                              className="cursor-pointer text-xs font-medium"
+                            >
+                              {dict.LABEL_DELIVERY_TAXABLE || "Include Delivery Fee in Tax (PPN)"}
+                            </Label>
+                            <Switch
+                              id="delivery-taxable"
+                              checked={formData.delivery_taxable}
+                              onCheckedChange={(val) =>
+                                setFormData({ ...formData, delivery_taxable: val })
+                              }
+                              disabled={isFromQuotation}
+                            />
+                          </div>
                           <div className="space-y-2">
                             {formData.tax_details.map((tax, idx) => {
                               const calculatedAmount =

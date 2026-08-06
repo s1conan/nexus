@@ -103,6 +103,8 @@ interface InvoiceInfo {
     name?: string
     details?: {
       contact_persons?: { email?: string; name?: string }[]
+      cc_emails?: string
+      bcc_emails?: string
     }
   }
 }
@@ -128,6 +130,8 @@ interface PreviewDoc {
   pdf: string
   customerEmail?: string
   contacts: { name: string; email?: string }[]
+  ccEmails?: string
+  bccEmails?: string
   raw: PaymentWithRelations
 }
 
@@ -139,6 +143,8 @@ type GalleryDoc = {
   pdf?: string
   customerEmail?: string
   contacts?: { name: string; email?: string }[]
+  ccEmails?: string
+  bccEmails?: string
   raw?: unknown
 }
 
@@ -578,6 +584,8 @@ export default function PaymentsPage() {
         pdf: dataUri,
         customerEmail: contacts[0]?.email || "",
         contacts: contacts,
+        ccEmails: p.invoice?.company?.details?.cc_emails || "",
+        bccEmails: p.invoice?.company?.details?.bcc_emails || "",
         raw: p,
       })
     } catch (err: unknown) {
@@ -616,6 +624,45 @@ export default function PaymentsPage() {
           content: (pdfDataUri as string).split(",")[1],
         },
       ]
+      const { data: ccData } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("category", "email")
+        .eq("name", "cc_payment")
+        .single()
+      const globalCcList = ccData?.value
+        ? ccData.value
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const companyCcList = doc.ccEmails
+        ? doc.ccEmails
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const ccList = [...new Set([...globalCcList, ...companyCcList])]
+
+      const { data: bccData } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("category", "email")
+        .eq("name", "bcc_payment")
+        .single()
+      const globalBccList = bccData?.value
+        ? bccData.value
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const companyBccList = doc.bccEmails
+        ? doc.bccEmails
+            .split(",")
+            .map((email: string) => email.trim())
+            .filter((e: string) => e !== "")
+        : []
+      const bccList = [...new Set([...globalBccList, ...companyBccList])]
 
       const paymentDate = p.payment_date
         ? new Date(p.payment_date).toLocaleDateString("en-GB", {
@@ -675,6 +722,8 @@ export default function PaymentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: doc.customerEmail,
+          cc: ccList,
+          bcc: bccList,
           subject: `Payment Confirmation ${p.payment_number} - PT Anugerah Buana Sriwijaya`,
           html: emailHtml,
           attachments,
