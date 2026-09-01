@@ -344,7 +344,7 @@ const a4Styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 5,
   },
-  logo: { width: 139, height: 70, marginRight: 1, marginBottom: 3 },
+  logo: { width: 140, height: 70, marginRight: 1, marginBottom: 3 },
   companyInfo: {
     fontSize: 11,
     textSpacing: 0.9,
