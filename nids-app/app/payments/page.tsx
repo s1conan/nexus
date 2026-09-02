@@ -101,6 +101,7 @@ interface InvoiceInfo {
   paid_amount: number
   company?: {
     name?: string
+    nickname?: string
     details?: {
       contact_persons?: { email?: string; name?: string }[]
       cc_emails?: string
@@ -270,7 +271,7 @@ export default function PaymentsPage() {
         let query = supabase
           .from("payments")
           .select(
-            "*, invoice:invoices(id, invoice_number, total_amount, paid_amount, company:companies(name))"
+            "*, invoice:invoices(id, invoice_number, total_amount, paid_amount, company:companies(name, nickname))"
           )
           .order("created_at", { ascending: false })
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
@@ -441,7 +442,7 @@ export default function PaymentsPage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("payments")
           .select(
-            "*, invoice:invoices(id, invoice_number, total_amount, paid_amount, company:companies(name))"
+            "*, invoice:invoices(id, invoice_number, total_amount, paid_amount, company:companies(name, nickname))"
           )
           .eq("id", editingItem.id)
           .single()
@@ -600,7 +601,10 @@ export default function PaymentsPage() {
     const link = document.createElement("a")
     if (!doc.pdf) return
     link.href = doc.pdf
-    link.download = `Payment_${doc.title}.pdf`
+    const raw = doc.raw as PaymentWithRelations | undefined
+    const nickname =
+      raw?.invoice?.company?.nickname || raw?.invoice?.company?.name || ""
+    link.download = `P - ${nickname} - ${doc.title}.pdf`
     link.click()
     notify.success(
       dict.MSG_PRINT_SUCCESS,
@@ -620,7 +624,7 @@ export default function PaymentsPage() {
       if (!pdfDataUri) throw new Error("Failed to generate PDF for attachment.")
       const attachments = [
         {
-          filename: `Payment_${doc.title}.pdf`,
+          filename: `P - ${p.invoice?.company?.nickname || p.invoice?.company?.name || ""} - ${doc.title}.pdf`,
           content: (pdfDataUri as string).split(",")[1],
         },
       ]
@@ -836,7 +840,7 @@ export default function PaymentsPage() {
                         let q = supabase
                           .from("invoices")
                           .select(
-                            "id, invoice_number, total_amount, paid_amount, company:companies(name)"
+                            "id, invoice_number, total_amount, paid_amount, company:companies(name, nickname)"
                           )
                           .neq("status", "Cancelled")
                           .limit(8)

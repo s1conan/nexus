@@ -58,6 +58,7 @@ export interface QuotationData {
   discounts: {
     label: string
     value: number
+    direct_price?: number
     delivery_address?: string
     delivery_cost?: number
   }[]
@@ -581,19 +582,55 @@ const QuotationDocument = ({
   company: CompanyInfo
   data: QuotationData
 }) => {
-  const discountColumnWidth = Math.max(
-    65,
-    Math.max(
-      ...data.discounts.map((d) => `${d.label} ${d.value}%`.length),
-      10
-    ) * 6
-  )
   const hasDeliveryAddress = data.discounts.some((d) => d.delivery_address)
   const headerHeight = hasDeliveryAddress ? 28 : 18
   const shrinkageEnabled = !!data.shrinkage_in_price && Number(data.shrinkage) > 0
-  const shrinkageAmount = shrinkageEnabled
-    ? Math.round(data.base_price * (Number(data.shrinkage) / 100))
-    : 0
+  const hasPercentDiscount = data.discounts.some(
+    (d) =>
+      Number(d?.direct_price) <= 0 &&
+      Number(d.value) > 0 &&
+      Number(d.value) <= 100
+  )
+  const columns = data.discounts.map((d) => {
+    const isDirect =
+      Number(d?.direct_price) > 0 || Number(d.value) > 100
+    const directPrice = isDirect
+      ? Number(d?.direct_price) > 0
+        ? Number(d.direct_price)
+        : Number(d.value)
+      : 0
+    const discountValue = isDirect
+      ? 0
+      : Math.round(data.base_price * (d.value / 100))
+    const baseABS = isDirect
+      ? directPrice
+      : data.base_price - discountValue
+    const shrinkageAmount = isDirect
+      ? shrinkageEnabled
+        ? Math.round(directPrice * (Number(data.shrinkage) / 100))
+        : 0
+      : shrinkageEnabled
+        ? Math.round(data.base_price * (Number(data.shrinkage) / 100))
+        : 0
+    return { d, isDirect, directPrice, discountValue, baseABS, shrinkageAmount }
+  })
+  const discountColumnWidth = Math.max(
+    65,
+    Math.max(
+      ...data.discounts.map((d) => {
+        const isDirect =
+          Number(d?.direct_price) > 0 || Number(d.value) > 100
+        return isDirect
+          ? `${d.label} ${formatNumber(
+              Number(d?.direct_price) > 0
+                ? Number(d.direct_price)
+                : Number(d.value)
+            )}`.length
+          : `${d.label} ${d.value}%`.length
+      }),
+      10
+    ) * 6
+  )
   
   const replacements: Record<string, string> = {
     quotation_number: data.quotation_number,
@@ -696,40 +733,50 @@ const QuotationDocument = ({
                 Price Components (per Liter)
               </Text>
             </View>
-            <View
-              style={[
-                a4Styles.cell,
-                a4Styles.headerCell,
-                { width: 30, height: headerHeight },
-              ]}
-            >
-              <Text>%</Text>
-            </View>
-            {data.discounts.map((d, i) => (
+            {hasPercentDiscount && (
               <View
-                key={i}
                 style={[
                   a4Styles.cell,
                   a4Styles.headerCell,
-                  { width: discountColumnWidth, height: headerHeight },
+                  { width: 30, height: headerHeight },
                 ]}
               >
-                <Text>
-                  {d.label} {d.value}%
-                </Text>
-                {d.delivery_address && (
-                  <Text style={{ fontSize: 8 }}>({d.delivery_address})</Text>
-                )}
+                <Text>%</Text>
               </View>
-            ))}
+            )}
+            {data.discounts.map((d, i) => {
+              const isDirect =
+                Number(d?.direct_price) > 0 || Number(d.value) > 100
+              return (
+                <View
+                  key={i}
+                  style={[
+                    a4Styles.cell,
+                    a4Styles.headerCell,
+                    { width: discountColumnWidth, height: headerHeight },
+                  ]}
+                >
+                  <Text>
+                    {isDirect
+                      ? `${d.label}`
+                      : `${d.label} ${d.value}%`}
+                  </Text>
+                  {d.delivery_address && (
+                    <Text style={{ fontSize: 8 }}>({d.delivery_address})</Text>
+                  )}
+                </View>
+              )
+            })}
           </View>
           <View style={a4Styles.tableRow}>
             <View style={[a4Styles.cell, { width: 170 }]}>
               <Text>Harga Dasar Pertamina</Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
-              <Text> </Text>
-            </View>
+            {hasPercentDiscount && (
+              <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
+                <Text> </Text>
+              </View>
+            )}
             {data.discounts.map((_, i) => (
               <View
                 key={i}
@@ -743,45 +790,21 @@ const QuotationDocument = ({
               </View>
             ))}
           </View>
-          <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 170 }]}>
-              <Text>Discount</Text>
-            </View>
-            <View
-              style={[
-                a4Styles.cell,
-                a4Styles.center,
-                { width: 30, height: 50 },
-              ]}
-            >
-              <Text> </Text>
-            </View>
-            {data.discounts.map((d, i) => (
-              <View
-                key={i}
-                style={[
-                  a4Styles.cell,
-                  a4Styles.right,
-                  { width: discountColumnWidth },
-                ]}
-              >
-                <Text>
-                  {formatNumber(
-                    Math.round(data.base_price * (d.value / 100))
-                  )}
-                </Text>
-              </View>
-            ))}
-          </View>
-          {shrinkageEnabled && (
+          {hasPercentDiscount && (
             <View style={a4Styles.tableRow}>
               <View style={[a4Styles.cell, { width: 170 }]}>
-                <Text>Harga Setelah Diskon</Text>
+                <Text>Discount</Text>
               </View>
-              <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
+              <View
+                style={[
+                  a4Styles.cell,
+                  a4Styles.center,
+                  { width: 30, height: 50 },
+                ]}
+              >
                 <Text> </Text>
               </View>
-              {data.discounts.map((d, i) => (
+              {columns.map((c, i) => (
                 <View
                   key={i}
                   style={[
@@ -790,10 +813,35 @@ const QuotationDocument = ({
                     { width: discountColumnWidth },
                   ]}
                 >
-                  <Text>{formatNumber(
-                    data.base_price -
-                      Math.round(data.base_price * (d.value / 100))
-                  )}</Text>
+                  <Text>
+                    {c.isDirect
+                      ? ""
+                      : formatNumber(c.discountValue)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {shrinkageEnabled && (
+            <View style={a4Styles.tableRow}>
+              <View style={[a4Styles.cell, { width: 170 }]}>
+                <Text>Harga Setelah Diskon</Text>
+              </View>
+              {hasPercentDiscount && (
+                <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
+                  <Text> </Text>
+                </View>
+              )}
+              {columns.map((c, i) => (
+                <View
+                  key={i}
+                  style={[
+                    a4Styles.cell,
+                    a4Styles.right,
+                    { width: discountColumnWidth },
+                  ]}
+                >
+                  <Text>{formatNumber(c.baseABS)}</Text>
                 </View>
               ))}
             </View>
@@ -803,10 +851,12 @@ const QuotationDocument = ({
               <View style={[a4Styles.cell, { width: 170 }]}>
                 <Text>Toleransi Susut ({data.shrinkage}%)</Text>
               </View>
-              <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
-                <Text> </Text>
-              </View>
-              {data.discounts.map((_, i) => (
+              {hasPercentDiscount && (
+                <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
+                  <Text> </Text>
+                </View>
+              )}
+              {columns.map((c, i) => (
                 <View
                   key={i}
                   style={[
@@ -815,7 +865,7 @@ const QuotationDocument = ({
                     { width: discountColumnWidth },
                   ]}
                 >
-                  <Text>{formatNumber(shrinkageAmount)}</Text>
+                  <Text>{formatNumber(c.shrinkageAmount)}</Text>
                 </View>
               ))}
             </View>
@@ -824,10 +874,12 @@ const QuotationDocument = ({
             <View style={[a4Styles.cell, { fontWeight: "bold", width: 170 }]}>
               <Text>Harga Dasar PT. ABS</Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
-              <Text> </Text>
-            </View>
-            {data.discounts.map((d, i) => (
+            {hasPercentDiscount && (
+              <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
+                <Text> </Text>
+              </View>
+            )}
+            {columns.map((c, i) => (
               <View
                 key={i}
                 style={[
@@ -837,10 +889,7 @@ const QuotationDocument = ({
                 ]}
               >
                 <Text style={{ fontWeight: "bold" }}>
-                  {formatNumber(
-                    data.base_price + shrinkageAmount - 
-                      Math.round(data.base_price * (d.value / 100))
-                  )}
+                  {formatNumber(c.baseABS + c.shrinkageAmount)}
                 </Text>
               </View>
             ))}
@@ -851,15 +900,17 @@ const QuotationDocument = ({
               <View style={[a4Styles.cell, { width: 170 }]}>
                 <Text>Biaya Pengiriman</Text>
               </View>
-              <View
-                style={[
-                  a4Styles.cell,
-                  a4Styles.center,
-                  { width: 30, height: 22, top: 2 },
-                ]}
-              >
-                <Text> </Text>
-              </View>
+              {hasPercentDiscount && (
+                <View
+                  style={[
+                    a4Styles.cell,
+                    a4Styles.center,
+                    { width: 30, height: 22, top: 2 },
+                  ]}
+                >
+                  <Text> </Text>
+                </View>
+              )}
               {data.discounts.map((d, i) => (
                 <View
                   key={i}
@@ -881,17 +932,15 @@ const QuotationDocument = ({
                 <View style={[a4Styles.cell, { width: 170 }]}>
                   <Text>{tax.name}</Text>
                 </View>
-                <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
-                  <Text>{tax.rate}%</Text>
-                </View>
-                {data.discounts.map((d, i) => {
-                  const discountValue = Math.round(
-                    data.base_price * (d.value / 100)
-                  )
-                  const baseABS = data.base_price - discountValue
+                {hasPercentDiscount && (
+                  <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
+                    <Text>{tax.rate}%</Text>
+                  </View>
+                )}
+                {columns.map((c, i) => {
                   const taxableBase = data.delivery_taxable
-                    ? baseABS + (d.delivery_cost ?? 0)
-                    : baseABS
+                    ? c.baseABS + (c.d.delivery_cost ?? 0)
+                    : c.baseABS
                   const taxAmount = Math.round(
                     taxableBase * (Number(tax.rate) / 100)
                   )
@@ -916,15 +965,17 @@ const QuotationDocument = ({
               <View style={[a4Styles.cell, { width: 170 }]}>
                 <Text>Biaya Pengiriman</Text>
               </View>
-              <View
-                style={[
-                  a4Styles.cell,
-                  a4Styles.center,
-                  { width: 30, height: 22, top: 2 },
-                ]}
-              >
-                <Text> </Text>
-              </View>
+              {hasPercentDiscount && (
+                <View
+                  style={[
+                    a4Styles.cell,
+                    a4Styles.center,
+                    { width: 30, height: 22, top: 2 },
+                  ]}
+                >
+                  <Text> </Text>
+                </View>
+              )}
               {data.discounts.map((d, i) => (
                 <View
                   key={i}
@@ -945,18 +996,16 @@ const QuotationDocument = ({
                 Total Harga Include Pajak
               </Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
-              <Text> </Text>
-            </View>
-            {data.discounts.map((d, i) => {
-              const discountValue = Math.round(
-                data.base_price * (d.value / 100)
-              )
-              const baseABS = data.base_price - discountValue
-              const deliveryCost = Math.round(d.delivery_cost ?? 0)
+            {hasPercentDiscount && (
+              <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
+                <Text> </Text>
+              </View>
+            )}
+            {columns.map((c, i) => {
+              const deliveryCost = Math.round(c.d.delivery_cost ?? 0)
               const taxableBase = data.delivery_taxable
-                ? baseABS + deliveryCost
-                : baseABS
+                ? c.baseABS + deliveryCost
+                : c.baseABS
               let totalTaxes = 0
               if (data.tax_details) {
                 data.tax_details
@@ -967,7 +1016,7 @@ const QuotationDocument = ({
                     )
                   })
               }
-              const total = baseABS + totalTaxes + deliveryCost
+              const total = c.baseABS + totalTaxes + deliveryCost
               return (
                 <View
                   key={i}

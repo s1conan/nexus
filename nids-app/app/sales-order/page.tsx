@@ -276,7 +276,7 @@ export default function SalesOrdersPage() {
             supabase
               .from("quotations")
               .select(
-                "*, company:companies(id, name, details), product:products(id, sku, name)"
+                "*, company:companies(id, name, nickname, details), product:products(id, sku, name)"
               )
               .eq("status", "Accepted"),
             supabase.from("app_settings").select("*").eq("category", "tax"),
@@ -297,7 +297,7 @@ export default function SalesOrdersPage() {
         let query = supabase
           .from("sales_orders")
           .select(
-            "*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, delivery_taxable, company:companies!quotations_company_id_fkey(id, name))"
+            "*, company:companies(id, name, nickname, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, delivery_taxable, company:companies!quotations_company_id_fkey(id, name))"
           )
           .order("created_at", { ascending: false })
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
@@ -421,7 +421,8 @@ export default function SalesOrdersPage() {
   const handleDownload = (doc: any) => {
     const link = document.createElement("a")
     link.href = doc.pdf
-    link.download = `SO_${doc.title}.pdf`
+    const nickname = doc.raw?.company?.nickname || doc.raw?.company?.name || ""
+    link.download = `SO - ${nickname} - ${doc.title}.pdf`
     link.click()
     notify.success(
       dict.MSG_PRINT_SUCCESS,
@@ -662,7 +663,7 @@ export default function SalesOrdersPage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("sales_orders")
           .select(
-            "*, company:companies(id, name, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, company:companies!quotations_company_id_fkey(id, name))"
+            "*, company:companies(id, name, nickname, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, company:companies!quotations_company_id_fkey(id, name))"
           )
           .eq("id", editingItem.id)
           .single()
@@ -943,7 +944,7 @@ export default function SalesOrdersPage() {
                                 let q = supabase
                                   .from("quotations")
                                   .select(
-                                    "*, company:companies(id, name), product:products(id, sku, name)"
+                                    "*, company:companies(id, name, nickname), product:products(id, sku, name)"
                                   )
                                   .eq("status", "Accepted")
                                 if (query) {

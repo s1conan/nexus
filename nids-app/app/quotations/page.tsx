@@ -181,6 +181,7 @@ export default function QuotationsPage() {
     discounts: [] as {
       label: string
       value: number
+      direct_price: number
       delivery_address: string
       delivery_cost: number
     }[],
@@ -295,7 +296,7 @@ export default function QuotationsPage() {
         let query = supabase
           .from("quotations")
           .select(
-            "*, company:companies(id, name, details), product:products(id, sku, name, base_price)"
+            "*, company:companies(id, name, nickname, details), product:products(id, sku, name, base_price)"
           )
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -485,12 +486,21 @@ export default function QuotationsPage() {
         is_terms_enabled: item.is_terms_enabled ?? true,
         closing_remarks: item.closing_remarks || "",
         is_closing_enabled: item.is_closing_enabled ?? true,
-        discounts: (item.discounts || []).map((d: any) => ({
-          label: d.label || "",
-          value: d.value || 0,
-          delivery_address: d.delivery_address || "",
-          delivery_cost: d.delivery_cost || 0,
-        })),
+        discounts: (item.discounts || []).map((d: any) => {
+          const isDirect =
+            Number(d.direct_price) > 0 || Number(d.value) > 100
+          return {
+            label: d.label || "",
+            value: isDirect ? 0 : d.value || 0,
+            direct_price: isDirect
+              ? Number(d.direct_price) > 0
+                ? Number(d.direct_price)
+                : Number(d.value)
+              : 0,
+            delivery_address: d.delivery_address || "",
+            delivery_cost: d.delivery_cost || 0,
+          }
+        }),
         bank_accounts: initialSelectedBanks,
         tax_details: mergedTaxes,
         delivery_taxable: item.delivery_taxable ?? false,
@@ -668,7 +678,7 @@ export default function QuotationsPage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("quotations")
           .select(
-            "*, company:companies(id, name, details), product:products(id, sku, name, base_price)"
+            "*, company:companies(id, name, nickname, details), product:products(id, sku, name, base_price)"
           )
           .eq("id", editingItem.id)
           .single()
@@ -865,7 +875,8 @@ export default function QuotationsPage() {
   const handleDownload = (doc: any) => {
     const link = document.createElement("a")
     link.href = doc.pdf
-    link.download = `Quotation_${doc.title}.pdf`
+    const nickname = doc.raw?.company?.nickname || doc.raw?.company?.name || ""
+    link.download = `Q - ${nickname} - ${doc.title}.pdf`
     link.click()
     notify.success(
       dict.MSG_PRINT_SUCCESS,
@@ -924,7 +935,7 @@ export default function QuotationsPage() {
       if (!pdfDataUri) throw new Error("Failed to generate PDF for attachment.")
       const attachments = [
         {
-          filename: `Quotation_${doc.title}.pdf`,
+          filename: `Q - ${q.company?.nickname || q.company?.name || ""} - ${doc.title}.pdf`,
           content: (pdfDataUri as string).split(",")[1],
         },
       ]
@@ -1493,29 +1504,7 @@ export default function QuotationsPage() {
                         </div> */}
                         <div className="grid gap-2">
                           <Label htmlFor="shrinkage">
-                            {dict.LABEL_SHRINKAGE_TOLERANCE}
-                          </Label>
-                          <div className="flex items-center gap-2">
-                            <div className="w-2/3">
-                              <NumberInput
-                                id="shrinkage"
-                                value={formData.shrinkage_tolerance}
-                                onChange={(val) =>
-                                  setFormData({
-                                    ...formData,
-                                    shrinkage_tolerance: val,
-                                  })
-                                }
-                                rightBadge="%"
-                              />
-                            </div>
-                            <div className="flex w-1/3">
-                              <Label
-                                htmlFor="shrinkage-in-price"
-                                className="cursor-pointer text-xs font-medium"
-                              >
-                                {dict.LABEL_SHRINKAGE_IN_PRICE}
-                              </Label>
+{dict.LABEL_SHRINKAGE_TOLERANCE}
                               <Switch
                                 id="shrinkage-in-price"
                                 size="sm"
@@ -1527,8 +1516,21 @@ export default function QuotationsPage() {
                                   })
                                 }
                               />
-                            </div>
-                          </div>
+
+                          </Label>
+
+                              <NumberInput
+                                id="shrinkage"
+                                value={formData.shrinkage_tolerance}
+                                onChange={(val) =>
+                                  setFormData({
+                                    ...formData,
+                                    shrinkage_tolerance: val,
+                                  })
+                                }
+                                rightBadge="%"
+                              />
+
                         </div>
                         <div className="grid gap-2">
                           <Label>
@@ -1560,6 +1562,7 @@ export default function QuotationsPage() {
                                   {
                                     label: "",
                                     value: 0,
+                                    direct_price: 0,
                                     delivery_address: "",
                                     delivery_cost: 0,
                                   },
@@ -1578,7 +1581,7 @@ export default function QuotationsPage() {
                             >
                               <div className="flex items-center gap-2">
                                 <Input
-                                  className="h-9 w-6/20"
+                                  className="h-9 w-5/20"
                                   placeholder={dict.LABEL_DISCOUNT_TERM1}
                                   value={d.label}
                                   onChange={(e) => {
@@ -1591,7 +1594,7 @@ export default function QuotationsPage() {
                                   }}
                                 />
                                 <Input
-                                  className="h-9 w-6/20"
+                                  className="h-9 w-5/20"
                                   placeholder={dict.LABEL_DISCOUNT_TERM2}
                                   value={d.delivery_address}
                                   onChange={(e) => {
@@ -1603,18 +1606,40 @@ export default function QuotationsPage() {
                                     })
                                   }}
                                 />
-                                <div className="w-3/20 shrink-0">
+                                <div className="w-5/20 shrink-0">
                                   <NumberInput
-                                    value={d.value}
+                                    value={
+                                      Number(d.direct_price) > 0
+                                        ? Number(d.direct_price)
+                                        : Number(d.value)
+                                    }
                                     onChange={(val) => {
                                       const newD = [...formData.discounts]
-                                      newD[i].value = val
+                                      // Small values are treated as a discount %,
+                                      // large values as a direct price (Rp/L).
+                                      if (val > 100) {
+                                        newD[i].direct_price = val
+                                        newD[i].value = 0
+                                      } else {
+                                        newD[i].value = val
+                                        newD[i].direct_price = 0
+                                      }
                                       setFormData({
                                         ...formData,
                                         discounts: newD,
                                       })
                                     }}
-                                    rightBadge="%"
+                                    leftBadge={
+                                      Number(d.direct_price) > 0
+                                        ? SITE_CONFIG.currencySymbol
+                                        : undefined
+                                    }
+                                    rightBadge={
+                                      Number(d.direct_price) <= 0 &&
+                                      Number(d.value) > 0
+                                        ? "%"
+                                        : undefined
+                                    }
                                     className="h-9"
                                   />
                                 </div>

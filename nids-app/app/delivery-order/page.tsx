@@ -216,7 +216,7 @@ export default function DeliveryOrdersPage() {
         let query = supabase
           .from("delivery_orders")
           .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, po_number, quantity, so_date, delivery_address), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
+            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, po_number, quantity, so_date, delivery_address), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
           )
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -565,7 +565,7 @@ export default function DeliveryOrdersPage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("delivery_orders")
           .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, quantity, so_date, delivery_address), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
+            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, quantity, so_date, delivery_address), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
           )
           .eq("id", editingItem.id)
           .single()
@@ -857,7 +857,7 @@ export default function DeliveryOrdersPage() {
       if (!pdfDataUri) throw new Error("Failed to generate PDF for attachment.")
       const attachments = [
         {
-          filename: `DO_${doc.title}.pdf`,
+          filename: `DO - ${doRecord.company?.nickname || doRecord.company?.name || ""} - ${doc.title}.pdf`,
           content: (pdfDataUri as string).split(",")[1],
         },
       ]
@@ -2353,7 +2353,9 @@ export default function DeliveryOrdersPage() {
             if (!doc.pdf) return
             const link = document.createElement("a")
             link.href = doc.pdf
-            link.download = `DO_${doc.title}.pdf`
+            const nickname =
+              doc.raw?.company?.nickname || doc.raw?.company?.name || ""
+            link.download = `DO - ${nickname} - ${doc.title}.pdf`
             link.click()
             notify.success(
               dict.MSG_PRINT_SUCCESS,

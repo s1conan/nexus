@@ -398,7 +398,7 @@ export default function InvoicePage() {
         let query = supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
+            "*, company:companies(id, name, nickname), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
           )
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -544,7 +544,7 @@ export default function InvoicePage() {
         supabase
           .from("delivery_orders")
           .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
+            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
           )
           .eq("id", item.do_id)
           .maybeSingle()
@@ -699,7 +699,7 @@ export default function InvoicePage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
+            "*, company:companies(id, name, nickname), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
           )
           .eq("id", editingItem.id)
           .single()
@@ -939,7 +939,8 @@ export default function InvoicePage() {
   const handleDownload = (doc: any) => {
     const link = document.createElement("a")
     link.href = doc.pdf
-    link.download = `Invoice_${doc.title}.pdf`
+    const nickname = doc.raw?.company?.nickname || doc.raw?.company?.name || ""
+    link.download = `INV - ${nickname} - ${doc.title}.pdf`
     link.click()
     notify.success(
       dict.MSG_PRINT_SUCCESS || "Print Successful",
@@ -1001,7 +1002,7 @@ export default function InvoicePage() {
       if (!pdfDataUri) throw new Error("Failed to generate PDF for attachment.")
       const attachments = [
         {
-          filename: `Invoice_${doc.title}.pdf`,
+          filename: `INV - ${inv.company?.nickname || inv.company?.name || ""} - ${doc.title}.pdf`,
           content: (pdfDataUri as string).split(",")[1],
         },
       ]
@@ -1339,7 +1340,7 @@ export default function InvoicePage() {
                               let q = supabase
                                 .from("delivery_orders")
                                 .select(
-                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
+                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name, nickname), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
                                 )
                                 .in("status", ["Shipped", "Delivered"])
                                 .limit(8)
