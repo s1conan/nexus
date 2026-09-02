@@ -845,7 +845,8 @@ const QuotationDocument = ({
               </View>
             ))}
           </View>
-          {data.delivery_taxable && Number(data.delivery_price) > 0 && (
+          {data.delivery_taxable &&
+            data.discounts.some((d) => Number(d.delivery_cost) > 0) && (
             <View style={a4Styles.tableRow}>
               <View style={[a4Styles.cell, { width: 170 }]}>
                 <Text>Biaya Pengiriman</Text>
@@ -909,7 +910,8 @@ const QuotationDocument = ({
                 })}
               </View>
             ))}
-          {!data.delivery_taxable && Number(data.delivery_price) > 0 && (
+          {!data.delivery_taxable &&
+            data.discounts.some((d) => Number(d.delivery_cost) > 0) && (
             <View style={a4Styles.tableRow}>
               <View style={[a4Styles.cell, { width: 170 }]}>
                 <Text>Biaya Pengiriman</Text>

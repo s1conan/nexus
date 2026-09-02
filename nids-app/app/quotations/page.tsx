@@ -1145,16 +1145,20 @@ export default function QuotationsPage() {
   // Calculation logic for Quotation Unit Price
   const totals = useMemo(() => {
     const subtotal = formData.base_price
-    const taxableAmount = subtotal + (formData.delivery_taxable ? formData.delivery_price : 0)
+    const deliveryTotal = formData.discounts.reduce(
+      (sum, d) => sum + (Number(d.delivery_cost) || 0),
+      0
+    )
+    const taxableAmount = subtotal + (formData.delivery_taxable ? deliveryTotal : 0)
     const appliedTaxes = formData.tax_details.map((t) => {
       if (!t.enabled) return { ...t, amount: 0 }
       const amt = (taxableAmount * Number(t.rate)) / 100
       return { ...t, amount: amt }
     })
     const taxTotal = appliedTaxes.reduce((sum, t) => sum + t.amount, 0)
-    const grandTotal = subtotal + taxTotal + formData.delivery_price
+    const grandTotal = subtotal + taxTotal + deliveryTotal
     return { subtotal, taxTotal, grandTotal, appliedTaxes }
-  }, [formData.base_price, formData.delivery_price, formData.delivery_taxable, formData.tax_details])
+  }, [formData.base_price, formData.delivery_taxable, formData.tax_details, formData.discounts])
 
   if (!canView && !loading && !authLoading) {
     return (

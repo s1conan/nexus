@@ -216,7 +216,8 @@ export default function SalesOrdersPage() {
         product_id: quote.product_id,
         quantity: quote.minimum_order || 0,
         unit_price: quote.base_price || 0,
-        delivery_price_per_litre: quote.delivery_price || 0,
+        delivery_price_per_litre:
+          quote.delivery_price || quote.discounts?.[0]?.delivery_cost || 0,
         tax_details: mergedTaxes,
         // Also take delivery address if available from quotation
         delivery_address: quote.delivery_address || prev.delivery_address,
