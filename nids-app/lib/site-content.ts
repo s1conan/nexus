@@ -152,6 +152,9 @@ export const SITE_CONTENT = {
     MSG_QUOTATION_STATUS_UPDATED: "Quotation status %data% updated.",
     MSG_DELETE_CONFIRM: "Are you sure you want to delete this?",
     MSG_EXPIRY_INFO: "Expiry is calculated based on Quotation Date.",
+    MSG_VALIDATION_ERROR: "Validation Error",
+    MSG_COMPANY_REQUIRED: "Company must be selected.",
+    MSG_PRODUCT_REQUIRED: "Product/SKU must be selected.",
 
     // Deposit Module
     LABEL_DEPOSIT_NUMBER: "Deposit Number",
@@ -710,6 +713,9 @@ export const SITE_CONTENT = {
     MSG_QUOTATION_STATUS_UPDATED: "Status penawaran %data% diperbarui.",
     MSG_DELETE_CONFIRM: "Apakah Anda yakin ingin menghapus ini?",
     MSG_EXPIRY_INFO: "Kedaluwarsa dihitung berdasarkan Tanggal Penawaran.",
+    MSG_VALIDATION_ERROR: "Validasi Gagal",
+    MSG_COMPANY_REQUIRED: "Perusahaan harus dipilih.",
+    MSG_PRODUCT_REQUIRED: "Produk/SKU harus dipilih.",
 
     // Deposit Module
     LABEL_DEPOSIT_NUMBER: "Nomor Deposit",

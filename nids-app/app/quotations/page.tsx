@@ -571,6 +571,16 @@ export default function QuotationsPage() {
   }
 
   const handleSave = async () => {
+    // Field validation
+    const errors: string[] = []
+    if (!formData.company_id) errors.push(dict.MSG_COMPANY_REQUIRED)
+    if (!formData.product_id) errors.push(dict.MSG_PRODUCT_REQUIRED)
+
+    if (errors.length > 0) {
+      notify.error(dict.MSG_VALIDATION_ERROR, errors.join("\n"))
+      return
+    }
+
     setIsSaving(true)
     try {
       const payload = { ...formData }
@@ -693,9 +703,18 @@ export default function QuotationsPage() {
           payload.quotation_number = data
         }
 
-        const { error } = await supabase.from("quotations").insert([payload])
+        // Convert empty UUID foreign keys to null
+        const insertPayload = {
+          ...payload,
+          company_id: payload.company_id || null,
+          product_id: payload.product_id || null,
+        }
+
+        const { error } = await supabase
+          .from("quotations")
+          .insert([insertPayload])
         if (error) throw error
-        const docLabel = `[${payload.quotation_number || formData.quotation_number}]`
+        const docLabel = `[${insertPayload.quotation_number || formData.quotation_number}]`
         notify.success(
           dict.MSG_QUOTATION_SAVED.replace("%data%", docLabel),
           dict.MSG_SUCCESS_SAVE_DESC.replace("%entity%", "quotation").replace(
