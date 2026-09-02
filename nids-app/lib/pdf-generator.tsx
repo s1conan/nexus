@@ -53,6 +53,7 @@ export interface QuotationData {
   delivery_price: number
   min_order: number
   shrinkage?: number
+  shrinkage_in_price?: boolean
   content: string
   discounts: {
     label: string
@@ -87,6 +88,8 @@ export interface SalesOrderData {
   quantity: number
   unit_price: number
   discount: number
+  shrinkage_tolerance?: number
+  shrinkage_in_price?: boolean
   delivery_price_per_litre: number
   tax_details: { name: string; rate: number; enabled: boolean }[]
   delivery_taxable?: boolean
@@ -114,6 +117,8 @@ export interface InvoiceData {
   quantity: number
   unit_price: number
   delivery_price_per_litre: number
+  shrinkage_tolerance?: number
+  shrinkage_in_price?: boolean
   subtotal: number
   tax_details: { name: string; rate: number; enabled: boolean }[]
   delivery_taxable?: boolean
@@ -585,6 +590,11 @@ const QuotationDocument = ({
   )
   const hasDeliveryAddress = data.discounts.some((d) => d.delivery_address)
   const headerHeight = hasDeliveryAddress ? 28 : 18
+  const shrinkageEnabled = !!data.shrinkage_in_price && Number(data.shrinkage) > 0
+  const shrinkageAmount = shrinkageEnabled
+    ? Math.round(data.base_price * (Number(data.shrinkage) / 100))
+    : 0
+  
   const replacements: Record<string, string> = {
     quotation_number: data.quotation_number,
     quotation_date: data.quotation_date
@@ -756,13 +766,62 @@ const QuotationDocument = ({
                 ]}
               >
                 <Text>
-                  {formatNumber(Math.round(data.base_price * (d.value / 100)))}
+                  {formatNumber(
+                    Math.round(data.base_price * (d.value / 100))
+                  )}
                 </Text>
               </View>
             ))}
           </View>
+          {shrinkageEnabled && (
+            <View style={a4Styles.tableRow}>
+              <View style={[a4Styles.cell, { width: 170 }]}>
+                <Text>Harga Setelah Diskon</Text>
+              </View>
+              <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
+                <Text> </Text>
+              </View>
+              {data.discounts.map((d, i) => (
+                <View
+                  key={i}
+                  style={[
+                    a4Styles.cell,
+                    a4Styles.right,
+                    { width: discountColumnWidth },
+                  ]}
+                >
+                  <Text>{formatNumber(
+                    data.base_price -
+                      Math.round(data.base_price * (d.value / 100))
+                  )}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {shrinkageEnabled && (
+            <View style={a4Styles.tableRow}>
+              <View style={[a4Styles.cell, { width: 170 }]}>
+                <Text>Toleransi Susut ({data.shrinkage}%)</Text>
+              </View>
+              <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
+                <Text> </Text>
+              </View>
+              {data.discounts.map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    a4Styles.cell,
+                    a4Styles.right,
+                    { width: discountColumnWidth },
+                  ]}
+                >
+                  <Text>{formatNumber(shrinkageAmount)}</Text>
+                </View>
+              ))}
+            </View>
+          )}
           <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 170 }]}>
+            <View style={[a4Styles.cell, { fontWeight: "bold", width: 170 }]}>
               <Text>Harga Dasar PT. ABS</Text>
             </View>
             <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
@@ -779,7 +838,7 @@ const QuotationDocument = ({
               >
                 <Text style={{ fontWeight: "bold" }}>
                   {formatNumber(
-                    data.base_price -
+                    data.base_price + shrinkageAmount - 
                       Math.round(data.base_price * (d.value / 100))
                   )}
                 </Text>
@@ -1011,8 +1070,14 @@ const SalesOrderDocument = ({
   data: SalesOrderData
 }) => {
   const subtotal = data.quantity * data.unit_price
+  const shrinkageEnabled =
+    !!data.shrinkage_in_price && Number(data.shrinkage_tolerance) > 0
+  const shrinkageAmount = shrinkageEnabled
+    ? Math.round(subtotal * (Number(data.shrinkage_tolerance) / 100))
+    : 0
+  const effectiveSubtotal = subtotal + shrinkageAmount
   const discountAmount = subtotal * (data.discount / 100)
-  const afterDiscount = subtotal - discountAmount
+  const afterDiscount = effectiveSubtotal - discountAmount
   const deliveryTotal = data.quantity * data.delivery_price_per_litre
   const taxableAmount =
     afterDiscount + (data.delivery_taxable ? deliveryTotal : 0)
@@ -1127,9 +1192,27 @@ const SalesOrderDocument = ({
               </View>
             </View>
           )}
+          {shrinkageEnabled && (
+            <View style={a4Styles.tableRow}>
+              <View style={[a4Styles.cell, { width: 160 }]}>
+                <Text>Toleransi Susut ({data.shrinkage_tolerance}%)</Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 60 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 80 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+                <Text>+{formatNumber(shrinkageAmount)}</Text>
+              </View>
+            </View>
+          )}
           <View style={a4Styles.tableRow}>
             <View style={[a4Styles.cell, { width: 160 }]}>
-              <Text style={{ fontWeight: "bold" }}>Total Setelah Diskon</Text>
+              <Text style={{ fontWeight: "bold" }}>
+                Total Setelah Diskon & Susut
+              </Text>
             </View>
             <View style={[a4Styles.cell, { width: 60 }]}>
               <Text></Text>
@@ -2105,6 +2188,8 @@ export async function generateStandardInvoicePDF(
       quantity,
       unit_price: unitPrice,
       delivery_price_per_litre: deliveryPricePerLitre,
+      shrinkage_tolerance: inv.do?.so?.shrinkage_tolerance ?? 0,
+      shrinkage_in_price: inv.do?.so?.shrinkage_in_price ?? false,
       subtotal,
       tax_details: inv.tax_details || [],
       delivery_taxable:
@@ -2223,6 +2308,7 @@ export async function generateStandardQuotationPDF(
       delivery_price: q.delivery_price || 0,
       min_order: q.minimum_order || 0,
       shrinkage: q.shrinkage_tolerance,
+      shrinkage_in_price: q.shrinkage_in_price ?? false,
       content: q.is_content_enabled ? q.content : "",
       discounts: q.discounts || [],
       note: q.is_note_enabled ? q.note : "",
@@ -2285,6 +2371,8 @@ export async function generateStandardSalesOrderPDF(
       quantity: so.quantity || 0,
       unit_price: so.unit_price || 0,
       discount: so.discount || 0,
+      shrinkage_tolerance: so.shrinkage_tolerance ?? 0,
+      shrinkage_in_price: so.shrinkage_in_price ?? false,
       delivery_price_per_litre: so.delivery_price_per_litre || 0,
       tax_details: so.tax_details || [],
       delivery_taxable: so.delivery_taxable ?? false,

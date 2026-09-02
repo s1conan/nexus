@@ -168,6 +168,7 @@ export default function QuotationsPage() {
     expiry_days: 30,
     minimum_order: 0,
     shrinkage_tolerance: 0,
+    shrinkage_in_price: false,
     status: "Draft",
     content: "",
     is_content_enabled: true,
@@ -474,6 +475,7 @@ export default function QuotationsPage() {
         expiry_days: item.expiry_days,
         minimum_order: item.minimum_order,
         shrinkage_tolerance: item.shrinkage_tolerance ?? 0,
+        shrinkage_in_price: item.shrinkage_in_price ?? false,
         status: item.status,
         content: item.content || "",
         is_content_enabled: item.is_content_enabled ?? true,
@@ -548,6 +550,7 @@ export default function QuotationsPage() {
         expiry_days: 30,
         minimum_order: 0,
         shrinkage_tolerance: 0,
+        shrinkage_in_price: false,
         status: "Draft",
         content: lastContent,
         is_content_enabled: lastIsContentEnabled,
@@ -608,6 +611,8 @@ export default function QuotationsPage() {
             Number(editingItem.minimum_order || 0) ||
           Number(payload.shrinkage_tolerance) !==
             Number(editingItem.shrinkage_tolerance ?? 0) ||
+          payload.shrinkage_in_price !==
+            (editingItem.shrinkage_in_price ?? false) ||
           payload.content !== (editingItem.content || "") ||
           payload.is_content_enabled !==
             (editingItem.is_content_enabled ?? true) ||
@@ -1486,17 +1491,40 @@ export default function QuotationsPage() {
                           <Label htmlFor="shrinkage">
                             {dict.LABEL_SHRINKAGE_TOLERANCE}
                           </Label>
-                          <NumberInput
-                            id="shrinkage"
-                            value={formData.shrinkage_tolerance}
-                            onChange={(val) =>
-                              setFormData({
-                                ...formData,
-                                shrinkage_tolerance: val,
-                              })
-                            }
-                            rightBadge="%"
-                          />
+                          <div className="flex items-center gap-2">
+                            <div className="w-2/3">
+                              <NumberInput
+                                id="shrinkage"
+                                value={formData.shrinkage_tolerance}
+                                onChange={(val) =>
+                                  setFormData({
+                                    ...formData,
+                                    shrinkage_tolerance: val,
+                                  })
+                                }
+                                rightBadge="%"
+                              />
+                            </div>
+                            <div className="flex w-1/3">
+                              <Label
+                                htmlFor="shrinkage-in-price"
+                                className="cursor-pointer text-xs font-medium"
+                              >
+                                {dict.LABEL_SHRINKAGE_IN_PRICE}
+                              </Label>
+                              <Switch
+                                id="shrinkage-in-price"
+                                size="sm"
+                                checked={formData.shrinkage_in_price}
+                                onCheckedChange={(val) =>
+                                  setFormData({
+                                    ...formData,
+                                    shrinkage_in_price: val,
+                                  })
+                                }
+                              />
+                            </div>
+                          </div>
                         </div>
                         <div className="grid gap-2">
                           <Label>

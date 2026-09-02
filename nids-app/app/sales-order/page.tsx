@@ -127,6 +127,7 @@ export default function SalesOrdersPage() {
     is_note_enabled: true,
     tax_details: [] as any[],
     shrinkage_tolerance: 0,
+    shrinkage_in_price: false,
     delivery_taxable: false,
     funders: [] as { funder_id: string; funder_name: string; amount: number }[],
   }))
@@ -221,6 +222,8 @@ export default function SalesOrdersPage() {
         delivery_address: quote.delivery_address || prev.delivery_address,
         // Also take shrinkage tolerance from quotation
         shrinkage_tolerance: quote.shrinkage_tolerance ?? 0,
+        // Also take shrinkage in price toggle from quotation
+        shrinkage_in_price: quote.shrinkage_in_price ?? false,
         // Inherit delivery_taxable from quotation
         delivery_taxable: quote.delivery_taxable ?? false,
         discount: 0,
@@ -245,6 +248,7 @@ export default function SalesOrdersPage() {
         delivery_price_per_litre: 0,
         delivery_address: "",
         shrinkage_tolerance: 0,
+        shrinkage_in_price: false,
         delivery_taxable: false,
         discount: 0,
         term_of_payment: "",
@@ -484,6 +488,7 @@ export default function SalesOrdersPage() {
         discount: item.discount || 0,
         delivery_price_per_litre: item.delivery_price_per_litre || 0,
         shrinkage_tolerance: item.shrinkage_tolerance ?? 0,
+        shrinkage_in_price: item.shrinkage_in_price ?? false,
         status: item.status,
         note: item.note || "",
         is_note_enabled: item.is_note_enabled ?? true,
@@ -517,6 +522,7 @@ export default function SalesOrdersPage() {
         discount: 0,
         delivery_price_per_litre: 0,
         shrinkage_tolerance: 0,
+        shrinkage_in_price: false,
         status: "Draft",
         note: "",
         is_note_enabled: true,
@@ -606,6 +612,8 @@ export default function SalesOrdersPage() {
             Number(editingItem.delivery_price_per_litre || 0) ||
           Number(payload.shrinkage_tolerance) !==
             Number(editingItem.shrinkage_tolerance ?? 0) ||
+          payload.shrinkage_in_price !==
+            (editingItem.shrinkage_in_price ?? false) ||
           payload.note !== (editingItem.note || "") ||
           payload.is_note_enabled !== (editingItem.is_note_enabled ?? true) ||
           JSON.stringify(
@@ -1341,18 +1349,42 @@ export default function SalesOrdersPage() {
                             <Label htmlFor="shrinkage">
                               {dict.LABEL_SHRINKAGE_TOLERANCE}
                             </Label>
-                            <NumberInput
-                              id="shrinkage"
-                              value={formData.shrinkage_tolerance}
-                              onChange={(val) =>
-                                setFormData({
-                                  ...formData,
-                                  shrinkage_tolerance: val,
-                                })
-                              }
-                              rightBadge="%"
-                              disabled={isFromQuotation}
-                            />
+                            <div className="flex items-center gap-2">
+                              <div className="w-1/2">
+                                <NumberInput
+                                  id="shrinkage"
+                                  value={formData.shrinkage_tolerance}
+                                  onChange={(val) =>
+                                    setFormData({
+                                      ...formData,
+                                      shrinkage_tolerance: val,
+                                    })
+                                  }
+                                  rightBadge="%"
+                                  disabled={isFromQuotation}
+                                />
+                              </div>
+                              <div className="flex w-1/2 items-center justify-between gap-1 rounded-md border border-input bg-muted/40 px-2 py-1">
+                                <Label
+                                  htmlFor="shrinkage-in-price"
+                                  className="cursor-pointer text-xs font-medium"
+                                >
+                                  {dict.LABEL_SHRINKAGE_IN_PRICE}
+                                </Label>
+                                <Switch
+                                  id="shrinkage-in-price"
+                                  size="sm"
+                                  checked={formData.shrinkage_in_price}
+                                  onCheckedChange={(val) =>
+                                    setFormData({
+                                      ...formData,
+                                      shrinkage_in_price: val,
+                                    })
+                                  }
+                                  disabled={isFromQuotation}
+                                />
+                              </div>
+                            </div>
                           </div>
                         </div>
 

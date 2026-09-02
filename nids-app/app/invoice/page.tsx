@@ -398,7 +398,7 @@ export default function InvoicePage() {
         let query = supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
+            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
           )
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -544,7 +544,7 @@ export default function InvoicePage() {
         supabase
           .from("delivery_orders")
           .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, delivery_taxable)"
+            "*, company:companies!delivery_orders_company_id_fkey(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
           )
           .eq("id", item.do_id)
           .maybeSingle()
@@ -699,7 +699,7 @@ export default function InvoicePage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
+            "*, company:companies(id, name), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
           )
           .eq("id", editingItem.id)
           .single()
@@ -1339,7 +1339,7 @@ export default function InvoicePage() {
                               let q = supabase
                                 .from("delivery_orders")
                                 .select(
-                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, delivery_taxable)"
+                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
                                 )
                                 .in("status", ["Shipped", "Delivered"])
                                 .limit(8)
@@ -1565,6 +1565,17 @@ export default function InvoicePage() {
                                         0
                                     ).toLocaleString()}
                                     %
+                                  </div>
+
+                                  <div className="text-muted-foreground">
+                                    {dict.LABEL_SHRINKAGE_IN_PRICE ||
+                                      "In Price"}
+                                    :
+                                  </div>
+                                  <div className="font-mono">
+                                    {selectedDOInfo.so?.shrinkage_in_price
+                                      ? "Yes"
+                                      : "No"}
                                   </div>
                                 </div>
                               </div>
