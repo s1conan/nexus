@@ -938,9 +938,10 @@ const QuotationDocument = ({
                   </View>
                 )}
                 {columns.map((c, i) => {
-                  const taxableBase = data.delivery_taxable
-                    ? c.baseABS + (c.d.delivery_cost ?? 0)
-                    : c.baseABS
+                  const taxableBase =
+                    c.baseABS +
+                    c.shrinkageAmount +
+                    (data.delivery_taxable ? (c.d.delivery_cost ?? 0) : 0)
                   const taxAmount = Math.round(
                     taxableBase * (Number(tax.rate) / 100)
                   )
@@ -1003,9 +1004,8 @@ const QuotationDocument = ({
             )}
             {columns.map((c, i) => {
               const deliveryCost = Math.round(c.d.delivery_cost ?? 0)
-              const taxableBase = data.delivery_taxable
-                ? c.baseABS + deliveryCost
-                : c.baseABS
+              const taxableBase =
+                c.baseABS + c.shrinkageAmount + (data.delivery_taxable ? deliveryCost : 0)
               let totalTaxes = 0
               if (data.tax_details) {
                 data.tax_details
@@ -1016,7 +1016,7 @@ const QuotationDocument = ({
                     )
                   })
               }
-              const total = c.baseABS + totalTaxes + deliveryCost
+              const total = c.baseABS + c.shrinkageAmount + totalTaxes + deliveryCost
               return (
                 <View
                   key={i}

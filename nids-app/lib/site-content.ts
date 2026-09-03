@@ -187,6 +187,27 @@ export const SITE_CONTENT = {
     MSG_SO_DELETED: "Sales Order %data% removed.",
     MSG_SO_STATUS_UPDATED: "Sales Order status %data% updated.",
 
+    // SO AI Import
+    BUTTON_IMPORT_DOC: "Import from Document",
+    IMPORT_DOC_TITLE: "Import from Document",
+    IMPORT_DOC_DESCRIPTION:
+      "Upload a Purchase Order document (PDF or image). AI will read it and fill the new Sales Order form for you.",
+    IMPORT_DOC_DROP_HINT: "Drag & drop files here, or",
+    IMPORT_DOC_SELECT_FILES: "Choose Files",
+    IMPORT_DOC_LIMITS: "PDF, PNG, JPEG, or WebP. Max 4 files, 10 MB each.",
+    IMPORT_DOC_ANALYZE: "Analyze",
+    IMPORT_DOC_ANALYZING: "Analyzing...",
+    IMPORT_DOC_USE_DATA: "Use This Data",
+    IMPORT_DOC_WARNINGS: "AI Warnings",
+    IMPORT_DOC_MATCHED_HINT:
+      "Matched company/product will be pre-selected. You can change them in the form.",
+    IMPORT_DOC_FAILED_TITLE: "AI Extraction Failed",
+    IMPORT_DOC_FAILED_DESC: "Could not extract data from the document(s).",
+    IMPORT_DOC_INVALID_TYPE_TITLE: "Unsupported File",
+    IMPORT_DOC_INVALID_TYPE_DESC: "Only PDF, PNG, JPEG, or WebP files are allowed.",
+    IMPORT_DOC_TOO_LARGE_TITLE: "File Too Large",
+    IMPORT_DOC_TOO_LARGE_DESC: "Maximum file size is 10 MB.",
+
     // Delivery Order Module
     LABEL_DO_NUMBER: "DO Number",
     LABEL_DO_DATE: "DO Date",
@@ -362,6 +383,7 @@ export const SITE_CONTENT = {
     // General UI
     BUTTON_SAVE: "Save",
     BUTTON_CANCEL: "Cancel",
+    BUTTON_BACK: "Back",
     BUTTON_ADD: "Add New",
     BUTTON_EDIT: "Edit",
     BUTTON_DELETE: "Delete",
@@ -749,6 +771,27 @@ export const SITE_CONTENT = {
     MSG_SO_DELETED: "Pesanan Penjualan %data% berhasil dihapus.",
     MSG_SO_STATUS_UPDATED: "Status Pesanan Penjualan %data% diperbarui.",
 
+    // SO AI Import
+    BUTTON_IMPORT_DOC: "Impor dari Dokumen",
+    IMPORT_DOC_TITLE: "Impor dari Dokumen",
+    IMPORT_DOC_DESCRIPTION:
+      "Unggah dokumen Purchase Order (PDF atau gambar). AI akan membacanya dan mengisi form SO baru untuk Anda.",
+    IMPORT_DOC_DROP_HINT: "Tarik & lepas file di sini, atau",
+    IMPORT_DOC_SELECT_FILES: "Pilih File",
+    IMPORT_DOC_LIMITS: "PDF, PNG, JPEG, atau WebP. Maks 4 file, 10 MB per file.",
+    IMPORT_DOC_ANALYZE: "Analisis",
+    IMPORT_DOC_ANALYZING: "Menganalisis...",
+    IMPORT_DOC_USE_DATA: "Gunakan Data Ini",
+    IMPORT_DOC_WARNINGS: "Peringatan AI",
+    IMPORT_DOC_MATCHED_HINT:
+      "Perusahaan/produk yang cocok akan dipilih otomatis. Anda dapat mengubahnya di form.",
+    IMPORT_DOC_FAILED_TITLE: "Ekstraksi AI Gagal",
+    IMPORT_DOC_FAILED_DESC: "Tidak dapat mengekstrak data dari dokumen.",
+    IMPORT_DOC_INVALID_TYPE_TITLE: "File Tidak Didukung",
+    IMPORT_DOC_INVALID_TYPE_DESC: "Hanya file PDF, PNG, JPEG, atau WebP yang diizinkan.",
+    IMPORT_DOC_TOO_LARGE_TITLE: "File Terlalu Besar",
+    IMPORT_DOC_TOO_LARGE_DESC: "Ukuran file maksimal 10 MB.",
+
     // Delivery Order Module
     LABEL_DO_NUMBER: "Nomor DO",
     LABEL_DO_DATE: "Tanggal DO",
@@ -925,6 +968,7 @@ export const SITE_CONTENT = {
     // General UI
     BUTTON_SAVE: "Simpan",
     BUTTON_CANCEL: "Batal",
+    BUTTON_BACK: "Kembali",
     BUTTON_ADD: "Tambah Baru",
     BUTTON_EDIT: "Ubah",
     BUTTON_DELETE: "Hapus",

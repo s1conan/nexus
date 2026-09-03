@@ -30,6 +30,7 @@ import {
   AlertCircle,
   ShoppingBag,
   RefreshCw,
+  FileUp,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -72,6 +73,11 @@ import {
 import { ButtonLoader } from "@/components/button-loader"
 import { NumberInput } from "@/components/number-input"
 import { generateStandardSalesOrderPDF } from "@/lib/pdf-generator"
+import {
+  SOAIImportDialog,
+  type ExtractedSOData,
+  type SOAutoMatch,
+} from "@/components/so-ai-import-dialog"
 import dynamic from "next/dynamic"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
@@ -143,6 +149,7 @@ export default function SalesOrdersPage() {
     so_number: string
   } | null>(null)
   const [fundersDialogOpen, setFundersDialogOpen] = useState(false)
+  const [aiImportOpen, setAiImportOpen] = useState(false)
 
   const statusStyles: Record<string, string> = {
     Default:
@@ -540,7 +547,55 @@ export default function SalesOrdersPage() {
     setIsOpen(true)
   }
 
-  // Actions
+  // Apply AI-extracted data to a new SO form
+  const handleAIApply = (data: ExtractedSOData, match: SOAutoMatch) => {
+    setAiImportOpen(false)
+    setEditingItem(null)
+    setViewOnly(false)
+    setSelectedQuotationInfo(null)
+    setAvailableDiscounts([])
+    setSelectedCompanyInfo(match.company)
+    setSelectedProductInfo(match.product)
+
+    // Merge extracted taxes with global taxes (enable + rate from document)
+    const extractedTaxes = Array.isArray(data.taxes) ? data.taxes : []
+    const mergedTaxes = globalTaxes.map((gt) => {
+      const existing = extractedTaxes.find(
+        (et) =>
+          et.name.toLowerCase() === gt.name.toLowerCase() ||
+          gt.name.toLowerCase().includes(et.name.toLowerCase())
+      )
+      if (existing) return { ...gt, rate: existing.rate, enabled: true }
+      return { ...gt, rate: gt.value, enabled: false }
+    })
+
+    setFormData({
+      so_number: "", // Will be auto-generated on save if empty
+      po_number: data.po_number || "",
+      quotation_id: "",
+      company_id: match.company?.id || "",
+      product_id: match.product?.id || "",
+      so_date: data.so_date || format(new Date(), "yyyy-MM-dd"),
+      delivery_date:
+        data.delivery_date ||
+        format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
+      quantity: data.quantity ?? 0,
+      unit_price: data.unit_price ?? 0,
+      term_of_payment: data.term_of_payment || "",
+      delivery_address: data.delivery_address || "",
+      discount: data.discount_percent ?? 0,
+      delivery_price_per_litre: 0,
+      shrinkage_tolerance: 0,
+      shrinkage_in_price: false,
+      status: "Draft",
+      note: data.note || "",
+      is_note_enabled: true,
+      tax_details: mergedTaxes,
+      funders: [],
+      delivery_taxable: false,
+    })
+    setIsOpen(true)
+  }
   const handleSave = async () => {
     // Validate required fields
     if (!formData.po_number?.trim()) {
@@ -850,6 +905,16 @@ export default function SalesOrdersPage() {
                 (loading || loadingMore) && "animate-spin"
               )}
             />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAiImportOpen(true)}
+            disabled={!canInsert}
+            title={dict.BUTTON_IMPORT_DOC}
+          >
+            <FileUp data-icon="inline-start" />
+            {dict.BUTTON_IMPORT_DOC}
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -1743,6 +1808,11 @@ export default function SalesOrdersPage() {
           onClose={() => setPreviewDoc(null)}
         />
       )}
+      <SOAIImportDialog
+        open={aiImportOpen}
+        onOpenChange={setAiImportOpen}
+        onApply={handleAIApply}
+      />
       <FundersDialog
         open={fundersDialogOpen}
         onOpenChange={setFundersDialogOpen}
