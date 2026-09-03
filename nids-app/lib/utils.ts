@@ -6,6 +6,22 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Strips PostgREST reserved characters (, ( ) ") from a raw value before it is
+ * interpolated into an or()/and() filter string (e.g. searching "PT Royaltama, Tbk").
+ */
+export function sanitizePostgrestValue(value: string) {
+  return value.replace(/[,()"]/g, "")
+}
+
+/**
+ * Formats a list of warning strings as bullet lines for toast descriptions
+ * (e.g. "• PPN: document states 12%...\n• PBBKB: ...").
+ */
+export function formatBulletList(items: string[]) {
+  return items.map((item) => `• ${item}`).join("\n")
+}
+
+/**
  * Constructs a PostgREST filter string for multi-word "AND" search across multiple columns.
  * For each column, it checks if it contains ALL words from the query.
  * Matches if ANY column meets the criteria.
@@ -35,7 +51,5 @@ export function constructMultiWordSearch(query: string, columns: string[]) {
     return `and(${wordFilters.join(",")})`
   })
 
-  const finalQuery = columnFilters.join(",")
-  console.log(`[DEBUG UTILS] Final PostgREST string:`, finalQuery)
-  return finalQuery
+  return columnFilters.join(",")
 }

@@ -41,7 +41,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 
-import { cn } from "@/lib/utils"
+import { cn, sanitizePostgrestValue } from "@/lib/utils"
 
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
@@ -116,7 +116,7 @@ export default function ProductsPage() {
 
         if (debouncedSearchQuery) {
           query = query.or(
-            `name.ilike.%${debouncedSearchQuery}%,sku.ilike.%${debouncedSearchQuery}%`
+            `name.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%,sku.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%`
           )
         }
 

@@ -40,7 +40,7 @@ import { Switch } from "@/components/ui/switch"
 import { SummaryCard } from "@/components/summary-card"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 
-import { cn } from "@/lib/utils"
+import { cn, sanitizePostgrestValue } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { usePersistedState } from "@/hooks/use-persisted-state"
@@ -168,7 +168,7 @@ export default function VehiclesPage() {
 
         if (debouncedSearchQuery) {
           query = query.or(
-            `license_number.ilike.%${debouncedSearchQuery}%,vehicle_type.ilike.%${debouncedSearchQuery}%`
+            `license_number.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%,vehicle_type.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%`
           )
         }
 

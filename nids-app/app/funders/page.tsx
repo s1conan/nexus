@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { cn } from "@/lib/utils"
+import { cn, sanitizePostgrestValue } from "@/lib/utils"
 
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
@@ -150,7 +150,7 @@ export default function FundersPage() {
 
         if (debouncedSearchQuery) {
           query = query.or(
-            `name.ilike.%${debouncedSearchQuery}%,id_number.ilike.%${debouncedSearchQuery}%,phone.ilike.%${debouncedSearchQuery}%`
+            `name.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%,id_number.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%,phone.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%`
           )
         }
 

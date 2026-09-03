@@ -62,7 +62,11 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { cn, constructMultiWordSearch } from "@/lib/utils"
+import {
+  cn,
+  constructMultiWordSearch,
+  sanitizePostgrestValue,
+} from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { Checkbox } from "@/components/ui/checkbox"
 import { notify } from "@/lib/notifications"
@@ -317,7 +321,9 @@ export default function QuotationsPage() {
         query = query.order("created_at", { ascending: false })
 
         if (debouncedSearchQuery) {
-          query = query.or(`quotation_number.ilike.%${debouncedSearchQuery}%`)
+          query = query.or(
+            `quotation_number.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%`
+          )
         }
 
         const { data, error } = await query
