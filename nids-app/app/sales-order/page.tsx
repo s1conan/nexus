@@ -30,7 +30,7 @@ import {
   AlertCircle,
   ShoppingBag,
   RefreshCw,
-  FileUp,
+  Sparkles,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -174,7 +174,10 @@ export default function SalesOrdersPage() {
     const discountAmount = baseTotal * ((formData.discount || 0) / 100)
     const afterDiscount = baseTotal - discountAmount
     const subtotal = Math.max(0, afterDiscount + deliveryTotal)
-    const taxableAmount = Math.max(0, afterDiscount + (formData.delivery_taxable ? deliveryTotal : 0))
+    const taxableAmount = Math.max(
+      0,
+      afterDiscount + (formData.delivery_taxable ? deliveryTotal : 0)
+    )
 
     const appliedTaxes = formData.tax_details.map((t) => {
       if (!t.enabled) return { ...t, amount: 0 }
@@ -747,7 +750,10 @@ export default function SalesOrdersPage() {
         if (!payload.so_number) {
           const { data, error: rpcError } = await supabase.rpc(
             "generate_document_number",
-            { p_doc_type: "sales-order", p_company_id: payload.company_id || null }
+            {
+              p_doc_type: "sales-order",
+              p_company_id: payload.company_id || null,
+            }
           )
           if (rpcError) throw rpcError
           payload.so_number = data
@@ -913,7 +919,7 @@ export default function SalesOrdersPage() {
             disabled={!canInsert}
             title={dict.BUTTON_IMPORT_DOC}
           >
-            <FileUp data-icon="inline-start" />
+            <Sparkles data-icon="inline-start" />
             {dict.BUTTON_IMPORT_DOC}
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -1345,8 +1351,12 @@ export default function SalesOrdersPage() {
                                     ...formData,
                                     term_of_payment: val,
                                     discount: disc ? disc.value : 0,
-                                    delivery_address: disc?.delivery_address || formData.delivery_address,
-                                    delivery_price_per_litre: disc?.delivery_cost ?? formData.delivery_price_per_litre,
+                                    delivery_address:
+                                      disc?.delivery_address ||
+                                      formData.delivery_address,
+                                    delivery_price_per_litre:
+                                      disc?.delivery_cost ??
+                                      formData.delivery_price_per_litre,
                                   })
                                 }}
                               >
@@ -1465,13 +1475,17 @@ export default function SalesOrdersPage() {
                               htmlFor="delivery-taxable"
                               className="cursor-pointer text-xs font-medium"
                             >
-                              {dict.LABEL_DELIVERY_TAXABLE || "Include Delivery Fee in Tax (PPN)"}
+                              {dict.LABEL_DELIVERY_TAXABLE ||
+                                "Include Delivery Fee in Tax (PPN)"}
                             </Label>
                             <Switch
                               id="delivery-taxable"
                               checked={formData.delivery_taxable}
                               onCheckedChange={(val) =>
-                                setFormData({ ...formData, delivery_taxable: val })
+                                setFormData({
+                                  ...formData,
+                                  delivery_taxable: val,
+                                })
                               }
                               disabled={isFromQuotation}
                             />

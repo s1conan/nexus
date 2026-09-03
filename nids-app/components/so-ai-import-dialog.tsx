@@ -104,9 +104,7 @@ export function SOAIImportDialog({
   }
 
   // Auto-match extracted names against DB records
-  const autoMatch = async (
-    data: ExtractedSOData
-  ): Promise<SOAutoMatch> => {
+  const autoMatch = async (data: ExtractedSOData): Promise<SOAutoMatch> => {
     const result: SOAutoMatch = { company: null, product: null }
 
     if (data.company_name) {
@@ -196,7 +194,10 @@ export function SOAIImportDialog({
     }
     return (
       <span
-        className={cn("ml-2 text-[10px] font-semibold uppercase", styles[level])}
+        className={cn(
+          "ml-2 text-[10px] font-semibold uppercase",
+          styles[level]
+        )}
       >
         {level}
       </span>
@@ -211,19 +212,17 @@ export function SOAIImportDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            <Sparkles className="mr-2 inline-block size-5 text-primary" />
+            <Sparkles className="mr-2 inline-block size-5" />
             {dict.IMPORT_DOC_TITLE}
           </DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            {dict.IMPORT_DOC_DESCRIPTION}
-          </p>
+          <p className="text-xs">{dict.IMPORT_DOC_DESCRIPTION}</p>
         </DialogHeader>
 
         {!extracted ? (
           <div className="space-y-4">
             <div
               className={cn(
-                "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition-colors",
+                "flex flex-col items-center justify-center gap-2 border-3 border-dotted bg-secondary/10 p-6 text-center transition-colors",
                 files.length > 0 && "border-primary/50 bg-primary/5"
               )}
               onDragOver={(e) => e.preventDefault()}
@@ -311,10 +310,7 @@ export function SOAIImportDialog({
               },
               {
                 label: dict.LABEL_COMPANY_NAME,
-                value:
-                  match?.company?.name ||
-                  extracted.company_name ||
-                  "-",
+                value: match?.company?.name || extracted.company_name || "-",
                 field: "company_name",
               },
               {

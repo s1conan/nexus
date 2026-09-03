@@ -30,6 +30,9 @@ Font.register({
   ],
 })
 
+// Delivery cost is only taxable under PPN, not other taxes (e.g. PPKB/PBBKB)
+const isPpnTax = (name: string) => name.toUpperCase().includes("PPN")
+
 export interface CompanyInfo {
   name: string
   address: string
@@ -584,16 +587,13 @@ const QuotationDocument = ({
 }) => {
   const hasDeliveryAddress = data.discounts.some((d) => d.delivery_address)
   const headerHeight = hasDeliveryAddress ? 28 : 18
-  const shrinkageEnabled = !!data.shrinkage_in_price && Number(data.shrinkage) > 0
-  const hasPercentDiscount = data.discounts.some(
-    (d) =>
-      Number(d?.direct_price) <= 0 &&
-      Number(d.value) > 0 &&
-      Number(d.value) <= 100
-  )
+  const shrinkageEnabled =
+    !!data.shrinkage_in_price && Number(data.shrinkage) > 0
+  // % column is always rendered for uniformity (tax rates need it even
+  // when all discount tiers are direct prices); it stays blank otherwise.
+  const hasPercentDiscount = true
   const columns = data.discounts.map((d) => {
-    const isDirect =
-      Number(d?.direct_price) > 0 || Number(d.value) > 100
+    const isDirect = Number(d?.direct_price) > 0 || Number(d.value) > 100
     const directPrice = isDirect
       ? Number(d?.direct_price) > 0
         ? Number(d.direct_price)
@@ -602,9 +602,7 @@ const QuotationDocument = ({
     const discountValue = isDirect
       ? 0
       : Math.round(data.base_price * (d.value / 100))
-    const baseABS = isDirect
-      ? directPrice
-      : data.base_price - discountValue
+    const baseABS = isDirect ? directPrice : data.base_price - discountValue
     const shrinkageAmount = isDirect
       ? shrinkageEnabled
         ? Math.round(directPrice * (Number(data.shrinkage) / 100))
@@ -618,8 +616,7 @@ const QuotationDocument = ({
     65,
     Math.max(
       ...data.discounts.map((d) => {
-        const isDirect =
-          Number(d?.direct_price) > 0 || Number(d.value) > 100
+        const isDirect = Number(d?.direct_price) > 0 || Number(d.value) > 100
         return isDirect
           ? `${d.label} ${formatNumber(
               Number(d?.direct_price) > 0
@@ -631,7 +628,7 @@ const QuotationDocument = ({
       10
     ) * 6
   )
-  
+
   const replacements: Record<string, string> = {
     quotation_number: data.quotation_number,
     quotation_date: data.quotation_date
@@ -757,9 +754,7 @@ const QuotationDocument = ({
                   ]}
                 >
                   <Text>
-                    {isDirect
-                      ? `${d.label}`
-                      : `${d.label} ${d.value}%`}
+                    {isDirect ? `${d.label}` : `${d.label} ${d.value}%`}
                   </Text>
                   {d.delivery_address && (
                     <Text style={{ fontSize: 8 }}>({d.delivery_address})</Text>
@@ -813,11 +808,7 @@ const QuotationDocument = ({
                     { width: discountColumnWidth },
                   ]}
                 >
-                  <Text>
-                    {c.isDirect
-                      ? ""
-                      : formatNumber(c.discountValue)}
-                  </Text>
+                  <Text>{c.isDirect ? "" : formatNumber(c.discountValue)}</Text>
                 </View>
               ))}
             </View>
@@ -896,52 +887,59 @@ const QuotationDocument = ({
           </View>
           {data.delivery_taxable &&
             data.discounts.some((d) => Number(d.delivery_cost) > 0) && (
-            <View style={a4Styles.tableRow}>
-              <View style={[a4Styles.cell, { width: 170 }]}>
-                <Text>Biaya Pengiriman</Text>
+              <View style={a4Styles.tableRow}>
+                <View style={[a4Styles.cell, { width: 170 }]}>
+                  <Text>Biaya Pengiriman</Text>
+                </View>
+                {hasPercentDiscount && (
+                  <View
+                    style={[
+                      a4Styles.cell,
+                      a4Styles.center,
+                      { width: 30, height: 22, top: 2 },
+                    ]}
+                  >
+                    <Text> </Text>
+                  </View>
+                )}
+                {data.discounts.map((d, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      a4Styles.cell,
+                      a4Styles.right,
+                      { width: discountColumnWidth },
+                    ]}
+                  >
+                    <Text>
+                      {formatNumber(Math.round(d.delivery_cost ?? 0))}
+                    </Text>
+                  </View>
+                ))}
               </View>
-              {hasPercentDiscount && (
-                <View
-                  style={[
-                    a4Styles.cell,
-                    a4Styles.center,
-                    { width: 30, height: 22, top: 2 },
-                  ]}
-                >
-                  <Text> </Text>
-                </View>
-              )}
-              {data.discounts.map((d, i) => (
-                <View
-                  key={i}
-                  style={[
-                    a4Styles.cell,
-                    a4Styles.right,
-                    { width: discountColumnWidth },
-                  ]}
-                >
-                  <Text>{formatNumber(Math.round(d.delivery_cost ?? 0))}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+            )}
           {data.tax_details
             ?.filter((t) => t.enabled)
             .map((tax, taxIdx) => (
               <View key={`tax-${taxIdx}`} style={a4Styles.tableRow}>
                 <View style={[a4Styles.cell, { width: 170 }]}>
-                  <Text>{tax.name}</Text>
+                  <Text>
+                    {tax.name}
+                    {data.delivery_taxable && isPpnTax(tax.name)
+                      ? " (OAT included)"
+                      : ""}
+                  </Text>
                 </View>
-                {hasPercentDiscount && (
-                  <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
-                    <Text>{tax.rate}%</Text>
-                  </View>
-                )}
+                <View style={[a4Styles.cell, a4Styles.center, { width: 30 }]}>
+                  <Text>{tax.rate}%</Text>
+                </View>
                 {columns.map((c, i) => {
                   const taxableBase =
                     c.baseABS +
                     c.shrinkageAmount +
-                    (data.delivery_taxable ? (c.d.delivery_cost ?? 0) : 0)
+                    (data.delivery_taxable && isPpnTax(tax.name)
+                      ? (c.d.delivery_cost ?? 0)
+                      : 0)
                   const taxAmount = Math.round(
                     taxableBase * (Number(tax.rate) / 100)
                   )
@@ -962,35 +960,37 @@ const QuotationDocument = ({
             ))}
           {!data.delivery_taxable &&
             data.discounts.some((d) => Number(d.delivery_cost) > 0) && (
-            <View style={a4Styles.tableRow}>
-              <View style={[a4Styles.cell, { width: 170 }]}>
-                <Text>Biaya Pengiriman</Text>
+              <View style={a4Styles.tableRow}>
+                <View style={[a4Styles.cell, { width: 170 }]}>
+                  <Text>Biaya Pengiriman</Text>
+                </View>
+                {hasPercentDiscount && (
+                  <View
+                    style={[
+                      a4Styles.cell,
+                      a4Styles.center,
+                      { width: 30, height: 22, top: 2 },
+                    ]}
+                  >
+                    <Text> </Text>
+                  </View>
+                )}
+                {data.discounts.map((d, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      a4Styles.cell,
+                      a4Styles.right,
+                      { width: discountColumnWidth },
+                    ]}
+                  >
+                    <Text>
+                      {formatNumber(Math.round(d.delivery_cost ?? 0))}
+                    </Text>
+                  </View>
+                ))}
               </View>
-              {hasPercentDiscount && (
-                <View
-                  style={[
-                    a4Styles.cell,
-                    a4Styles.center,
-                    { width: 30, height: 22, top: 2 },
-                  ]}
-                >
-                  <Text> </Text>
-                </View>
-              )}
-              {data.discounts.map((d, i) => (
-                <View
-                  key={i}
-                  style={[
-                    a4Styles.cell,
-                    a4Styles.right,
-                    { width: discountColumnWidth },
-                  ]}
-                >
-                  <Text>{formatNumber(Math.round(d.delivery_cost ?? 0))}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+            )}
           <View style={a4Styles.tableRow}>
             <View style={[a4Styles.cell, { width: 170 }]}>
               <Text style={{ fontWeight: "bold" }}>
@@ -1004,19 +1004,24 @@ const QuotationDocument = ({
             )}
             {columns.map((c, i) => {
               const deliveryCost = Math.round(c.d.delivery_cost ?? 0)
-              const taxableBase =
-                c.baseABS + c.shrinkageAmount + (data.delivery_taxable ? deliveryCost : 0)
               let totalTaxes = 0
               if (data.tax_details) {
                 data.tax_details
                   .filter((t) => t.enabled)
                   .forEach((tax) => {
+                    const taxableBase =
+                      c.baseABS +
+                      c.shrinkageAmount +
+                      (data.delivery_taxable && isPpnTax(tax.name)
+                        ? deliveryCost
+                        : 0)
                     totalTaxes += Math.round(
                       taxableBase * (Number(tax.rate) / 100)
                     )
                   })
               }
-              const total = c.baseABS + c.shrinkageAmount + totalTaxes + deliveryCost
+              const total =
+                c.baseABS + c.shrinkageAmount + totalTaxes + deliveryCost
               return (
                 <View
                   key={i}

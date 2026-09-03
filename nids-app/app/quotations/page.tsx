@@ -1160,10 +1160,15 @@ export default function QuotationsPage() {
       (sum, d) => sum + (Number(d.delivery_cost) || 0),
       0
     )
-    const taxableAmount = subtotal + (formData.delivery_taxable ? deliveryTotal : 0)
     const appliedTaxes = formData.tax_details.map((t) => {
       if (!t.enabled) return { ...t, amount: 0 }
-      const amt = (taxableAmount * Number(t.rate)) / 100
+      // Delivery cost is only taxable under PPN, not other taxes (e.g. PPKB)
+      const taxable =
+        subtotal +
+        (formData.delivery_taxable && t.name.toUpperCase().includes("PPN")
+          ? deliveryTotal
+          : 0)
+      const amt = (taxable * Number(t.rate)) / 100
       return { ...t, amount: amt }
     })
     const taxTotal = appliedTaxes.reduce((sum, t) => sum + t.amount, 0)
