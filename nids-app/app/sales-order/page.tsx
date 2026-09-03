@@ -31,6 +31,7 @@ import {
   ShoppingBag,
   RefreshCw,
   Sparkles,
+  FileUp,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -54,7 +55,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { cn, constructMultiWordSearch } from "@/lib/utils"
+import { cn, constructMultiWordSearch, formatBulletList } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 import { FundersDialog } from "@/components/funders-dialog"
@@ -73,19 +74,24 @@ import {
 import { ButtonLoader } from "@/components/button-loader"
 import { NumberInput } from "@/components/number-input"
 import { generateStandardSalesOrderPDF } from "@/lib/pdf-generator"
+import { SOAIImportDialog, type SOImportMeta } from "@/components/so-ai-import-dialog"
 import {
-  SOAIImportDialog,
+  autoMatchSO,
+  // computeTaxRateWarnings, // superseded by the AI arithmetic verifier
   type ExtractedSOData,
   type SOAutoMatch,
-} from "@/components/so-ai-import-dialog"
+} from "@/lib/so-auto-match"
+import { fuzzyScore } from "@/lib/fuzzy-match"
 import dynamic from "next/dynamic"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
 const PAGE_SIZE = 50
 
+type FieldFlag = "low" | "warning"
+
 export default function SalesOrdersPage() {
-  const { dict } = useDictionary()
+  const { dict, lang } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
@@ -150,6 +156,19 @@ export default function SalesOrdersPage() {
   } | null>(null)
   const [fundersDialogOpen, setFundersDialogOpen] = useState(false)
   const [aiImportOpen, setAiImportOpen] = useState(false)
+  const [isDraggingFile, setIsDraggingFile] = useState(false)
+  const [isProcessingImport, setIsProcessingImport] = useState(false)
+  const [fieldFlags, setFieldFlags] = useState<Record<string, FieldFlag>>({})
+  const dragCounter = useRef(0)
+
+  // Border/background classes marking AI-suspect fields on the existing
+  // controls — no wrapper elements, layout untouched
+  const flagClass = (...fields: (FieldFlag | undefined)[]) => {
+    const flag = fields.find(Boolean)
+    if (flag === "warning") return "border-red-500/60 bg-red-500/5"
+    if (flag === "low") return "border-amber-500/60 bg-amber-500/5"
+    return ""
+  }
 
   const statusStyles: Record<string, string> = {
     Default:
@@ -174,14 +193,20 @@ export default function SalesOrdersPage() {
     const discountAmount = baseTotal * ((formData.discount || 0) / 100)
     const afterDiscount = baseTotal - discountAmount
     const subtotal = Math.max(0, afterDiscount + deliveryTotal)
+    // Delivery fee is only ever taxed by PPN — other taxes (PBBKB, etc.)
+    // are always computed on the product amount alone.
     const taxableAmount = Math.max(
       0,
       afterDiscount + (formData.delivery_taxable ? deliveryTotal : 0)
     )
+    const productOnlyAmount = Math.max(0, afterDiscount)
 
     const appliedTaxes = formData.tax_details.map((t) => {
       if (!t.enabled) return { ...t, amount: 0 }
-      const amt = (taxableAmount * Number(t.rate)) / 100
+      const isPpn = /ppn/i.test(t.name) && !/pbbkb/i.test(t.name)
+      const base =
+        formData.delivery_taxable && isPpn ? taxableAmount : productOnlyAmount
+      const amt = (base * Number(t.rate)) / 100
       return { ...t, amount: amt }
     })
     const taxTotal = appliedTaxes.reduce((sum, t) => sum + t.amount, 0)
@@ -485,6 +510,8 @@ export default function SalesOrdersPage() {
         }
       })
 
+      setFieldFlags({}) // manual open/edit — no AI marks
+
       setFormData({
         so_number: item.so_number,
         po_number: item.po_number || "",
@@ -515,6 +542,7 @@ export default function SalesOrdersPage() {
       setSelectedProductInfo(null)
       setSelectedQuotationInfo(null)
       setAvailableDiscounts([])
+      setFieldFlags({}) // manual open — no AI marks
 
       setFormData({
         so_number: "", // Will be auto-generated on save if empty
@@ -551,7 +579,11 @@ export default function SalesOrdersPage() {
   }
 
   // Apply AI-extracted data to a new SO form
-  const handleAIApply = (data: ExtractedSOData, match: SOAutoMatch) => {
+  const handleAIApply = (
+    data: ExtractedSOData,
+    match: SOAutoMatch,
+    meta?: SOImportMeta
+  ) => {
     setAiImportOpen(false)
     setEditingItem(null)
     setViewOnly(false)
@@ -560,17 +592,123 @@ export default function SalesOrdersPage() {
     setSelectedCompanyInfo(match.company)
     setSelectedProductInfo(match.product)
 
-    // Merge extracted taxes with global taxes (enable + rate from document)
-    const extractedTaxes = Array.isArray(data.taxes) ? data.taxes : []
-    const mergedTaxes = globalTaxes.map((gt) => {
-      const existing = extractedTaxes.find(
-        (et) =>
-          et.name.toLowerCase() === gt.name.toLowerCase() ||
-          gt.name.toLowerCase().includes(et.name.toLowerCase())
+    // Build per-field marks: AI low confidence → amber; fields involved in
+    // warnings (AI flagged_fields + code audit) → red. Red wins.
+    const fieldFlags: Record<string, FieldFlag> = {}
+    for (const [field, level] of Object.entries(data.confidence ?? {})) {
+      if (level === "low") fieldFlags[field] = "low"
+    }
+    for (const field of data.flagged_fields ?? []) {
+      fieldFlags[field] = "warning"
+    }
+    setFieldFlags(fieldFlags)
+
+    // Warnings + timing info follow the data into BOTH paths (dialog apply
+    // and drag-drop shortcut) so the user always sees them
+    const warnings = Array.from(
+      new Set([...(data.warnings || []), ...(meta?.warnings ?? [])])
+    )
+    if (warnings.length > 0) {
+      notify.warning(
+        dict.IMPORT_DOC_WARNINGS,
+        formatBulletList(warnings),
+        12000
       )
-      if (existing) return { ...gt, rate: existing.rate, enabled: true }
+    }
+    if (meta?.timings) {
+      const fmtDur = (ms: number) =>
+        ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
+      notify.info(
+        dict.IMPORT_DOC_TIMINGS,
+        dict
+          .IMPORT_DOC_TIMINGS_DETAIL.replace(
+            "%upload%",
+            fmtDur(meta.timings.upload_parse_ms)
+          )
+          .replace(
+            "%ai%",
+            fmtDur(
+              Math.max(
+                0,
+                meta.timings.total_ms -
+                  meta.timings.upload_parse_ms -
+                  meta.timings.code_ms
+              )
+            )
+          )
+          .replace("%verify%", fmtDur(meta.timings.code_ms))
+          .replace("%total%", fmtDur(meta.timings.total_ms))
+      )
+    }
+
+    // Merge extracted taxes with global taxes by fuzzy name match — handles
+    // document variants like "PBBKB SOLAR" matching the global "PBBKB".
+    // The DB rate (gt.value) ALWAYS wins — document rates are often wrong or
+    // use a different basis; the dialog surfaces any mismatch as a warning.
+    const extractedTaxes = Array.isArray(data.taxes) ? data.taxes : []
+    const matchedExtracted = new Set<number>()
+    const mergedTaxes = globalTaxes.map((gt) => {
+      let best: { index: number; score: number } | null = null
+      for (let idx = 0; idx < extractedTaxes.length; idx++) {
+        if (matchedExtracted.has(idx)) continue
+        const et = extractedTaxes[idx]
+        const score = Math.max(
+          fuzzyScore(gt.name, et.name),
+          fuzzyScore(et.name, gt.name)
+        )
+        if (!best || score > best.score) best = { index: idx, score }
+      }
+      if (best && best.score >= 0.6) {
+        matchedExtracted.add(best.index)
+        return { ...gt, rate: gt.value, enabled: true }
+      }
       return { ...gt, rate: gt.value, enabled: false }
     })
+
+    // Append extracted taxes with no global match (truly custom/local taxes)
+    extractedTaxes.forEach((et, idx) => {
+      if (matchedExtracted.has(idx)) return
+      mergedTaxes.push({
+        id: `custom-${et.name}`,
+        name: et.name,
+        value: et.rate ?? 0,
+        rate: et.rate ?? 0,
+        enabled: true,
+      })
+    })
+
+    // Match extracted delivery address against the company's saved addresses
+    // so the address Select picks an existing entry instead of free text.
+    let deliveryAddress = ""
+    const companyDetails = match.company?.details as
+      | { addresses?: { label: string; address: string }[] }
+      | undefined
+    const savedAddresses = companyDetails?.addresses || []
+    if (data.delivery_address && savedAddresses.length > 0) {
+      const best = savedAddresses.reduce(
+        (acc, addr) => {
+          const score = Math.max(
+            fuzzyScore(data.delivery_address!, addr.address),
+            fuzzyScore(data.delivery_address!, addr.label)
+          )
+          return score > acc.score ? { addr, score } : acc
+        },
+        { addr: null as { label: string; address: string } | null, score: 0 }
+      )
+      if (best.addr && best.score >= 0.6) {
+        deliveryAddress = best.addr.address
+      }
+    }
+
+    // Delivery cost: prefer an explicitly stated per-litre rate; otherwise
+    // convert the flat OAT total (e.g. "ONGKOS ANGKUT ... 1 LOT ... 5.000.000")
+    // to per-litre using the extracted quantity (5.000.000 / 10.000 L = 500/L).
+    const quantityNum = data.quantity ?? 0
+    const deliveryPerLitre =
+      data.delivery_price_per_litre ??
+      (data.delivery_price_total && quantityNum > 0
+        ? Math.round((data.delivery_price_total / quantityNum) * 100) / 100
+        : 0)
 
     setFormData({
       so_number: "", // Will be auto-generated on save if empty
@@ -585,20 +723,111 @@ export default function SalesOrdersPage() {
       quantity: data.quantity ?? 0,
       unit_price: data.unit_price ?? 0,
       term_of_payment: data.term_of_payment || "",
-      delivery_address: data.delivery_address || "",
+      delivery_address: deliveryAddress,
       discount: data.discount_percent ?? 0,
-      delivery_price_per_litre: 0,
-      shrinkage_tolerance: 0,
+      delivery_price_per_litre: deliveryPerLitre,
+      shrinkage_tolerance: data.shrinkage_tolerance ?? 0,
       shrinkage_in_price: false,
       status: "Draft",
       note: data.note || "",
       is_note_enabled: true,
       tax_details: mergedTaxes,
       funders: [],
-      delivery_taxable: false,
+      delivery_taxable: data.delivery_taxable ?? false,
     })
     setIsOpen(true)
   }
+
+  // Drag-and-drop shortcut: validate -> extract via AI -> auto-match -> open form
+  const handleAIImportFiles = async (incoming: File[]) => {
+    const allowed = ["application/pdf", "image/png", "image/jpeg", "image/webp"]
+    const valid = incoming.filter((f) => {
+      if (!allowed.includes(f.type)) {
+        notify.error(
+          dict.IMPORT_DOC_INVALID_TYPE_TITLE,
+          `${f.name}: ${dict.IMPORT_DOC_INVALID_TYPE_DESC}`
+        )
+        return false
+      }
+      if (f.size > 10 * 1024 * 1024) {
+        notify.error(
+          dict.IMPORT_DOC_TOO_LARGE_TITLE,
+          `${f.name}: ${dict.IMPORT_DOC_TOO_LARGE_DESC}`
+        )
+        return false
+      }
+      return true
+    })
+    if (valid.length === 0) return
+    if (valid.length > 4) {
+      notify.error(dict.IMPORT_DOC_TOO_LARGE_TITLE, dict.IMPORT_DOC_LIMITS)
+      return
+    }
+
+    setIsProcessingImport(true)
+    try {
+      const body = new FormData()
+      valid.forEach((file) => body.append("files", file))
+      // app_settings "company" category keys the supplier name as "name"
+      if (companyInfo?.name) {
+        body.append("supplier_name", companyInfo.name)
+      }
+      // DB tax rates are the system parameter of record — the server uses
+      // them for verification instead of trusting document rates
+      if (globalTaxes.length > 0) {
+        body.append(
+          "tax_rates",
+          JSON.stringify(
+            Object.fromEntries(globalTaxes.map((gt) => [gt.name, gt.value]))
+          )
+        )
+      }
+      body.append("language", lang)
+
+      const res = await fetch("/api/ai/extract-so", {
+        method: "POST",
+        body,
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error || dict.IMPORT_DOC_FAILED_DESC)
+      }
+
+      const data = json.data as ExtractedSOData
+      // Code-audit flagged fields ride along on the data so handleAIApply
+      // can mark the corresponding form controls
+      data.flagged_fields = [
+        ...(data.flagged_fields ?? []),
+        ...(Array.isArray(json.code_flagged_fields)
+          ? json.code_flagged_fields
+          : []),
+      ]
+      const match = await autoMatchSO(supabase, data)
+
+      // Warnings + timings are surfaced inside handleAIApply (same as the
+      // dialog path)
+      handleAIApply(data, match, {
+        warnings: [
+          ...(Array.isArray(json.code_warnings) ? json.code_warnings : []),
+          ...(Array.isArray(json.verification_warnings)
+            ? json.verification_warnings
+            : []),
+          ...(json.verification_error
+            ? [dict.IMPORT_DOC_VERIFY_FAILED]
+            : []),
+        ],
+        timings: json.timings ?? null,
+      })
+    } catch (err) {
+      notify.error(
+        dict.IMPORT_DOC_FAILED_TITLE,
+        err instanceof Error ? err.message : dict.IMPORT_DOC_FAILED_DESC
+      )
+    } finally {
+      setIsProcessingImport(false)
+    }
+  }
+
   const handleSave = async () => {
     // Validate required fields
     if (!formData.po_number?.trim()) {
@@ -913,14 +1142,47 @@ export default function SalesOrdersPage() {
             />
           </Button>
           <Button
-            variant="outline"
+            variant={isDraggingFile ? "secondary" : "outline"}
             size="sm"
             onClick={() => setAiImportOpen(true)}
-            disabled={!canInsert}
+            disabled={!canInsert || isProcessingImport}
             title={dict.BUTTON_IMPORT_DOC}
+            className={cn(
+              "transition-all duration-150",
+              isDraggingFile &&
+                "scale-105 ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
+            )}
+            onDragEnter={(e) => {
+              e.preventDefault()
+              dragCounter.current += 1
+              if (canInsert && !isProcessingImport) setIsDraggingFile(true)
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              dragCounter.current -= 1
+              if (dragCounter.current <= 0) {
+                dragCounter.current = 0
+                setIsDraggingFile(false)
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              dragCounter.current = 0
+              setIsDraggingFile(false)
+              if (!canInsert || isProcessingImport) return
+              const dropped = Array.from(e.dataTransfer.files)
+              if (dropped.length > 0) handleAIImportFiles(dropped)
+            }}
           >
-            <Sparkles data-icon="inline-start" />
-            {dict.BUTTON_IMPORT_DOC}
+            {isProcessingImport ? (
+              <ButtonLoader />
+            ) : (
+              <FileUp data-icon="inline-start" />
+            )}
+            {isProcessingImport
+              ? dict.IMPORT_DOC_ANALYZING
+              : dict.BUTTON_IMPORT_DOC}
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -984,6 +1246,7 @@ export default function SalesOrdersPage() {
                         </Label>
                         <Input
                           id="ponum"
+                          className={flagClass(fieldFlags.po_number)}
                           value={formData.po_number}
                           onChange={(e) =>
                             setFormData({
@@ -1086,6 +1349,7 @@ export default function SalesOrdersPage() {
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_COMPANY_NAME}</Label>
                         <LiveSearch
+                          className={flagClass(fieldFlags.company_name)}
                           data={
                             selectedCompanyInfo ? [selectedCompanyInfo] : []
                           }
@@ -1148,6 +1412,10 @@ export default function SalesOrdersPage() {
                       <div className="grid gap-2">
                         <Label>{dict.LABEL_SKU}</Label>
                         <LiveSearch
+                          className={flagClass(
+                            fieldFlags.product_description,
+                            fieldFlags.product_sku
+                          )}
                           data={
                             selectedProductInfo ? [selectedProductInfo] : []
                           }
@@ -1210,6 +1478,7 @@ export default function SalesOrdersPage() {
                           </Label>
                           <Input
                             type="date"
+                            className={flagClass(fieldFlags.so_date)}
                             value={formData.so_date}
                             onChange={(e) =>
                               setFormData({
@@ -1226,6 +1495,7 @@ export default function SalesOrdersPage() {
                           </Label>
                           <Input
                             type="date"
+                            className={flagClass(fieldFlags.delivery_date)}
                             value={formData.delivery_date}
                             onChange={(e) =>
                               setFormData({
@@ -1250,7 +1520,12 @@ export default function SalesOrdersPage() {
                             }
                             disabled={isFromQuotation}
                           >
-                            <SelectTrigger className="h-13 w-full">
+                            <SelectTrigger
+                              className={cn(
+                                "h-13 w-full",
+                                flagClass(fieldFlags.delivery_address)
+                              )}
+                            >
                               <SelectValue
                                 placeholder={dict.PLACEHOLDER_SELECT_ADDRESS}
                               />
@@ -1281,7 +1556,10 @@ export default function SalesOrdersPage() {
                             }
                             disabled={isFromQuotation}
                             placeholder={dict.PLACEHOLDER_ENTER_ADDRESS}
-                            className="w-full"
+                            className={cn(
+                              "w-full",
+                              flagClass(fieldFlags.delivery_address)
+                            )}
                           />
                         )}
                       </div>
@@ -1310,6 +1588,9 @@ export default function SalesOrdersPage() {
                             <Label htmlFor="qty">{dict.LABEL_QUANTITY}</Label>
                             <NumberInput
                               id="qty"
+                              containerClassName={flagClass(
+                                fieldFlags.quantity
+                              )}
                               value={formData.quantity}
                               onChange={(val) =>
                                 setFormData({ ...formData, quantity: val })
@@ -1323,6 +1604,9 @@ export default function SalesOrdersPage() {
                             </Label>
                             <NumberInput
                               id="uprice"
+                              containerClassName={flagClass(
+                                fieldFlags.unit_price
+                              )}
                               value={formData.unit_price}
                               onChange={(val) =>
                                 setFormData({ ...formData, unit_price: val })
@@ -1360,7 +1644,11 @@ export default function SalesOrdersPage() {
                                   })
                                 }}
                               >
-                                <SelectTrigger>
+                                <SelectTrigger
+                                  className={flagClass(
+                                    fieldFlags.term_of_payment
+                                  )}
+                                >
                                   <SelectValue
                                     placeholder={dict.PLACEHOLDER_SELECT_TERM}
                                   />
@@ -1376,6 +1664,9 @@ export default function SalesOrdersPage() {
                             ) : (
                               <Input
                                 id="top"
+                                className={flagClass(
+                                  fieldFlags.term_of_payment
+                                )}
                                 value={formData.term_of_payment}
                                 onChange={(e) =>
                                   setFormData({
@@ -1393,6 +1684,10 @@ export default function SalesOrdersPage() {
                             </Label>
                             <NumberInput
                               id="discount"
+                              containerClassName={flagClass(
+                                fieldFlags.discount_percent,
+                                fieldFlags.discount_amount
+                              )}
                               value={formData.discount}
                               onChange={(val) =>
                                 setFormData({ ...formData, discount: val })
@@ -1410,6 +1705,10 @@ export default function SalesOrdersPage() {
                             </Label>
                             <NumberInput
                               id="deliv_price"
+                              containerClassName={flagClass(
+                                fieldFlags.delivery_price_total,
+                                fieldFlags.delivery_price_per_litre
+                              )}
                               value={formData.delivery_price_per_litre}
                               onChange={(val) =>
                                 setFormData({
@@ -1425,47 +1724,43 @@ export default function SalesOrdersPage() {
                           <div className="grid gap-2">
                             <Label htmlFor="shrinkage">
                               {dict.LABEL_SHRINKAGE_TOLERANCE}
+                              <Switch
+                                id="shrinkage-in-price"
+                                size="sm"
+                                checked={formData.shrinkage_in_price}
+                                onCheckedChange={(val) =>
+                                  setFormData({
+                                    ...formData,
+                                    shrinkage_in_price: val,
+                                  })
+                                }
+                                disabled={isFromQuotation}
+                              />
                             </Label>
-                            <div className="flex items-center gap-2">
-                              <div className="w-1/2">
-                                <NumberInput
-                                  id="shrinkage"
-                                  value={formData.shrinkage_tolerance}
-                                  onChange={(val) =>
-                                    setFormData({
-                                      ...formData,
-                                      shrinkage_tolerance: val,
-                                    })
-                                  }
-                                  rightBadge="%"
-                                  disabled={isFromQuotation}
-                                />
-                              </div>
-                              <div className="flex w-1/2 items-center justify-between gap-1 rounded-md border border-input bg-muted/40 px-2 py-1">
-                                <Label
-                                  htmlFor="shrinkage-in-price"
-                                  className="cursor-pointer text-xs font-medium"
-                                >
-                                  {dict.LABEL_SHRINKAGE_IN_PRICE}
-                                </Label>
-                                <Switch
-                                  id="shrinkage-in-price"
-                                  size="sm"
-                                  checked={formData.shrinkage_in_price}
-                                  onCheckedChange={(val) =>
-                                    setFormData({
-                                      ...formData,
-                                      shrinkage_in_price: val,
-                                    })
-                                  }
-                                  disabled={isFromQuotation}
-                                />
-                              </div>
-                            </div>
+                            <NumberInput
+                              id="shrinkage"
+                              containerClassName={cn(
+                                flagClass(fieldFlags.shrinkage_tolerance)
+                              )}
+                              value={formData.shrinkage_tolerance}
+                              onChange={(val) =>
+                                setFormData({
+                                  ...formData,
+                                  shrinkage_tolerance: val,
+                                })
+                              }
+                              rightBadge="%"
+                              disabled={isFromQuotation}
+                            />
                           </div>
                         </div>
 
-                        <div className="space-y-3 border-t pt-4">
+                        <div
+                          className={cn(
+                            "space-y-3 p-1",
+                            flagClass(fieldFlags.taxes)
+                          )}
+                        >
                           <Label className="mb-2 block text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
                             {dict.LABEL_TAXES || "Taxes"}
                           </Label>
@@ -1578,6 +1873,7 @@ export default function SalesOrdersPage() {
                   <div className="w-full">
                     <RichTextEditor
                       label={dict.LABEL_NOTE}
+                      containerClassName={flagClass(fieldFlags.note)}
                       value={formData.note}
                       onChange={(val) =>
                         setFormData((prev) => ({ ...prev, note: val || "" }))
@@ -1826,6 +2122,8 @@ export default function SalesOrdersPage() {
         open={aiImportOpen}
         onOpenChange={setAiImportOpen}
         onApply={handleAIApply}
+        supplierName={companyInfo?.name}
+        globalTaxes={globalTaxes}
       />
       <FundersDialog
         open={fundersDialogOpen}

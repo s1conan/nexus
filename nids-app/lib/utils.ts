@@ -32,16 +32,16 @@ export function formatBulletList(items: string[]) {
  * To be used as: .or(constructMultiWordSearch(query, ['name', 'contact']))
  */
 export function constructMultiWordSearch(query: string, columns: string[]) {
-  const words = query.trim().split(/\s+/).filter(Boolean)
-  console.log(
-    `[DEBUG UTILS] Query: "${query}", Words:`,
-    words,
-    "Columns:",
-    columns
-  )
+  // Strip PostgREST reserved characters (, ( ) ") so they don't break the
+  // or()/and() filter syntax (e.g. searching "PT Royaltama, Tbk").
+  const words = query
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.replace(/[,()"]/g, ""))
+    .filter(Boolean)
 
   if (words.length === 0 || columns.length === 0) {
-    console.log("[DEBUG UTILS] Returning empty string")
     return ""
   }
 

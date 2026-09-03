@@ -2,7 +2,13 @@
 
 import { useRef, useState } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
+import { SITE_CONFIG } from "@/lib/site-content"
 import { createClient } from "@/lib/supabase"
+import {
+  autoMatchSO,
+  type ExtractedSOData,
+  type SOAutoMatch,
+} from "@/lib/so-auto-match"
 import { notify } from "@/lib/notifications"
 import {
   Dialog,
@@ -13,37 +19,37 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { ButtonLoader } from "@/components/button-loader"
-import { FileText, Sparkles, Trash2, Upload, AlertCircle } from "lucide-react"
+import {
+  FileText,
+  Sparkles,
+  Trash2,
+  Upload,
+  AlertCircle,
+  Info,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export type ExtractedSOData = {
-  po_number: string | null
-  company_name: string | null
-  product_description: string | null
-  product_sku: string | null
-  so_date: string | null
-  delivery_date: string | null
-  quantity: number | null
-  unit_price: number | null
-  currency: string | null
-  term_of_payment: string | null
-  discount_percent: number | null
-  delivery_address: string | null
-  note: string | null
-  taxes: { name: string; rate: number }[] | null
-  confidence: Record<string, string> | null
-  warnings: string[] | null
-}
+export type { ExtractedSOData, SOAutoMatch }
 
-export type SOAutoMatch = {
-  company: { id: string; name: string; details: unknown } | null
-  product: { id: string; sku: string; name: string } | null
+export type SOImportMeta = {
+  warnings: string[]
+  timings: {
+    upload_parse_ms: number
+    code_ms: number
+    total_ms: number
+  } | null
 }
 
 interface SOAIImportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onApply: (data: ExtractedSOData, match: SOAutoMatch) => void
+  onApply: (
+    data: ExtractedSOData,
+    match: SOAutoMatch,
+    meta?: SOImportMeta
+  ) => void
+  supplierName?: string
+  globalTaxes?: { name: string; value: number }[]
 }
 
 const ACCEPTED_TYPES = "application/pdf,image/png,image/jpeg,image/webp"
@@ -54,8 +60,10 @@ export function SOAIImportDialog({
   open,
   onOpenChange,
   onApply,
+  supplierName,
+  globalTaxes = [],
 }: SOAIImportDialogProps) {
-  const { dict } = useDictionary()
+  const { dict, lang } = useDictionary()
   const supabase = createClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -63,11 +71,21 @@ export function SOAIImportDialog({
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [extracted, setExtracted] = useState<ExtractedSOData | null>(null)
   const [match, setMatch] = useState<SOAutoMatch | null>(null)
+  const [verificationWarnings, setVerificationWarnings] = useState<string[]>([])
+  const [verificationFailed, setVerificationFailed] = useState(false)
+  const [timings, setTimings] = useState<{
+    upload_parse_ms: number
+    code_ms: number
+    total_ms: number
+  } | null>(null)
 
   const reset = () => {
     setFiles([])
     setExtracted(null)
     setMatch(null)
+    setVerificationWarnings([])
+    setVerificationFailed(false)
+    setTimings(null)
     setIsAnalyzing(false)
   }
 
@@ -103,57 +121,24 @@ export function SOAIImportDialog({
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  // Auto-match extracted names against DB records
-  const autoMatch = async (data: ExtractedSOData): Promise<SOAutoMatch> => {
-    const result: SOAutoMatch = { company: null, product: null }
-
-    if (data.company_name) {
-      const { data: companies } = await supabase
-        .from("companies")
-        .select("id, name, details")
-        .contains("type", ["Customer"])
-        .ilike("name", `%${data.company_name}%`)
-        .limit(5)
-      if (companies && companies.length > 0) {
-        // Prefer exact (case-insensitive) match, otherwise first partial match
-        const exact = companies.find(
-          (c: { name: string }) =>
-            c.name.toLowerCase() === data.company_name!.toLowerCase()
-        )
-        result.company = exact || companies[0]
-      }
-    }
-
-    if (data.product_sku) {
-      const { data: products } = await supabase
-        .from("products")
-        .select("id, sku, name")
-        .ilike("sku", data.product_sku)
-        .limit(1)
-      if (products && products.length > 0) {
-        result.product = products[0]
-      }
-    }
-    if (!result.product && data.product_description) {
-      const { data: products } = await supabase
-        .from("products")
-        .select("id, sku, name")
-        .ilike("name", `%${data.product_description}%`)
-        .limit(5)
-      if (products && products.length > 0) {
-        result.product = products[0]
-      }
-    }
-
-    return result
-  }
-
   const handleAnalyze = async () => {
     if (files.length === 0) return
     setIsAnalyzing(true)
     try {
       const formData = new FormData()
       files.forEach((file) => formData.append("files", file))
+      if (supplierName) formData.append("supplier_name", supplierName)
+      formData.append("language", lang)
+      // DB tax rates — the server applies them so the audit verifies against
+      // the system parameters (same as the drag-drop path)
+      if (globalTaxes.length > 0) {
+        formData.append(
+          "tax_rates",
+          JSON.stringify(
+            Object.fromEntries(globalTaxes.map((gt) => [gt.name, gt.value]))
+          )
+        )
+      }
 
       const res = await fetch("/api/ai/extract-so", {
         method: "POST",
@@ -165,7 +150,29 @@ export function SOAIImportDialog({
       }
 
       const data = json.data as ExtractedSOData
-      const matched = await autoMatch(data)
+      // Code-audit flagged fields ride along on the data so handleAIApply
+      // can mark the corresponding form controls
+      data.flagged_fields = [
+        ...(data.flagged_fields ?? []),
+        ...(Array.isArray(json.code_flagged_fields)
+          ? json.code_flagged_fields
+          : []),
+      ]
+      const matched = await autoMatchSO(supabase, data)
+
+      // // Document tax rates vs DB parameters (which win) — warn on mismatch
+      // // Superseded by the AI arithmetic verifier (verification_warnings)
+      // setRateWarnings(computeTaxRateWarnings(data, globalTaxes))
+
+      // Second AI pass: arithmetic audit of the extracted data
+      setVerificationWarnings([
+        ...(Array.isArray(json.code_warnings) ? json.code_warnings : []),
+        ...(Array.isArray(json.verification_warnings)
+          ? json.verification_warnings
+          : []),
+      ])
+      setVerificationFailed(Boolean(json.verification_error))
+      setTimings(json.timings ?? null)
       setMatch(matched)
       setExtracted(data)
     } catch (err) {
@@ -180,7 +187,15 @@ export function SOAIImportDialog({
 
   const handleApply = () => {
     if (!extracted) return
-    onApply(extracted, match || { company: null, product: null })
+    // Carry the warnings + timings shown in this panel through to the page,
+    // so the user still sees them as toasts after the dialog closes
+    onApply(extracted, match || { company: null, product: null }, {
+      warnings: [
+        ...(extracted.warnings ?? []),
+        ...verificationWarnings,
+      ],
+      timings,
+    })
     reset()
   }
 
@@ -207,6 +222,28 @@ export function SOAIImportDialog({
   const formatValue = (value: string | number | null | undefined) =>
     value === null || value === undefined || value === "" ? "-" : String(value)
 
+  const formatDuration = (ms: number) =>
+    ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
+
+  const timingsDetail = timings
+    ? dict
+        .IMPORT_DOC_TIMINGS_DETAIL.replace(
+          "%upload%",
+          formatDuration(timings.upload_parse_ms)
+        )
+        .replace(
+          "%ai%",
+          formatDuration(
+            Math.max(
+              0,
+              timings.total_ms - timings.upload_parse_ms - timings.code_ms
+            )
+          )
+        )
+        .replace("%verify%", formatDuration(timings.code_ms))
+        .replace("%total%", formatDuration(timings.total_ms))
+    : null
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -219,11 +256,10 @@ export function SOAIImportDialog({
         </DialogHeader>
 
         {!extracted ? (
-          <div className="space-y-4">
+          <div className="space-y-4 p-6">
             <div
               className={cn(
-                "flex flex-col items-center justify-center gap-2 border-3 border-dotted bg-secondary/10 p-6 text-center transition-colors",
-                files.length > 0 && "border-primary/50 bg-primary/5"
+                "flex flex-col items-center justify-center gap-2 border-3 border-dotted bg-secondary/10 p-6 text-center transition-colors"
               )}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
@@ -275,7 +311,7 @@ export function SOAIImportDialog({
                     </div>
                     <Button
                       type="button"
-                      variant="table_action"
+                      variant="destructive"
                       size="sm"
                       onClick={() => removeFile(idx)}
                     >
@@ -287,18 +323,38 @@ export function SOAIImportDialog({
             )}
           </div>
         ) : (
-          <div className="max-h-[50vh] space-y-3 overflow-y-auto pr-1">
-            {extracted.warnings && extracted.warnings.length > 0 && (
+          <div className="max-h-[50vh] space-y-3 overflow-y-auto p-4">
+            {((extracted.warnings && extracted.warnings.length > 0) ||
+              verificationWarnings.length > 0 ||
+              verificationFailed) && (
               <div className="space-y-1 rounded border border-amber-500/30 bg-amber-500/10 p-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
                   <AlertCircle className="size-4" />
                   {dict.IMPORT_DOC_WARNINGS}
                 </div>
                 <ul className="list-inside list-disc text-xs text-amber-700 dark:text-amber-300">
-                  {extracted.warnings.map((w, i) => (
-                    <li key={i}>{w}</li>
+                  {(extracted.warnings || []).map((w, i) => (
+                    <li key={`ai-${i}`}>{w}</li>
                   ))}
+                  {verificationWarnings.map((w, i) => (
+                    <li key={`verify-${i}`}>{w}</li>
+                  ))}
+                  {verificationFailed && (
+                    <li key="verify-failed">{dict.IMPORT_DOC_VERIFY_FAILED}</li>
+                  )}
                 </ul>
+              </div>
+            )}
+
+            {timingsDetail && (
+              <div className="flex items-center gap-2 rounded border border-blue-500/30 bg-blue-500/10 p-2.5 text-xs text-blue-700 dark:text-blue-300">
+                <Info className="size-4 shrink-0" />
+                <span>
+                  <span className="font-semibold">
+                    {dict.IMPORT_DOC_TIMINGS}:
+                  </span>{" "}
+                  {timingsDetail}
+                </span>
               </div>
             )}
 
@@ -358,18 +414,81 @@ export function SOAIImportDialog({
                 value: extracted.delivery_address,
                 field: "delivery_address",
               },
-            ].map((row) => (
-              <div
-                key={row.field}
-                className="flex items-start justify-between gap-4 rounded border bg-background p-2 text-sm"
-              >
-                <span className="shrink-0 font-medium text-muted-foreground">
-                  {row.label}
-                  {confidenceBadge(row.field)}
-                </span>
-                <span className="text-right">{formatValue(row.value)}</span>
-              </div>
-            ))}
+              {
+                label: dict.LABEL_TRANSPORT_COST,
+                value:
+                  extracted.delivery_price_total !== null &&
+                  extracted.delivery_price_total !== undefined
+                    ? `${SITE_CONFIG.currencySymbol} ${extracted.delivery_price_total.toLocaleString()} (flat)`
+                    : extracted.delivery_price_per_litre !== null &&
+                        extracted.delivery_price_per_litre !== undefined
+                      ? `${SITE_CONFIG.currencySymbol} ${extracted.delivery_price_per_litre.toLocaleString()} / L`
+                      : null,
+                field: "delivery_price_total",
+              },
+              {
+                label: dict.LABEL_SHRINKAGE_TOLERANCE,
+                value:
+                  extracted.shrinkage_tolerance !== null &&
+                  extracted.shrinkage_tolerance !== undefined
+                    ? `${extracted.shrinkage_tolerance}%`
+                    : null,
+                field: "shrinkage_tolerance",
+              },
+              {
+                label: dict.IMPORT_DOC_TAXES,
+                value:
+                  extracted.taxes && extracted.taxes.length > 0
+                    ? extracted.taxes
+                        .map(
+                          (t) =>
+                            `${t.name}${t.rate != null ? ` ${t.rate}%` : ""}${
+                              t.amount != null
+                                ? ` = ${SITE_CONFIG.currencySymbol} ${t.amount.toLocaleString()}`
+                                : ""
+                            }`
+                        )
+                        .join("; ")
+                    : null,
+                field: "taxes",
+              },
+              {
+                label: dict.LABEL_DELIVERY_TAXABLE,
+                value:
+                  extracted.delivery_taxable === true
+                    ? dict.IMPORT_DOC_TAXABLE_YES
+                    : extracted.delivery_taxable === false
+                      ? dict.IMPORT_DOC_TAXABLE_NO
+                      : dict.IMPORT_DOC_TAXABLE_UNKNOWN,
+                field: "delivery_taxable",
+              },
+            ].map((row) => {
+              // Tint rows the AI was unsure about (amber) or that failed a
+              // consistency check / were explicitly flagged (red)
+              const isFlagged = (extracted.flagged_fields ?? []).includes(
+                row.field
+              )
+              const isLow = extracted.confidence?.[row.field] === "low"
+              return (
+                <div
+                  key={row.field}
+                  className={cn(
+                    "flex items-start justify-between gap-4 rounded border bg-background p-2 text-sm",
+                    isFlagged &&
+                      "border-red-500/40 bg-red-500/5 text-red-700 dark:text-red-300",
+                    !isFlagged &&
+                      isLow &&
+                      "border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-300"
+                  )}
+                >
+                  <span className="shrink-0 font-medium text-muted-foreground">
+                    {row.label}
+                    {confidenceBadge(row.field)}
+                  </span>
+                  <span className="text-right">{formatValue(row.value)}</span>
+                </div>
+              )
+            })}
 
             {(match?.company || match?.product) && (
               <p className="text-xs text-muted-foreground">

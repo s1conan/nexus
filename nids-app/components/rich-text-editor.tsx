@@ -202,6 +202,7 @@ interface RichTextEditorProps {
   variables?: { id: string; label: string }[]
   variableValues?: Record<string, string>
   readOnly?: boolean
+  containerClassName?: string
 }
 
 export function RichTextEditor({
@@ -214,6 +215,7 @@ export function RichTextEditor({
   variables = [],
   variableValues = {},
   readOnly = false,
+  containerClassName,
 }: RichTextEditorProps) {
   const [isShrunk, setIsShrunk] = useState(true)
 
@@ -301,7 +303,8 @@ export function RichTextEditor({
     <div
       className={cn(
         "flex flex-col rounded-md border p-2 transition-all",
-        !isEnabled && "bg-muted/20 opacity-50 grayscale"
+        !isEnabled && "bg-muted/20 opacity-50 grayscale",
+        containerClassName
       )}
     >
       <div className="relative z-20 mb-1 flex items-center justify-between gap-4">

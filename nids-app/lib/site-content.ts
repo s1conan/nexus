@@ -199,6 +199,15 @@ export const SITE_CONTENT = {
     IMPORT_DOC_ANALYZING: "Analyzing...",
     IMPORT_DOC_USE_DATA: "Use This Data",
     IMPORT_DOC_WARNINGS: "AI Warnings",
+    IMPORT_DOC_TIMINGS: "Processing time",
+    IMPORT_DOC_TIMINGS_DETAIL:
+      "Upload %upload% · AI analysis %ai% · Verification %verify% · Total %total%",
+    IMPORT_DOC_VERIFY_FAILED:
+      "Arithmetic verification could not be run — totals were not audited.",
+    IMPORT_DOC_TAXES: "Taxes",
+    IMPORT_DOC_TAXABLE_YES: "Yes — delivery fee is included in PPN",
+    IMPORT_DOC_TAXABLE_NO: "No — delivery fee is not taxed",
+    IMPORT_DOC_TAXABLE_UNKNOWN: "Not stated in document",
     IMPORT_DOC_MATCHED_HINT:
       "Matched company/product will be pre-selected. You can change them in the form.",
     IMPORT_DOC_FAILED_TITLE: "AI Extraction Failed",
@@ -783,6 +792,15 @@ export const SITE_CONTENT = {
     IMPORT_DOC_ANALYZING: "Menganalisis...",
     IMPORT_DOC_USE_DATA: "Gunakan Data Ini",
     IMPORT_DOC_WARNINGS: "Peringatan AI",
+    IMPORT_DOC_TIMINGS: "Waktu proses",
+    IMPORT_DOC_TIMINGS_DETAIL:
+      "Unggah %upload% · Analisis AI %ai% · Verifikasi %verify% · Total %total%",
+    IMPORT_DOC_VERIFY_FAILED:
+      "Verifikasi aritmetika tidak dapat dijalankan — total tidak diaudit.",
+    IMPORT_DOC_TAXES: "Pajak",
+    IMPORT_DOC_TAXABLE_YES: "Ya — ongkos kirim termasuk PPN",
+    IMPORT_DOC_TAXABLE_NO: "Tidak — ongkos kirim tidak kena pajak",
+    IMPORT_DOC_TAXABLE_UNKNOWN: "Tidak disebutkan di dokumen",
     IMPORT_DOC_MATCHED_HINT:
       "Perusahaan/produk yang cocok akan dipilih otomatis. Anda dapat mengubahnya di form.",
     IMPORT_DOC_FAILED_TITLE: "Ekstraksi AI Gagal",
