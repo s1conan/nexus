@@ -244,53 +244,48 @@ export default function SalesOrdersPage() {
         return { ...gt, rate: gt.value, enabled: false }
       })
 
+      // Only fill fields the user left empty — never overwrite user input.
+      const isEmptyValue = (v: any) =>
+        v == null || v === "" || Number(v) === 0
+      const isEmptyTaxes = !formData.tax_details.some((t: any) => t.enabled)
+      const nextCompanyId = formData.company_id || quote.company_id || ""
+      const nextProductId = formData.product_id || quote.product_id || ""
+
       setFormData((prev) => ({
         ...prev,
         quotation_id: qId,
-        company_id: quote.company_id,
-        product_id: quote.product_id,
-        quantity: quote.minimum_order || 0,
-        unit_price: quote.base_price || 0,
-        delivery_price_per_litre:
-          quote.delivery_price || quote.discounts?.[0]?.delivery_cost || 0,
-        tax_details: mergedTaxes,
-        // Also take delivery address if available from quotation
-        delivery_address: quote.delivery_address || prev.delivery_address,
-        // Also take shrinkage tolerance from quotation
-        shrinkage_tolerance: quote.shrinkage_tolerance ?? 0,
-        // Also take shrinkage in price toggle from quotation
-        shrinkage_in_price: quote.shrinkage_in_price ?? false,
-        // Inherit delivery_taxable from quotation
-        delivery_taxable: quote.delivery_taxable ?? false,
-        discount: 0,
-        term_of_payment: "",
-        po_number: prev.po_number,
+        company_id: prev.company_id || quote.company_id || "",
+        product_id: prev.product_id || quote.product_id || "",
+        quantity: isEmptyValue(prev.quantity)
+          ? quote.minimum_order || 0
+          : prev.quantity,
+        unit_price: isEmptyValue(prev.unit_price)
+          ? quote.base_price || 0
+          : prev.unit_price,
+        delivery_price_per_litre: isEmptyValue(prev.delivery_price_per_litre)
+          ? quote.delivery_price || quote.discounts?.[0]?.delivery_cost || 0
+          : prev.delivery_price_per_litre,
+        tax_details: isEmptyTaxes ? mergedTaxes : prev.tax_details,
+        delivery_address: prev.delivery_address || quote.delivery_address || "",
+        shrinkage_tolerance: isEmptyValue(prev.shrinkage_tolerance)
+          ? quote.shrinkage_tolerance ?? 0
+          : prev.shrinkage_tolerance,
+        shrinkage_in_price:
+          prev.shrinkage_in_price || quote.shrinkage_in_price || false,
+        delivery_taxable:
+          prev.delivery_taxable || quote.delivery_taxable || false,
+        // discount, term_of_payment and po_number are always kept as typed
       }))
-      // Also update dependent info
-      setSelectedCompanyInfo(quote.company)
-      setSelectedProductInfo(quote.product)
+      // Sync picker previews only for fields we actually filled
+      if (!formData.company_id) setSelectedCompanyInfo(quote.company)
+      if (!formData.product_id) setSelectedProductInfo(quote.product)
     } else {
+      // Clearing the link keeps every field — values are now independent
       setSelectedQuotationInfo(null)
       setAvailableDiscounts([])
-      setSelectedCompanyInfo(null)
-      setSelectedProductInfo(null)
-      setFormData((prev) => ({
-        ...prev,
-        quotation_id: "",
-        company_id: "",
-        product_id: "",
-        quantity: 0,
-        unit_price: 0,
-        delivery_price_per_litre: 0,
-        delivery_address: "",
-        shrinkage_tolerance: 0,
-        shrinkage_in_price: false,
-        delivery_taxable: false,
-        discount: 0,
-        term_of_payment: "",
-        po_number: "",
-      }))
+      setFormData((prev) => ({ ...prev, quotation_id: "" }))
     }
+  }
   }
 
   // Fetch Data
@@ -1353,7 +1348,6 @@ export default function SalesOrdersPage() {
                           data={
                             selectedCompanyInfo ? [selectedCompanyInfo] : []
                           }
-                          disabled={isFromQuotation}
                           fetchData={async (query) => {
                             let q = supabase
                               .from("companies")
@@ -1419,7 +1413,6 @@ export default function SalesOrdersPage() {
                           data={
                             selectedProductInfo ? [selectedProductInfo] : []
                           }
-                          disabled={isFromQuotation}
                           fetchData={async (query) => {
                             let q = supabase
                               .from("products")
@@ -1518,7 +1511,6 @@ export default function SalesOrdersPage() {
                                 delivery_address: val,
                               })
                             }
-                            disabled={isFromQuotation}
                           >
                             <SelectTrigger
                               className={cn(
@@ -1554,7 +1546,6 @@ export default function SalesOrdersPage() {
                                 delivery_address: e.target.value,
                               })
                             }
-                            disabled={isFromQuotation}
                             placeholder={dict.PLACEHOLDER_ENTER_ADDRESS}
                             className={cn(
                               "w-full",
@@ -1612,7 +1603,6 @@ export default function SalesOrdersPage() {
                                 setFormData({ ...formData, unit_price: val })
                               }
                               leftBadge={SITE_CONFIG.currencySymbol}
-                              disabled={isFromQuotation}
                             />
                           </div>
                         </div>
@@ -1693,7 +1683,6 @@ export default function SalesOrdersPage() {
                                 setFormData({ ...formData, discount: val })
                               }
                               rightBadge="%"
-                              disabled={isFromQuotation}
                             />
                           </div>
                         </div>
@@ -1718,7 +1707,6 @@ export default function SalesOrdersPage() {
                               }
                               leftBadge={SITE_CONFIG.currencySymbol}
                               rightBadge="/ L"
-                              disabled={isFromQuotation}
                             />
                           </div>
                           <div className="grid gap-2">
@@ -1734,7 +1722,6 @@ export default function SalesOrdersPage() {
                                     shrinkage_in_price: val,
                                   })
                                 }
-                                disabled={isFromQuotation}
                               />
                             </Label>
                             <NumberInput
@@ -1750,7 +1737,6 @@ export default function SalesOrdersPage() {
                                 })
                               }
                               rightBadge="%"
-                              disabled={isFromQuotation}
                             />
                           </div>
                         </div>
@@ -1782,7 +1768,6 @@ export default function SalesOrdersPage() {
                                   delivery_taxable: val,
                                 })
                               }
-                              disabled={isFromQuotation}
                             />
                           </div>
                           <div className="space-y-2">
@@ -1818,7 +1803,6 @@ export default function SalesOrdersPage() {
                                           tax_details: newTaxes,
                                         })
                                       }}
-                                      disabled={isFromQuotation}
                                     />
                                   </div>
                                   <div className="col-span-4">
