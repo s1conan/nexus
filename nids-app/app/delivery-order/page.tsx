@@ -182,7 +182,6 @@ export default function DeliveryOrdersPage() {
     compartment_details: [] as {
       compartment_number: number
       seal_number: string
-      quantity: number
     }[],
   }))
 
@@ -379,22 +378,23 @@ export default function DeliveryOrdersPage() {
     }
   }, [isOpen])
 
-  // When vehicle changes, auto-fill compartments
+  // When vehicle changes, auto-fill seal rows based on vehicle's number of seals
   const handleVehicleSelect = (vId: string, vehicle?: any) => {
     if (vehicle) {
       setSelectedVehicleInfo(vehicle)
-      const compartments = (vehicle.compartments || []).sort(
-        (a: any, b: any) => a.number - b.number
-      )
+      const sealCount =
+        vehicle.number_of_seals || (vehicle.compartments || []).length || 1
       setFormData((prev) => ({
         ...prev,
         vehicle_id: vId,
         vehicle_number: vehicle.license_number,
-        compartment_details: compartments.map((c: any) => ({
-          compartment_number: c.number,
-          seal_number: sealNumberCache.current[c.number] || "",
-          quantity: c.capacity || 0,
-        })),
+        compartment_details: Array.from(
+          { length: sealCount },
+          (_, i) => ({
+            compartment_number: i + 1,
+            seal_number: sealNumberCache.current[i + 1] || "",
+          })
+        ),
       }))
     } else {
       setSelectedVehicleInfo(null)
@@ -467,7 +467,6 @@ export default function DeliveryOrdersPage() {
         compartment_details: (item.compartments || []).map((c: any) => ({
           compartment_number: c.compartment_number,
           seal_number: c.seal_number,
-          quantity: c.quantity,
         })),
       })
     } else {
@@ -1010,19 +1009,6 @@ export default function DeliveryOrdersPage() {
     }
   }
 
-  // Recalculate total quantity from compartments
-  useEffect(() => {
-    if (formData.compartment_details.length > 0) {
-      const total = formData.compartment_details.reduce(
-        (sum, c) => sum + (c.quantity || 0),
-        0
-      )
-      if (total !== formData.quantity && total > 0) {
-        setFormData((prev) => ({ ...prev, quantity: total }))
-      }
-    }
-  }, [formData.compartment_details])
-
   const handleSOSelect = (val: string, item: any) => {
     if (item) {
       setFormData((prev) => ({
@@ -1381,8 +1367,8 @@ export default function DeliveryOrdersPage() {
                           />
                         </div>
 
-                        {isFromSO && (
-                          <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          {isFromSO && (
                             <div className="grid gap-2">
                               <Label>{dict.LABEL_SO_TOTAL_QTY}</Label>
                               <NumberInput
@@ -1392,10 +1378,7 @@ export default function DeliveryOrdersPage() {
                                 rightBadge="L"
                               />
                             </div>
-                        </div>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-4">
+                          )}
                           <div className="grid gap-2">
                             <div className="flex items-center justify-between">
                               <Label htmlFor="qty">
@@ -1916,8 +1899,8 @@ export default function DeliveryOrdersPage() {
                                   className="m-2 p-0 shadow-none ring-0"
                                 >
                                   <div className="mb-2 flex items-center gap-3">
-                                    <span className="mt-4 text-xl font-bold text-primary">
-                                      #{comp.compartment_number}
+                                    <span className="mt-4 text-base font-bold text-primary">
+                                      {comp.compartment_number}
                                     </span>
                                     <div className="grid w-full gap-1">
                                       <Label className="text-[10px] uppercase">
@@ -1937,25 +1920,6 @@ export default function DeliveryOrdersPage() {
                                             compartment_details: newDetails,
                                           })
                                         }}
-                                      />
-                                    </div>
-                                    <div className="grid gap-1">
-                                      <Label className="text-[10px] uppercase">
-                                        {dict.LABEL_QUANTITY}
-                                      </Label>
-                                      <NumberInput
-                                        value={comp.quantity}
-                                        onChange={(val) => {
-                                          const newDetails = [
-                                            ...formData.compartment_details,
-                                          ]
-                                          newDetails[idx].quantity = val
-                                          setFormData({
-                                            ...formData,
-                                            compartment_details: newDetails,
-                                          })
-                                        }}
-                                        rightBadge="L"
                                       />
                                     </div>
                                   </div>

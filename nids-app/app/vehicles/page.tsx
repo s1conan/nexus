@@ -101,6 +101,7 @@ export default function VehiclesPage() {
     license_number: "",
     vehicle_type: "Truck",
     capacity: 0,
+    number_of_seals: 1,
     is_active: true,
     compartments: [{ compartment_number: 1, capacity: 8000 }] as {
       compartment_number: number
@@ -250,6 +251,8 @@ export default function VehiclesPage() {
         license_number: item.license_number,
         vehicle_type: item.vehicle_type || "Truck",
         capacity: item.capacity || 0,
+        number_of_seals:
+          item.number_of_seals || (item.compartments || []).length || 1,
         is_active: item.is_active ?? true,
         compartments: (item.compartments || []).map((c: any) => ({
           compartment_number: c.number,
@@ -263,6 +266,7 @@ export default function VehiclesPage() {
         license_number: "",
         vehicle_type: "Truck",
         capacity: 0,
+        number_of_seals: 1,
         is_active: true,
         compartments: [{ compartment_number: 1, capacity: 8000 }],
       })
@@ -284,6 +288,13 @@ export default function VehiclesPage() {
       notify.error("Validation Error", "Vehicle type is required.")
       return
     }
+    if (!formData.number_of_seals || formData.number_of_seals < 1) {
+      notify.error(
+        "Validation Error",
+        "Number of seals is required and must be at least 1."
+      )
+      return
+    }
 
     setIsSubmitting(true)
 
@@ -292,6 +303,7 @@ export default function VehiclesPage() {
         license_number: formData.license_number,
         vehicle_type: formData.vehicle_type,
         capacity: formData.capacity,
+        number_of_seals: formData.number_of_seals,
         is_active: formData.is_active,
         compartments: formData.compartments.map((c) => ({
           number: c.compartment_number,
@@ -554,6 +566,22 @@ export default function VehiclesPage() {
                           required
                         />
                       </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="num_seals">
+                          {dict.LABEL_NUMBER_OF_SEALS}
+                        </Label>
+                        <NumberInput
+                          id="num_seals"
+                          value={formData.number_of_seals}
+                          onChange={(val) =>
+                            setFormData({
+                              ...formData,
+                              number_of_seals: Math.floor(val),
+                            })
+                          }
+                          required
+                        />
+                      </div>
                     </div>
 
                     <div className="space-y-4">
@@ -572,7 +600,7 @@ export default function VehiclesPage() {
                         </Button>
                       </div>
 
-                      <div className="max-h-[40vh] space-y-3 overflow-y-auto pr-2">
+                      <div className="grid max-h-[40vh] grid-cols-1 gap-3 overflow-y-auto pr-2 md:grid-cols-2">
                         {formData.compartments.map((comp, idx) => (
                           <div
                             key={idx}
@@ -585,7 +613,7 @@ export default function VehiclesPage() {
                               <Hash className="size-4" />{" "}
                               {comp.compartment_number}
                             </Label>
-                            <div className="flex-1">
+                            <div className="min-w-30 flex-1">
                               <NumberInput
                                 id={`compartment-${idx}`}
                                 value={comp.capacity}
@@ -678,6 +706,7 @@ export default function VehiclesPage() {
               </TableHead>
               <TableHead>{dict.LABEL_VEHICLE_TYPE}</TableHead>
               <TableHead>{dict.LABEL_COMPARTMENTS}</TableHead>
+              <TableHead>{dict.LABEL_SEALS}</TableHead>
               <TableHead className="text-right">
                 {dict.LABEL_TOTAL_CAPACITY}
               </TableHead>
@@ -727,6 +756,12 @@ export default function VehiclesPage() {
                       </TableCell>
                       <TableCell>{v.vehicle_type}</TableCell>
                       <TableCell>{v.compartments?.length || 0} Comp.</TableCell>
+                      <TableCell>
+                        {v.number_of_seals ||
+                          (v.compartments || []).length ||
+                          1}{" "}
+                        Seals
+                      </TableCell>
                       <TableCell className="text-right font-mono">
                         {v.capacity?.toLocaleString()}
                       </TableCell>
