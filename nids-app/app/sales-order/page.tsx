@@ -245,11 +245,9 @@ export default function SalesOrdersPage() {
       })
 
       // Only fill fields the user left empty — never overwrite user input.
-      const isEmptyValue = (v: any) =>
+      const isEmptyValue = (v: unknown) =>
         v == null || v === "" || Number(v) === 0
-      const isEmptyTaxes = !formData.tax_details.some((t: any) => t.enabled)
-      const nextCompanyId = formData.company_id || quote.company_id || ""
-      const nextProductId = formData.product_id || quote.product_id || ""
+      const isEmptyTaxes = !formData.tax_details.some((t) => t.enabled)
 
       setFormData((prev) => ({
         ...prev,
@@ -285,7 +283,6 @@ export default function SalesOrdersPage() {
       setAvailableDiscounts([])
       setFormData((prev) => ({ ...prev, quotation_id: "" }))
     }
-  }
   }
 
   // Fetch Data
