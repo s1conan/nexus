@@ -523,9 +523,6 @@ export default function DeliveryOrdersPage() {
     if (!formData.supplier_id) errors.push("Supplier harus dipilih.")
     if (!formData.transporter_id) errors.push("Transporter harus dipilih.")
     if (!formData.vehicle_id) errors.push("Kendaraan harus dipilih.")
-    if (availableStock !== null && formData.quantity > availableStock) {
-      errors.push("Stok dari supplier tidak mencukupi.")
-    }
 
     if (errors.length > 0) {
       notify.error("Validasi Gagal", errors.join("\n"))
@@ -558,6 +555,37 @@ export default function DeliveryOrdersPage() {
           .from("delivery_orders")
           .insert([dbPayload])
         if (error) throw error
+      }
+
+      // Auto-create an Accepted deposit when the supplier's active stock cannot
+      // cover the full DO quantity (price starts at 0; corrected on Deposits page).
+      let autoDeposit: {
+        created: boolean
+        deposit_number?: string
+      } | null = null
+      if (
+        dbPayload.supplier_id &&
+        dbPayload.product_id &&
+        (dbPayload.quantity || 0) > 0 &&
+        dbPayload.status !== "Cancelled"
+      ) {
+        const { data: depositNumber } = await supabase.rpc(
+          "generate_document_number",
+          { p_doc_type: "deposit", p_company_id: dbPayload.supplier_id }
+        )
+        const { data, error: autoDepositError } = await supabase.rpc(
+          "create_do_auto_deposit",
+          {
+            p_supplier_id: dbPayload.supplier_id,
+            p_product_id: dbPayload.product_id,
+            p_quantity: dbPayload.quantity,
+            p_deposit_number: depositNumber || null,
+            p_do_number: dbPayload.do_number,
+            p_do_date: dbPayload.do_date,
+          }
+        )
+        if (autoDepositError) throw autoDepositError
+        autoDeposit = data
       }
 
       if (editingItem) {
@@ -614,13 +642,21 @@ export default function DeliveryOrdersPage() {
       }
 
       const docLabel = `[${dbPayload.do_number || formData.do_number}]`
+      const autoDepositNote = autoDeposit?.created
+        ? "\n" +
+          dict.MSG_AUTO_DEPOSIT_CREATED.replace(
+            "%data%",
+            `[${autoDeposit.deposit_number}]`
+          )
+        : ""
       if (editingItem) {
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace("%data%", docLabel),
           dict.MSG_SUCCESS_UPDATE_DESC.replace(
             "%entity%",
             "delivery order"
-          ).replace("%company%", `[${selectedCompanyInfo?.name || ""}]`),
+          ).replace("%company%", `[${selectedCompanyInfo?.name || ""}]`) +
+            autoDepositNote,
           undefined,
           true
         )
@@ -630,7 +666,8 @@ export default function DeliveryOrdersPage() {
           dict.MSG_SUCCESS_SAVE_DESC.replace(
             "%entity%",
             "delivery order"
-          ).replace("%company%", `[${selectedCompanyInfo?.name || ""}]`),
+          ).replace("%company%", `[${selectedCompanyInfo?.name || ""}]`) +
+            autoDepositNote,
           undefined,
           true
         )
@@ -1750,16 +1787,15 @@ export default function DeliveryOrdersPage() {
                                   ? [selectedSupplierInfo]
                                   : []
                               }
+                              // List ALL suppliers; stock shown as 0 when no
+                              // active deposit exists (auto-deposit covers it on save)
                               fetchData={async (query) => {
                                 if (!formData.product_id) return []
                                 let q = supabase
-                                  .from("supplier_stock_summary")
-                                  .select(
-                                    "supplier_id, name, product_id, current_stock"
-                                  )
-                                  .eq("product_id", formData.product_id)
-                                  .gt("current_stock", 0)
-                                  .order("current_stock", { ascending: false })
+                                  .from("companies")
+                                  .select("id, name")
+                                  .contains("type", ["Supplier"])
+                                  .order("name")
                                   .limit(8)
                                 if (query) {
                                   const searchStr = constructMultiWordSearch(
@@ -1768,46 +1804,29 @@ export default function DeliveryOrdersPage() {
                                   )
                                   if (searchStr) q = q.or(searchStr)
                                 }
-                                // q = q.or(
-                                //   `sku.ilike.%${query}%,name.ilike.%${query}%`
-                                // )
-                                const { data } = await q
-                                return data || []
-                                // Get stock data first
-                                // const { data: stockData } = await stockQ
-                                // if (!stockData?.length) return []
-                                // availableStock
-
-                                // Then filter suppliers by name if query provided
-                                // let supplierIds = stockData.map((s: any) => s.supplier_id)
-                                // if (query) {
-                                //   const searchStr = constructMultiWordSearch(query, ["name"])
-                                //   const { data: matchingCompanies } = searchStr
-                                //     ? await supabase
-                                //       .from("companies")
-                                //       .select("id")
-                                //       .contains("type", ["Supplier"])
-                                //       .or(searchStr)
-                                //     : { data: [] }
-                                //   const matchingIds = (matchingCompanies || []).map((c: any) => c.id)
-                                //   supplierIds = supplierIds.filter((id: string) => matchingIds.includes(id))
-                                // }
-                                // if (supplierIds.length === 0) return []
-
-                                // const { data: suppliers } = await supabase
-                                //   .from("companies")
-                                //   .select("id, name")
-                                //   .in("id", supplierIds)
-                                // const supplierMap = new Map(
-                                //   (suppliers || []).map((c: any) => [c.id, c.name])
-                                // )
-                                // return stockData
-                                //   .filter((s: any) => supplierMap.has(s.supplier_id))
-                                //   .map((s: any) => ({
-                                //     id: s.supplier_id,
-                                //     name: supplierMap.get(s.supplier_id) || "-",
-                                //     current_stock: s.current_stock.toLocaleString(),
-                                //   }))
+                                const [stockRes, companiesRes] =
+                                  await Promise.all([
+                                    supabase
+                                      .from("supplier_stock_summary")
+                                      .select("supplier_id, current_stock")
+                                      .eq("product_id", formData.product_id),
+                                    q,
+                                  ])
+                                const stockMap = new Map<string, number>(
+                                  (stockRes.data || []).map(
+                                    (s: {
+                                      supplier_id: string
+                                      current_stock: number
+                                    }) => [s.supplier_id, s.current_stock]
+                                  )
+                                )
+                                return (companiesRes.data || []).map(
+                                  (c: { id: string; name: string }) => ({
+                                    supplier_id: c.id,
+                                    name: c.name,
+                                    current_stock: stockMap.get(c.id) || 0,
+                                  })
+                                )
                               }}
                               value={formData.supplier_id}
                               onSelect={(val, item) => {

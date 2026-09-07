@@ -264,6 +264,8 @@ export const SITE_CONTENT = {
     BUTTON_ADD_COMPARTMENT: "Add Compartment",
     MSG_DO_SAVED: "Delivery Order %data% saved successfully.",
     MSG_DO_DELETED: "Delivery Order %data% removed.",
+    MSG_AUTO_DEPOSIT_CREATED:
+      "Auto-created deposit %data% to cover supplier stock (price is 0 — update it on the Deposits page).",
     MSG_DO_STATUS_UPDATED: "Delivery Order status %data% updated.",
     LABEL_QTY_SHIPPED: "Qty Shipped",
     LABEL_QTY_RECEIVED: "Qty Received",
@@ -857,6 +859,8 @@ export const SITE_CONTENT = {
     BUTTON_ADD_COMPARTMENT: "Tambah Kompartemen",
     MSG_DO_SAVED: "Surat Jalan %data% berhasil disimpan.",
     MSG_DO_DELETED: "Surat Jalan %data% berhasil dihapus.",
+    MSG_AUTO_DEPOSIT_CREATED:
+      "Deposit %data% otomatis dibuat untuk menutup stok supplier (harga 0 — perbarui di halaman Deposit).",
     MSG_DO_STATUS_UPDATED: "Status Surat Jalan %data% diperbarui.",
     LABEL_QTY_SHIPPED: "Qty Dikirim",
     LABEL_QTY_RECEIVED: "Qty Diterima",
