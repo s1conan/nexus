@@ -29,6 +29,7 @@ Font.register({
     { src: "/fonts/calibrii.ttf", fontStyle: "italic", fontWeight: 400 },
   ],
 })
+Font.registerHyphenationCallback((word) => [word])
 
 // Delivery cost is only taxable under PPN, not other taxes (e.g. PPKB/PBBKB)
 const isPpnTax = (name: string) => name.toUpperCase().includes("PPN")
