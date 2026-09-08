@@ -27,6 +27,7 @@ Font.register({
     { src: "/fonts/calibri.ttf", fontWeight: 400 },
     { src: "/fonts/calibrib.ttf", fontWeight: 700 },
     { src: "/fonts/calibrii.ttf", fontStyle: "italic", fontWeight: 400 },
+    { src: "/fonts/calibriz.ttf", fontStyle: "italic", fontWeight: 700 },
   ],
 })
 Font.registerHyphenationCallback((word) => [word])
@@ -124,7 +125,6 @@ export interface InvoiceData {
   customer_address?: string
   customer_npwp?: string
   po_date?: string
-  do_date?: string
   term_of_payment?: number
   quantity: number
   unit_price: number
@@ -2002,14 +2002,16 @@ const invoiceTableStyles = StyleSheet.create({
   },
 })
 
+// Fixed column widths (must sum to 100%) — defined once so the layout
+// never shifts between renders; merged spans combine the raw percentages
 const INVOICE_TABLE_COLS = {
-  no: "5.5%",
-  desc: "33.5%",
-  qty: "15.5%",
-  price: "24%",
-  qtyPrice: "39.5%",
-  total: "21.5%",
-  noDescQty: "54.5%",
+  no: "5%",
+  desc: "33%",
+  qty: "14%",
+  price: "23%",
+  qtyPrice: "37%",
+  total: "25%",
+  noDescQty: "52%",
   full: "100%",
 }
 
@@ -2176,9 +2178,9 @@ const InvoiceDocument = ({
             </View>
             <View style={{ height: 5 }} />
             <View style={{ flexDirection: "row", marginBottom: 3 }}>
-              <Text style={{ width: 105 }}>DO Date</Text>
+              <Text style={{ width: 105 }}>Invoice Date</Text>
               <Text style={{ width: 12 }}>:</Text>
-              <Text>{formatDateShort(data.do_date)}</Text>
+              <Text>{formatDateShort(data.issue_date)}</Text>
             </View>
             <View style={{ flexDirection: "row", marginBottom: 3 }}>
               <Text style={{ width: 105 }}>Term of Payment</Text>
@@ -2254,10 +2256,10 @@ const InvoiceDocument = ({
                 </Text>
               </View>
               {row.qtySpanPrice ? (
-                <View
+                <View debug
                   style={[
                     invoiceTableStyles.cell,
-                    { width: INVOICE_TABLE_COLS.qtyPrice },
+                    { width: INVOICE_TABLE_COLS.qtyPrice, alignItems: "center"},
                   ]}
                 >
                   <Text>{row.qty || ""}</Text>
@@ -2636,7 +2638,6 @@ export async function generateStandardInvoicePDF(
       so_number: soInfo?.so_number,
       po_number: soInfo?.po_number || poInfo?.po_number || undefined,
       po_date: soInfo?.so_date || poInfo?.so_date,
-      do_date: doInfo?.do_date,
       term_of_payment: termOfPayment,
       quantity,
       unit_price: unitPrice,
