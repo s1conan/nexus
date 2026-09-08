@@ -126,6 +126,51 @@ function calculateBilledQuantity(doInfo: any): number {
   return qtySent
 }
 
+/**
+ * Recomputes the invoice amounts from the row's joined DO/SO data using the
+ * same quotation workflow as the PDF (base - discount + delivery; only PPN
+ * includes the delivery fee in its base). Used so the list table always
+ * matches the dialog/PDF even when the saved total_amount is stale.
+ */
+function calculateInvoiceTotals(inv: any): {
+  subtotal: number
+  taxTotal: number
+  grandTotal: number
+} {
+  const doInfo = Array.isArray(inv?.do) ? inv.do[0] || {} : inv?.do || {}
+  const soInfo = doInfo.so
+    ? Array.isArray(doInfo.so)
+      ? doInfo.so[0] || {}
+      : doInfo.so
+    : Array.isArray(inv?.po)
+      ? inv.po[0] || {}
+      : inv?.po || {}
+  const quantity = calculateBilledQuantity(doInfo) || inv?.quantity || 0
+  const unitPrice = soInfo?.unit_price || 0
+  const deliveryPerLitre = soInfo?.delivery_price_per_litre || 0
+  const discountPercent = soInfo?.discount || 0
+  const basePrice = quantity * unitPrice
+  const afterDiscount = basePrice - basePrice * (discountPercent / 100)
+  const deliveryTotal = quantity * deliveryPerLitre
+  const subtotal = Math.max(0, Math.round(afterDiscount + deliveryTotal))
+  const deliveryTaxable =
+    soInfo?.delivery_taxable ?? inv?.delivery_taxable ?? false
+  const taxDetails = Array.isArray(inv?.tax_details) ? inv.tax_details : []
+  const taxTotal = taxDetails.reduce(
+    (sum: number, t: any) => {
+      if (!t?.enabled) return sum
+      const isPpn = String(t?.name || "").toUpperCase().includes("PPN")
+      const taxableBase =
+        afterDiscount + (deliveryTaxable && isPpn ? deliveryTotal : 0)
+      return (
+        sum + Math.round((Math.max(0, taxableBase) * (Number(t?.rate) || 0)) / 100)
+      )
+    },
+    0
+  )
+  return { subtotal, taxTotal, grandTotal: subtotal + taxTotal }
+}
+
 export default function InvoicePage() {
   const { dict } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
@@ -200,6 +245,7 @@ export default function InvoicePage() {
     company_id: "",
     do_id: "",
     so_id: "",
+    address: "",
     issue_date: INITIAL_ISSUE_DATE,
     due_date: INITIAL_DUE_DATE,
     payment_days: 14,
@@ -214,6 +260,14 @@ export default function InvoicePage() {
 
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
   const [selectedDOInfo, setSelectedDOInfo] = useState<any>(null)
+
+  const companyAddresses = useMemo(() => {
+    if (!selectedCompanyInfo?.details?.addresses) return []
+    return selectedCompanyInfo.details.addresses as {
+      label: string
+      address: string
+    }[]
+  }, [selectedCompanyInfo])
 
   // Permission Checks
   const canView = hasPermission("invoice", "view")
@@ -285,11 +339,16 @@ export default function InvoicePage() {
     const deliveryTotal = qty * deliveryRate
     const subtotal = Math.max(0, Math.round(afterDiscount + deliveryTotal))
     const deliveryTaxable = selectedDOInfo.so?.delivery_taxable ?? false
-    const taxableAmount = afterDiscount + (deliveryTaxable ? deliveryTotal : 0)
 
+    // Quotation workflow: only PPN includes the delivery fee (OAT) in its base
     const appliedTaxes = (formData.tax_details || []).map((t: any) => {
       const rate = Number(t.rate) || 0
-      const amount = t.enabled ? (Math.max(0, taxableAmount) * rate) / 100 : 0
+      const isPpn = String(t.name || "").toUpperCase().includes("PPN")
+      const taxableBase =
+        afterDiscount + (deliveryTaxable && isPpn ? deliveryTotal : 0)
+      const amount = t.enabled
+        ? Math.round((Math.max(0, taxableBase) * rate) / 100)
+        : 0
       return { ...t, amount }
     })
     const taxTotal = appliedTaxes.reduce(
@@ -397,7 +456,7 @@ export default function InvoicePage() {
         let query = supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name, nickname), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
+            "*, company:companies(id, name, nickname, details), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, po_number, so_date, tax_details)"
           )
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -543,7 +602,7 @@ export default function InvoicePage() {
         supabase
           .from("delivery_orders")
           .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
+            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
           )
           .eq("id", item.do_id)
           .maybeSingle()
@@ -585,6 +644,7 @@ export default function InvoicePage() {
         company_id: item.company_id,
         do_id: item.do_id || "",
         so_id: item.so_id || "",
+        address: item.address || "",
         issue_date: item.issue_date,
         due_date: item.due_date,
         payment_days: pdDiff > 0 ? pdDiff : 14,
@@ -607,6 +667,7 @@ export default function InvoicePage() {
         company_id: "",
         do_id: "",
         so_id: "",
+        address: "",
         issue_date: format(new Date(), "yyyy-MM-dd"),
         due_date: format(
           new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
@@ -633,14 +694,22 @@ export default function InvoicePage() {
       )
       return
     }
+    if (!formData.address?.trim()) {
+      notify.error(
+        "Validation Error",
+        "Please select a customer address before saving"
+      )
+      return
+    }
     setIsSaving(true)
     try {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { payment_days, ...cleanFormData } = formData
       const payload = {
         ...cleanFormData,
-        tax_amount: totals.taxTotal,
-        total_amount: totals.grandTotal,
+        subtotal: calcDetails ? calcDetails.subtotal : formData.subtotal,
+        tax_amount: calcDetails ? calcDetails.taxTotal : totals.taxTotal,
+        total_amount: calcDetails ? calcDetails.grandTotal : totals.grandTotal,
       }
 
       if (!editingItem && !payload.invoice_number) {
@@ -698,7 +767,7 @@ export default function InvoicePage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name, nickname), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, tax_details)"
+            "*, company:companies(id, name, nickname, details), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, po_number, so_date, tax_details)"
           )
           .eq("id", editingItem.id)
           .single()
@@ -1223,8 +1292,12 @@ export default function InvoicePage() {
     price: selectedDOInfo?.so?.unit_price
       ? new Intl.NumberFormat().format(selectedDOInfo.so.unit_price)
       : "0",
-    subtotal: new Intl.NumberFormat().format(totals.subtotal),
-    grand_total: new Intl.NumberFormat().format(totals.grandTotal),
+    subtotal: new Intl.NumberFormat().format(
+      calcDetails ? calcDetails.subtotal : totals.subtotal
+    ),
+    grand_total: new Intl.NumberFormat().format(
+      calcDetails ? calcDetails.grandTotal : totals.grandTotal
+    ),
     bank_accounts: formData.bank_accounts.map((b: any) => b.name).join(", "),
   }
 
@@ -1339,7 +1412,7 @@ export default function InvoicePage() {
                               let q = supabase
                                 .from("delivery_orders")
                                 .select(
-                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name, nickname), product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
+                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
                                 )
                                 .in("status", ["Shipped", "Delivered"])
                                 .limit(8)
@@ -1406,6 +1479,7 @@ export default function InvoicePage() {
                               subtotal: calcSubtotal,
                               tax_details: soTaxes,
                               delivery_taxable: item?.so?.delivery_taxable ?? false,
+                              address: "",
                             })
                             setSelectedDOInfo(item)
                           }}
@@ -1438,6 +1512,61 @@ export default function InvoicePage() {
                           emptyMessage={dict.NO_DATA}
                           disabled={viewOnly}
                         />
+                      </div>
+
+                      {/* Customer Address — required */}
+                      <div className="grid gap-2">
+                        <Label className="flex items-center gap-1.5">
+                          {dict.LABEL_ADDRESS || "Address"}
+                          <span
+                            className="text-xs font-bold text-destructive"
+                            title="Required"
+                          >
+                            *
+                          </span>
+                        </Label>
+                        {companyAddresses.length > 0 ? (
+                          <Select
+                            value={formData.address}
+                            onValueChange={(val) =>
+                              setFormData({ ...formData, address: val })
+                            }
+                            disabled={viewOnly}
+                          >
+                            <SelectTrigger className="h-13 w-full">
+                              <SelectValue
+                                placeholder={dict.PLACEHOLDER_SELECT_ADDRESS}
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {companyAddresses.map((addr, idx) => (
+                                <SelectItem key={idx} value={addr.address}>
+                                  <div className="flex flex-col items-start text-sm">
+                                    <span className="font-semibold">
+                                      {addr.label}
+                                    </span>
+                                    <span className="line-clamp-1 text-xs text-muted-foreground">
+                                      {addr.address}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            value={formData.address || ""}
+                            className="h-13"
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                address: e.target.value,
+                              })
+                            }
+                            placeholder={dict.PLACEHOLDER_ENTER_ADDRESS}
+                            disabled={viewOnly}
+                          />
+                        )}
                       </div>
 
                       {/* Dates & Status panel */}
@@ -2025,6 +2154,7 @@ export default function InvoicePage() {
             ) : (
               sortedAndFilteredData.map((i) => {
                 const displayStatus = getInvoiceStatus(i)
+                const amounts = calculateInvoiceTotals(i)
                 return (
                   <TableRow
                     key={i.id}
@@ -2081,7 +2211,7 @@ export default function InvoicePage() {
                     <TableCell className="text-right">
                       <div className="font-mono font-bold">
                         {SITE_CONFIG.currencySymbol}{" "}
-                        {Number(i.total_amount).toLocaleString()}
+                        {amounts.grandTotal.toLocaleString()}
                       </div>
                       <div className="font-mono text-xs text-green-600">
                         {dict.LABEL_PAID || "Paid"}:{" "}

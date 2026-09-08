@@ -119,8 +119,16 @@ export interface InvoiceData {
   company_name: string
   do_number?: string
   so_number?: string
+  po_number?: string
+  product_name?: string
+  customer_address?: string
+  customer_npwp?: string
+  po_date?: string
+  do_date?: string
+  term_of_payment?: number
   quantity: number
   unit_price: number
+  discount_percent?: number
   delivery_price_per_litre: number
   shrinkage_tolerance?: number
   shrinkage_in_price?: boolean
@@ -1429,7 +1437,7 @@ const DeliveryOrderDocument = ({
         </View>
         <View style={a4Styles.blueLine} />
         <View>
-          <Text style={a5Styles.title}>SURAT JALAN / DELIVERY ORDER</Text>
+          <Text style={a5Styles.title}>DELIVERY ORDER</Text>
           <Text style={[a5Styles.title, { fontSize: 10 }]}>
             No. : {data.do_number}
           </Text>
@@ -1901,6 +1909,110 @@ const PaymentDocument = ({
   )
 }
 
+// Formats amounts the Indonesian way with 2 decimals (e.g. 182.000.000,00)
+const formatRupiah = (amount: number) =>
+  new Intl.NumberFormat("id-ID", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+
+const terbilangUnits = [
+  "",
+  "Satu",
+  "Dua",
+  "Tiga",
+  "Empat",
+  "Lima",
+  "Enam",
+  "Tujuh",
+  "Delapan",
+  "Sembilan",
+  "Sepuluh",
+  "Sebelas",
+]
+
+// Converts an integer into Indonesian words (193789600 -> "Seratus Sembilan
+// Puluh Tiga Juta Tujuh Ratus Delapan Puluh Sembilan Ribu Enam Ratus")
+function numberToIndonesianWords(amount: number): string {
+  const n = Math.floor(Math.abs(amount))
+  if (n === 0) return "Nol"
+  if (n < 12) return terbilangUnits[n]
+  if (n < 20) return `${numberToIndonesianWords(n - 10)} Belas`
+  if (n < 100)
+    return `${numberToIndonesianWords(Math.floor(n / 10))} Puluh${
+      n % 10 ? ` ${numberToIndonesianWords(n % 10)}` : ""
+    }`
+  if (n < 200)
+    return `Seratus${n % 100 ? ` ${numberToIndonesianWords(n % 100)}` : ""}`
+  if (n < 1000)
+    return `${numberToIndonesianWords(Math.floor(n / 100))} Ratus${
+      n % 100 ? ` ${numberToIndonesianWords(n % 100)}` : ""
+    }`
+  if (n < 2000)
+    return `Seribu${n % 1000 ? ` ${numberToIndonesianWords(n % 1000)}` : ""}`
+  if (n < 1000000)
+    return `${numberToIndonesianWords(Math.floor(n / 1000))} Ribu${
+      n % 1000 ? ` ${numberToIndonesianWords(n % 1000)}` : ""
+    }`
+  if (n < 1000000000)
+    return `${numberToIndonesianWords(Math.floor(n / 1000000))} Juta${
+      n % 1000000 ? ` ${numberToIndonesianWords(n % 1000000)}` : ""
+    }`
+  if (n < 1000000000000)
+    return `${numberToIndonesianWords(Math.floor(n / 1000000000))} Miliar${
+      n % 1000000000 ? ` ${numberToIndonesianWords(n % 1000000000)}` : ""
+    }`
+  return `${numberToIndonesianWords(Math.floor(n / 1000000000000))} Triliun${
+    n % 1000000000000 ? ` ${numberToIndonesianWords(n % 1000000000000)}` : ""
+  }`
+}
+
+// Border-based flex table for the invoice — percentage widths keep every
+// column perfectly aligned (no background-gap gridline hack, no fixed heights)
+const invoiceTableStyles = StyleSheet.create({
+  table: {
+    marginTop: 7,
+    width: "100%",
+    border: "1px solid #000",
+  },
+  row: {
+    flexDirection: "row",
+    width: "100%",
+    borderBottom: "1px solid #000",
+  },
+  rowLast: {
+    flexDirection: "row",
+    width: "100%",
+  },
+  cell: {
+    paddingVertical: 3,
+    paddingHorizontal: 4,
+    fontSize: 10,
+    borderRight: "1px solid #000",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+  },
+  cellLast: {
+    borderRight: 0,
+  },
+  headerText: {
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+})
+
+const INVOICE_TABLE_COLS = {
+  no: "5.5%",
+  desc: "33.5%",
+  qty: "15.5%",
+  price: "24%",
+  qtyPrice: "39.5%",
+  total: "21.5%",
+  noDescQty: "54.5%",
+  full: "100%",
+}
+
 const InvoiceDocument = ({
   company,
   data,
@@ -1908,17 +2020,98 @@ const InvoiceDocument = ({
   company: CompanyInfo
   data: InvoiceData
 }) => {
-  const subtotal = data.subtotal
+  // SO (PO) calculation — copies the quotation PDF workflow:
+  // base price - discount; the delivery fee (OAT) sits at the top of the
+  // tax rows when it is included in PPN (after them otherwise), and ONLY
+  // PPN adds the delivery fee to its taxable base
+  const basePrice = data.quantity * data.unit_price
+  const discountPercent = data.discount_percent || 0
+  const discountAmount = basePrice * (discountPercent / 100)
+  const afterDiscount = basePrice - discountAmount
   const deliveryTotal = data.quantity * data.delivery_price_per_litre
-  const taxableAmount = data.delivery_taxable
-    ? subtotal
-    : subtotal - deliveryTotal
   const enabledTaxes = data.tax_details.filter((t) => t.enabled)
-  const taxLines = enabledTaxes.map((t) => ({
-    name: t.name,
-    amount: Math.round(Math.max(0, taxableAmount) * (Number(t.rate) / 100)),
-  }))
-  const grandTotal = subtotal + taxLines.reduce((sum, t) => sum + t.amount, 0)
+  const taxLines = enabledTaxes.map((t) => {
+    const isPpn = isPpnTax(t.name)
+    const taxableBase =
+      afterDiscount + (data.delivery_taxable && isPpn ? deliveryTotal : 0)
+    return {
+      name: t.name,
+      rate: Number(t.rate) || 0,
+      amount: Math.round(Math.max(0, taxableBase) * (Number(t.rate) / 100)),
+    }
+  })
+  const grandTotal =
+    Math.round(afterDiscount + deliveryTotal) +
+    taxLines.reduce((sum, t) => sum + t.amount, 0)
+  const discountPerLitre = data.quantity > 0 ? discountAmount / data.quantity : 0
+  const netPerLitre = data.unit_price - discountPerLitre
+  const showDelivery = data.delivery_price_per_litre > 0
+  const formatDateShort = (value?: string) =>
+    value ? format(new Date(value), "dd-MMM-yyyy") : "-"
+  const addressLines = (data.customer_address || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  type InvoiceRow = {
+    desc: string
+    bold?: boolean
+    totalBold?: boolean
+    qty?: string
+    qtySpanPrice?: boolean
+    pricePerLitre?: number
+    pricePerLitreRaw?: string
+    total: number
+  }
+
+  const invoiceRows: InvoiceRow[] = [
+    {
+      desc: data.product_name || (data.so_number ? `SO: ${data.so_number}` : "-"),
+      bold: true,
+      qty: formatNumber(data.quantity),
+      pricePerLitre: data.unit_price,
+      total: basePrice,
+    },
+  ]
+  if (discountAmount > 0) {
+    invoiceRows.push({
+      desc: "Discount",
+      qty: `${formatNumber(discountPercent)}%`,
+      pricePerLitre: discountPerLitre,
+      total: Math.round(discountAmount),
+    })
+  }
+  invoiceRows.push({
+    desc: "Harga Setelah Discount",
+    bold: true,
+    totalBold: true,
+    pricePerLitre: netPerLitre,
+    total: Math.round(afterDiscount),
+  })
+  const oatRow: InvoiceRow = {
+    desc: "OAT",
+    pricePerLitreRaw: formatNumber(data.delivery_price_per_litre),
+    total: Math.round(deliveryTotal),
+  }
+  // Delivery fee only joins the tax base when delivery_taxable is set
+  if (showDelivery && data.delivery_taxable) {
+    invoiceRows.push(oatRow)
+  }
+  taxLines.forEach((tax) => {
+    invoiceRows.push({
+      desc:
+        tax.name +
+        (data.delivery_taxable && isPpnTax(tax.name) ? " (OAT included)" : ""),
+      qty: `${formatNumber(tax.rate)}%`,
+      // The Price/Litre column stays empty for taxes — merge it into the
+      // rate cell so no blank column is rendered
+      qtySpanPrice: true,
+      total: tax.amount,
+    })
+  })
+  if (showDelivery && !data.delivery_taxable) {
+    invoiceRows.push(oatRow)
+  }
 
   return (
     <Document>
@@ -1936,162 +2129,268 @@ const InvoiceDocument = ({
             <Text>Email : {company.email}</Text>
           </View>
         </View>
-        <View style={a4Styles.blueLine} />
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <View style={a4Styles.row}>
-            <Text style={a4Styles.label}>No</Text>
-            <Text style={a4Styles.colon}>:</Text>
-            <Text>{data.invoice_number}</Text>
-          </View>
-          <View style={a4Styles.row}>
-            <Text>
-              Palembang,{" "}
-              {format(new Date(data.issue_date), "dd MMMM yyyy", {
-                locale: dateLocaleId,
-              })}
-            </Text>
-          </View>
-        </View>
-        <View style={a4Styles.row}>
-          <Text style={a4Styles.label}>Perihal</Text>
-          <Text style={a4Styles.colon}>:</Text>
-          <Text>Invoice</Text>
-        </View>
-        <View style={a4Styles.row}>
-          <Text style={a4Styles.label}></Text>
-          <Text style={a4Styles.colon}></Text>
-          <Text>
-            Jatuh tempo s.d.{" "}
-            {format(new Date(data.due_date), "dd MMMM yyyy", {
-              locale: dateLocaleId,
-            })}
+        <View
+          style={{
+            borderTop: "1px solid #000",
+            marginTop: 4,
+            marginBottom: 14,
+          }}
+        />
+        <View style={{ alignItems: "center", marginBottom: 14 }}>
+          <Text style={a5Styles.title}>INVOICE</Text>
+          <Text style={[a5Styles.title, { fontSize: 10 }]}>
+            NO : {data.invoice_number}
           </Text>
         </View>
-        {data.do_number && (
-          <View style={a4Styles.row}>
-            <Text style={a4Styles.label}></Text>
-            <Text style={a4Styles.colon}></Text>
-            <Text>
-              DO: {data.do_number}
-              {data.so_number ? ` / SO: ${data.so_number}` : ""}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginBottom: 12,
+          }}
+        >
+          <View style={{ width: 290 }}>
+            <Text>Kepada Yth:</Text>
+            <View style={{ marginTop: 5 }}>
+              <Text style={{ fontWeight: "bold", fontSize: 12 }}>{data.company_name}</Text>
+              {addressLines.map((line, i) => (
+                <Text style={{ marginTop: 5 }} key={i}>{line}</Text>
+              ))}
+            </View>
+            <Text style={{ marginTop: 14 }}>
+              NPWP : {data.customer_npwp || "-"}
             </Text>
           </View>
-        )}
-        <View style={a4Styles.section}>
-          <Text style={{ marginBottom: 5 }}>Kepada Yth.</Text>
-          <Text style={{ fontWeight: "bold" }}>{data.company_name}</Text>
-        </View>
-        <View style={a4Styles.table}>
-          <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 160 }]}>
-              <Text>Item</Text>
-            </View>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 60 }]}>
-              <Text>Qty (L)</Text>
-            </View>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 80 }]}>
-              <Text>Harga/L</Text>
-            </View>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 80 }]}>
-              <Text>Subtotal</Text>
-            </View>
-          </View>
-          <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 160 }]}>
-              <Text>{data.so_number ? `SO: ${data.so_number}` : "-"}</Text>
-            </View>
-            <View style={[a4Styles.cell, a4Styles.center, { width: 60 }]}>
-              <Text>{formatNumber(data.quantity)}</Text>
-            </View>
-            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
-              <Text>{formatNumber(data.unit_price)}</Text>
-            </View>
-            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
-              <Text>{formatNumber(subtotal)}</Text>
-            </View>
-          </View>
-          {data.delivery_price_per_litre > 0 && (
-            <View style={a4Styles.tableRow}>
-              <View style={[a4Styles.cell, { width: 160 }]}>
-                <Text>
-                  Biaya Pengiriman ({formatNumber(data.quantity)} L x{" "}
-                  {formatNumber(data.delivery_price_per_litre)}/L)
-                </Text>
-              </View>
-              <View style={[a4Styles.cell, { width: 60 }]}>
-                <Text></Text>
-              </View>
-              <View style={[a4Styles.cell, { width: 80 }]}>
-                <Text></Text>
-              </View>
-              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
-                <Text>
-                  {formatNumber(data.quantity * data.delivery_price_per_litre)}
-                </Text>
-              </View>
-            </View>
-          )}
-          <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 160 }]}>
-              <Text style={{ fontWeight: "bold" }}>Subtotal</Text>
-            </View>
-            <View style={[a4Styles.cell, { width: 60 }]}>
-              <Text></Text>
-            </View>
-            <View style={[a4Styles.cell, { width: 80 }]}>
-              <Text></Text>
-            </View>
-            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+          <View style={{ width: 245 }}>
+            <View style={{ flexDirection: "row", marginBottom: 3 }}>
+              <Text style={{ width: 105 }}>PO No.</Text>
+              <Text style={{ width: 12 }}>:</Text>
               <Text style={{ fontWeight: "bold" }}>
-                {formatNumber(subtotal)}
+                {data.po_number || "-"}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", marginBottom: 3 }}>
+              <Text style={{ width: 105 }}>PO Date</Text>
+              <Text style={{ width: 12 }}>:</Text>
+              <Text>{formatDateShort(data.po_date)}</Text>
+            </View>
+            <View style={{ height: 5 }} />
+            <View style={{ flexDirection: "row", marginBottom: 3 }}>
+              <Text style={{ width: 105 }}>DO Date</Text>
+              <Text style={{ width: 12 }}>:</Text>
+              <Text>{formatDateShort(data.do_date)}</Text>
+            </View>
+            <View style={{ flexDirection: "row", marginBottom: 3 }}>
+              <Text style={{ width: 105 }}>Term of Payment</Text>
+              <Text style={{ width: 12 }}>:</Text>
+              <Text>{data.term_of_payment ?? "-"}</Text>
+            </View>
+            <View style={{ flexDirection: "row", marginBottom: 3 }}>
+              <Text style={{ width: 105 }}>Due Date</Text>
+              <Text style={{ width: 12 }}>:</Text>
+              <Text style={{ fontWeight: "bold" }}>
+                {formatDateShort(data.due_date)}
               </Text>
             </View>
           </View>
-          {taxLines.map((tax, taxIdx) => (
-            <View key={`tax-${taxIdx}`} style={a4Styles.tableRow}>
-              <View style={[a4Styles.cell, { width: 160 }]}>
-                <Text>{tax.name}</Text>
+        </View>
+        <View style={invoiceTableStyles.table}>
+          <View style={invoiceTableStyles.row}>
+            <View
+              style={[
+                invoiceTableStyles.cell,
+                { width: INVOICE_TABLE_COLS.no, alignItems: "center" },
+              ]}
+            >
+              <Text style={invoiceTableStyles.headerText}>No</Text>
+            </View>
+            <View
+              style={[
+                invoiceTableStyles.cell,
+                { width: INVOICE_TABLE_COLS.desc, alignItems: "center" },
+              ]}
+            >
+              <Text style={invoiceTableStyles.headerText}>Description</Text>
+            </View>
+            <View
+              style={[
+                invoiceTableStyles.cell,
+                { width: INVOICE_TABLE_COLS.qty, alignItems: "center" },
+              ]}
+            >
+              <Text style={invoiceTableStyles.headerText}>Qty (Litre)</Text>
+            </View>
+            <View
+              style={[
+                invoiceTableStyles.cell,
+                { width: INVOICE_TABLE_COLS.price, alignItems: "center" },
+              ]}
+            >
+              <Text style={invoiceTableStyles.headerText}>Price / Litre</Text>
+            </View>
+            <View
+              style={[
+                invoiceTableStyles.cell,
+                invoiceTableStyles.cellLast,
+                { width: INVOICE_TABLE_COLS.total, alignItems: "center" },
+              ]}
+            >
+              <Text style={invoiceTableStyles.headerText}>Grand Total</Text>
+            </View>
+          </View>
+          {invoiceRows.map((row, i) => (
+            <View key={i} style={invoiceTableStyles.row}>
+              <View
+                style={[
+                  invoiceTableStyles.cell,
+                  { width: INVOICE_TABLE_COLS.no, alignItems: "center" },
+                ]}
+              >
+                <Text>{i + 1}</Text>
               </View>
-              <View style={[a4Styles.cell, { width: 60 }]}>
-                <Text></Text>
+              <View style={[invoiceTableStyles.cell, { width: INVOICE_TABLE_COLS.desc }]}>
+                <Text style={row.bold ? { fontWeight: "bold" } : undefined}>
+                  {row.desc}
+                </Text>
               </View>
-              <View style={[a4Styles.cell, { width: 80 }]}>
-                <Text></Text>
-              </View>
-              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
-                <Text>{formatNumber(tax.amount)}</Text>
+              {row.qtySpanPrice ? (
+                <View
+                  style={[
+                    invoiceTableStyles.cell,
+                    { width: INVOICE_TABLE_COLS.qtyPrice },
+                  ]}
+                >
+                  <Text>{row.qty || ""}</Text>
+                </View>
+              ) : (
+                <>
+                  <View
+                    style={[
+                      invoiceTableStyles.cell,
+                      { width: INVOICE_TABLE_COLS.qty },
+                    ]}
+                  >
+                    <Text style={{ textAlign: "right" }}>{row.qty || ""}</Text>
+                  </View>
+                  {row.pricePerLitreRaw !== undefined ? (
+                    <View
+                      style={[
+                        invoiceTableStyles.cell,
+                        {
+                          width: INVOICE_TABLE_COLS.price,
+                          alignItems: "center",
+                        },
+                      ]}
+                    >
+                      <Text>{row.pricePerLitreRaw}</Text>
+                    </View>
+                  ) : row.pricePerLitre !== undefined ? (
+                    <View
+                      style={[
+                        invoiceTableStyles.cell,
+                        {
+                          width: INVOICE_TABLE_COLS.price,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        },
+                      ]}
+                    >
+                      <Text>Rp</Text>
+                      <Text>{formatRupiah(row.pricePerLitre)}</Text>
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        invoiceTableStyles.cell,
+                        { width: INVOICE_TABLE_COLS.price },
+                      ]}
+                    >
+                      <Text></Text>
+                    </View>
+                  )}
+                </>
+              )}
+              <View
+                style={[
+                  invoiceTableStyles.cell,
+                  invoiceTableStyles.cellLast,
+                  {
+                    width: INVOICE_TABLE_COLS.total,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  },
+                ]}
+              >
+                <Text
+                  style={
+                    row.bold || row.totalBold
+                      ? { fontWeight: "bold" }
+                      : undefined
+                  }
+                >
+                  Rp
+                </Text>
+                <Text
+                  style={
+                    row.bold || row.totalBold
+                      ? { fontWeight: "bold" }
+                      : undefined
+                  }
+                >
+                  {formatRupiah(row.total)}
+                </Text>
               </View>
             </View>
           ))}
-          <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, a4Styles.headerCell, { width: 160 }]}>
-              <Text style={{ fontWeight: "bold" }}>Grand Total</Text>
+          <View style={invoiceTableStyles.row}>
+            <View
+              style={[
+                invoiceTableStyles.cell,
+                {
+                  width: INVOICE_TABLE_COLS.noDescQty,
+                  alignItems: "center",
+                },
+              ]}
+            >
+              <Text style={{ fontWeight: "bold" }}>TOTAL</Text>
             </View>
-            <View style={[a4Styles.cell, { width: 60 }]}>
-              <Text></Text>
-            </View>
-            <View style={[a4Styles.cell, { width: 80 }]}>
+            <View style={[invoiceTableStyles.cell, { width: INVOICE_TABLE_COLS.price }]}>
               <Text></Text>
             </View>
             <View
               style={[
-                a4Styles.cell,
-                a4Styles.headerCell,
-                a4Styles.right,
-                { width: 80 },
+                invoiceTableStyles.cell,
+                invoiceTableStyles.cellLast,
+                {
+                  width: INVOICE_TABLE_COLS.total,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                },
               ]}
             >
+              <Text style={{ fontWeight: "bold" }}>Rp</Text>
               <Text style={{ fontWeight: "bold" }}>
-                {formatNumber(grandTotal)}
+                {formatRupiah(grandTotal)}
+              </Text>
+            </View>
+          </View>
+          <View style={invoiceTableStyles.rowLast}>
+            <View
+              style={[
+                invoiceTableStyles.cell,
+                invoiceTableStyles.cellLast,
+                { width: INVOICE_TABLE_COLS.full, paddingVertical: 4 },
+              ]}
+            >
+              <Text style={{ fontStyle: "italic", fontSize: 12, fontWeight: "bold" }}>
+                Terbilang : # {numberToIndonesianWords(grandTotal)} Rupiah #
               </Text>
             </View>
           </View>
         </View>
-        {data.qr_code_url && (
-          <View style={{ alignItems: "center", marginTop: 10 }}>
-            <Image src={data.qr_code_url} style={{ width: 80, height: 80 }} />
-          </View>
-        )}
         {data.is_note_enabled && data.note && (
           <View style={a4Styles.section}>
             <Text style={{ fontWeight: "bold", marginBottom: 3 }}>
@@ -2102,35 +2401,55 @@ const InvoiceDocument = ({
         )}
         {data.bank_accounts && data.bank_accounts.length > 0 && (
           <View style={a4Styles.section}>
-            <Text style={{ fontWeight: "bold", marginBottom: 3 }}>
-              Rekening Pembayaran / Payment Account
-            </Text>
-            {data.bank_accounts.map((b, i) => (
-              <Text key={i} style={{ fontSize: 9 }}>
-                {b.name} - {b.bank_name} {b.branch ? `(${b.branch})` : ""} :{" "}
-                {b.account_number} a.n. {b.account_name}
-              </Text>
-            ))}
+            <Text style={{ fontWeight: "bold" }}>Metode Pembayaran :</Text>
+            <View
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                gap: 8,
+                marginTop: 5,
+              }}
+            >
+              {data.bank_accounts.map((d, i) => (
+                <View
+                  key={i}
+                  style={{
+                    borderRadius: 8,
+                    border: "1px solid silver",
+                    gap: 4,
+                    padding: 8,
+                    backgroundColor: "#fafafa",
+                  }}
+                >
+                  <Text style={{ fontWeight: "semibold" }}>{d.name}</Text>
+                  <Text>{d.account_number}</Text>
+                  <Text>{d.account_name}</Text>
+                  <Text>{d.branch}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         )}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            marginTop: 20,
-          }}
-        >
-          <View style={{ alignItems: "center" }}>
-            <Text style={{ fontSize: 9 }}>Penerima,</Text>
-            <View style={{ height: 50 }} />
-            <Text style={{ fontSize: 9 }}>( _________________________ )</Text>
+        <View style={{ display: "flex", justifyContent: "space-between" }}>
+          <View style={a4Styles.signature}>
+            <Text>Hormat Kami,</Text>
+            <Image src={company.logo_url} style={a4Styles.stamp} />
+            <Image src="/images/ttd-indah.png" style={a4Styles.ttd} />
+            <Text style={{ fontWeight: "bold", marginTop: 5 }}>
+              Indah Permatasari
+            </Text>
+            <Text style={{ fontWeight: "bold", marginTop: 2 }}>
+              ( DIREKTUR )
+            </Text>
           </View>
-          <View style={{ alignItems: "center" }}>
-            <Text style={{ fontSize: 9 }}>Hormat kami,</Text>
-            <View style={{ height: 50 }} />
-            <Text style={{ fontSize: 9 }}>( _________________________ )</Text>
-          </View>
+          {data.qr_code_url && (
+            <View style={a4Styles.qrContainer}>
+              <Image src={data.qr_code_url} style={a4Styles.qrImage} />
+              <Text style={a4Styles.qrLabel}> </Text>
+            </View>
+          )}
         </View>
+        <Image src={company.logo_url} style={a4Styles.backgroundImage} />
       </Page>
     </Document>
   )
@@ -2237,10 +2556,52 @@ export async function generateStandardInvoicePDF(
   inv: any,
   options: { save?: boolean; output?: "datauri" | "blob" } = { save: true }
 ) {
-  const quantity = calculateBilledQuantity(inv.do) || inv.quantity || 0
-  const unitPrice = inv.do?.so?.unit_price || 0
-  const deliveryPricePerLitre = inv.do?.so?.delivery_price_per_litre || 0
-  const subtotal = quantity * unitPrice + quantity * deliveryPricePerLitre
+  // Embedded relations can come back as arrays depending on the FK shape —
+  // normalize them first (mirrors the defensive unwrap in the invoice page).
+  const doInfo = Array.isArray(inv.do) ? inv.do[0] || {} : inv.do || {}
+  const soInfo = doInfo.so
+    ? Array.isArray(doInfo.so)
+      ? doInfo.so[0] || {}
+      : doInfo.so
+    : Array.isArray(inv.po)
+      ? inv.po[0] || {}
+      : inv.po || {}
+  const poInfo = Array.isArray(inv.po) ? inv.po[0] || {} : inv.po || {}
+
+  const quantity = calculateBilledQuantity(doInfo) || inv.quantity || 0
+  const unitPrice = soInfo?.unit_price || 0
+  const deliveryPricePerLitre = soInfo?.delivery_price_per_litre || 0
+  const discountPercent = soInfo?.discount || 0
+  const basePrice = quantity * unitPrice
+  const discountAmount = basePrice * (discountPercent / 100)
+  const subtotal = Math.max(
+    0,
+    Math.round(basePrice - discountAmount + quantity * deliveryPricePerLitre)
+  )
+
+  // Customer details for the invoice header block
+  const companyRow = Array.isArray(inv.company)
+    ? inv.company[0] || {}
+    : inv.company || {}
+  const companyDetails = companyRow?.details || {}
+  const companyAddresses = (
+    Array.isArray(companyDetails.addresses) ? companyDetails.addresses : []
+  ) as { label?: string; address?: string }[]
+  const customerAddress =
+    companyAddresses.find((a) => a?.address)?.address ||
+    companyDetails.address ||
+    ""
+  const termOfPayment =
+    inv.issue_date && inv.due_date
+      ? Math.max(
+          0,
+          Math.round(
+            (new Date(inv.due_date).getTime() -
+              new Date(inv.issue_date).getTime()) /
+              (1000 * 60 * 60 * 24)
+          )
+        )
+      : undefined
 
   // Compute hash from the RAW DB row so it matches server-side verification.
   let contentHash: string | undefined
@@ -2258,6 +2619,7 @@ export async function generateStandardInvoicePDF(
       name: companyInfo?.name || "PT Anugerah Buana Sriwijaya",
       address: companyInfo?.address || "",
       email: companyInfo?.email || "",
+      phone: companyInfo?.phone || companyInfo?.telephone || "",
       logo_url: companyInfo?.logo_url,
       header_url: companyInfo?.header_url,
     },
@@ -2266,18 +2628,26 @@ export async function generateStandardInvoicePDF(
       invoice_number: inv.invoice_number,
       issue_date: inv.issue_date,
       due_date: inv.due_date,
-      company_name: inv.company?.name || "-",
-      do_number: inv.do?.do_number,
-      so_number: inv.do?.so?.so_number,
+      company_name: companyRow?.name || "-",
+      product_name: doInfo?.product?.name,
+      customer_address: inv.address || customerAddress,
+      customer_npwp: companyDetails.npwp || companyRow?.npwp || undefined,
+      do_number: doInfo?.do_number,
+      so_number: soInfo?.so_number,
+      po_number: soInfo?.po_number || poInfo?.po_number || undefined,
+      po_date: soInfo?.so_date || poInfo?.so_date,
+      do_date: doInfo?.do_date,
+      term_of_payment: termOfPayment,
       quantity,
       unit_price: unitPrice,
+      discount_percent: discountPercent,
       delivery_price_per_litre: deliveryPricePerLitre,
-      shrinkage_tolerance: inv.do?.so?.shrinkage_tolerance ?? 0,
-      shrinkage_in_price: inv.do?.so?.shrinkage_in_price ?? false,
+      shrinkage_tolerance: soInfo?.shrinkage_tolerance ?? 0,
+      shrinkage_in_price: soInfo?.shrinkage_in_price ?? false,
       subtotal,
       tax_details: inv.tax_details || [],
       delivery_taxable:
-        inv.do?.so?.delivery_taxable ?? inv.delivery_taxable ?? false,
+        soInfo?.delivery_taxable ?? inv.delivery_taxable ?? false,
       total_amount: inv.total_amount || 0,
       note: inv.is_note_enabled ? inv.note : "",
       is_note_enabled: true,
