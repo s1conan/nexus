@@ -1215,20 +1215,30 @@ const SalesOrderDocument = ({
               <Text>Subtotal</Text>
             </View>
           </View>
-          <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 160 }]}>
-              <Text>{data.product_name || "-"}</Text>
+          <View style={[a4Styles.tableRow, { height: 30 }]}>
+            <View style={[a4Styles.cell, { width: 160, height: 30 }]}>
+              <Text style={{ height: 13 }}>{data.product_name || "-"}</Text>
               {data.product_sku && (
                 <Text style={{ fontSize: 8 }}>SKU: {data.product_sku}</Text>
               )}
             </View>
-            <View style={[a4Styles.cell, a4Styles.center, { width: 60 }]}>
+            <View
+              style={[
+                a4Styles.cell,
+                a4Styles.center,
+                { width: 60, height: 30 },
+              ]}
+            >
               <Text>{formatNumber(data.quantity)}</Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+            <View
+              style={[a4Styles.cell, a4Styles.right, { width: 80, height: 30 }]}
+            >
               <Text>{formatNumber(data.unit_price)}</Text>
             </View>
-            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+            <View
+              style={[a4Styles.cell, a4Styles.right, { width: 80, height: 30 }]}
+            >
               <Text>{formatNumber(subtotal)}</Text>
             </View>
           </View>
