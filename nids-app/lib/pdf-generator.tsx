@@ -457,7 +457,7 @@ const a5Styles = StyleSheet.create({
   },
   backgroundImage: {
     position: "absolute",
-    opacity: "0.06",
+    opacity: "0.10",
     top: 15,
     left: 0,
     right: 0,
@@ -479,7 +479,7 @@ const a5Styles = StyleSheet.create({
     marginBottom: 8,
     textSpacing: 2,
   },
-  blueLine: { height: 1, backgroundColor: "#1e3a8a", marginBottom: 1 },
+  blueLine: { height: 1, backgroundColor: "#1e3b8a0A", marginBottom: 1 },
   row: { flexDirection: "row", marginBottom: 3 },
   label: { width: 60 },
   colon: { width: 10, marginHorizontal: 2 },
@@ -540,13 +540,13 @@ const a5Styles = StyleSheet.create({
   },
   stamp: {
     position: "absolute",
-    opacity: "0.5",
+    opacity: "0.65",
     width: 70,
     height: 70,
     objectFit: "contain",
     objectPosition: "center",
     zIndex: 2,
-    marginTop: 8,
+    marginTop: 20,
   },
   signatureArea: {
     marginTop: 0,
@@ -567,7 +567,7 @@ const a5Styles = StyleSheet.create({
     padding: 2,
     height: 17,
   },
-  signatureSpace: { borderBottom: "1px solid black", height: 40 },
+  signatureSpace: { borderBottom: "1px solid black", height: 60 },
   signatureFooter: {
     paddingTop: 5,
     paddingHorizontal: 2,
@@ -1402,11 +1402,28 @@ const DeliveryOrderDocument = ({
 }) => {
   return (
     <Document>
-      <Page size="A4" orientation="landscape" style={a5Styles.page}>
+      <Page size="A4" style={a4Styles.page}>
+        <View style={a4Styles.header}>
+          {(company.header_url || company.logo_url) && (
+            <Image
+              src={company.header_url || company.logo_url}
+              style={a4Styles.logo}
+            />
+          )}
+          <View style={a4Styles.companyInfo}>
+            <Text style={a4Styles.companyName}>{company.name}</Text>
+            <Text>{company.address}</Text>
+            <Text>Email : {company.email}</Text>
+          </View>
+        </View>
+        <View style={a4Styles.blueLine} />
         <View>
           <Text style={a5Styles.title}>SURAT JALAN / DELIVERY ORDER</Text>
+          <Text style={[a5Styles.title, { fontSize: 10 }]}>
+            No. : {data.do_number}
+          </Text>
           <View style={a5Styles.subTitle}>
-            <Text>{data.do_number}</Text>
+            <Text></Text>
             <Text>
               Palembang,{" "}
               {data.do_date
@@ -1425,7 +1442,7 @@ const DeliveryOrderDocument = ({
             marginTop: 10,
           }}
         >
-          <View style={{ width: 270 }}>
+          <View style={{ width: 325 }}>
             <View style={a5Styles.row}>
               <Text style={{ width: 50 }}>Shipped to</Text>
               <Text style={a5Styles.colon}>:</Text>
@@ -1439,7 +1456,7 @@ const DeliveryOrderDocument = ({
             <View style={a5Styles.row}>
               <Text style={{ width: 50 }}></Text>
               <Text style={a5Styles.colon}></Text>
-              <Text>{data.delivery_address || "-"}</Text>
+              <Text style={{ width: 255 }}>{data.delivery_address || "-"}</Text>
             </View>
             <View style={a5Styles.row}>
               <Text style={{ width: 50 }}>PIC</Text>
@@ -1551,15 +1568,15 @@ const DeliveryOrderDocument = ({
                     { height: 36, alignItems: "center" },
                   ]}
                 >
-                  <Text style={{ width: "20%" }}>Tera</Text>
-                  <View style={{ flexDirection: "column", width: "80%" }}>
+                  <Text style={{ width: "25%" }}>Tera</Text>
+                  <View style={{ flexDirection: "column", width: "75%" }}>
                     <View
                       style={{
                         flexDirection: "row",
                         height: 18,
                         alignItems: "center",
                         borderBottom: "1px solid gray",
-                        paddingHorizontal: 5,
+                        paddingHorizontal: 0,
                       }}
                     >
                       <Text style={{ width: 30 }}>Front</Text>
@@ -1570,7 +1587,7 @@ const DeliveryOrderDocument = ({
                         flexDirection: "row",
                         height: 18,
                         alignItems: "center",
-                        paddingHorizontal: 5,
+                        paddingHorizontal: 0,
                       }}
                     >
                       <Text style={{ width: 30 }}>Back</Text>
@@ -1585,15 +1602,15 @@ const DeliveryOrderDocument = ({
                     { height: 36, alignItems: "center" },
                   ]}
                 >
-                  <Text style={{ width: "20%" }}>Manual Stick</Text>
-                  <View style={{ flexDirection: "column", width: "80%" }}>
+                  <Text style={{ width: "25%" }}>Manual Stick</Text>
+                  <View style={{ flexDirection: "column", width: "75%" }}>
                     <View
                       style={{
                         flexDirection: "row",
                         height: 18,
                         alignItems: "center",
                         borderBottom: "1px solid gray",
-                        paddingHorizontal: 5,
+                        paddingHorizontal: 0,
                       }}
                     >
                       <Text style={{ width: 30 }}>Front</Text>
@@ -1604,7 +1621,7 @@ const DeliveryOrderDocument = ({
                         flexDirection: "row",
                         height: 18,
                         alignItems: "center",
-                        paddingHorizontal: 5,
+                        paddingHorizontal: 0,
                       }}
                     >
                       <Text style={{ width: 30 }}>Back</Text>
@@ -1624,7 +1641,7 @@ const DeliveryOrderDocument = ({
                     <View
                       style={{ flexDirection: "row", alignItems: "center" }}
                     >
-                      <Text style={{ width: 30 }}></Text>
+                      <Text style={{ width: "30" }}></Text>
                       <Text style={[a5Styles.colon]}>:</Text>
                     </View>
                   </View>
