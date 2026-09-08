@@ -236,14 +236,13 @@ export default function InvoicePage() {
   // Calculations
   const totals = useMemo(() => {
     const subtotal = formData.subtotal || 0
-    const appliedTaxes = formData.tax_details.map((t) => {
-      const rate = Number(t.rate) || 0
-      const amount = t.enabled ? (subtotal * rate) / 100 : 0
-      return { ...t, amount }
-    })
-    const taxTotal = appliedTaxes.reduce((sum, t) => sum + t.amount, 0)
+    const taxTotal = formData.tax_details.reduce(
+      (sum: number, t: any) =>
+        sum + (t.enabled ? (subtotal * (Number(t.rate) || 0)) / 100 : 0),
+      0
+    )
     const grandTotal = subtotal + taxTotal
-    return { subtotal, taxTotal, grandTotal, appliedTaxes }
+    return { subtotal, taxTotal, grandTotal }
   }, [formData])
 
   const calcDetails = useMemo(() => {
@@ -1303,8 +1302,8 @@ export default function InvoicePage() {
                   )}
                 >
                   {viewOnly && <div className="absolute inset-0 z-20"></div>}
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                    <div className="space-y-4 md:col-span-2">
+                  <div className="space-y-6">
+                    <div className="space-y-4">
                       {/* Invoice Number */}
                       <div className="grid gap-2">
                         <Label>
@@ -1441,19 +1440,65 @@ export default function InvoicePage() {
                         />
                       </div>
 
+                      {/* Dates & Status panel */}
+                      <div className="grid grid-cols-1 gap-4 rounded-lg border bg-muted/10 p-4 md:grid-cols-3">
+                        <div className="grid gap-2">
+                          <Label className="flex items-center gap-2">
+                            <Receipt className="size-4" />{" "}
+                            {dict.LABEL_ISSUE_DATE || "Issue Date"}
+                          </Label>
+                          <Input
+                            type="date"
+                            value={formData.issue_date}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                issue_date: e.target.value,
+                              })
+                            }
+                            disabled={viewOnly}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="flex items-center gap-2">
+                            <RefreshCw className="size-4" /> Payment Days
+                          </Label>
+                          <NumberInput
+                            value={formData.payment_days}
+                            onChange={(val) => handleDaysChange(val)}
+                            rightBadge="Hari"
+                            disabled={viewOnly}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label className="flex items-center gap-2">
+                            <AlertCircle className="size-4" />{" "}
+                            {dict.LABEL_DUE_DATE || "Due Date"}
+                          </Label>
+                          <Input
+                            type="date"
+                            value={formData.due_date}
+                            onChange={(e) =>
+                              handleDueDateChange(e.target.value)
+                            }
+                            disabled={viewOnly}
+                          />
+                        </div>
+                      </div>
+
                       {/* Grouped DO Data Card — visible after DO selected */}
                       {selectedDOInfo && calcDetails && (
                         <div className="overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm">
                           {/* Header banner showing DO and SO link */}
                           <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-3">
-                            <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-primary md:text-sm">
                               <Receipt className="size-4" />
                               <span>
                                 {dict.MENU_DELIVERY_ORDER || "Delivery Order"}:{" "}
                                 {selectedDOInfo.do_number}
                               </span>
                             </div>
-                            <div className="text-xs font-medium text-muted-foreground">
+                            <div className="text-xs font-medium text-muted-foreground md:text-sm">
                               {dict.MENU_SALES_ORDER || "Sales Order"}:{" "}
                               <span className="font-mono font-semibold">
                                 {selectedDOInfo.so?.so_number || "-"}
@@ -1466,11 +1511,11 @@ export default function InvoicePage() {
                             <div className="grid grid-cols-1 gap-4 border-b pb-4 sm:grid-cols-2">
                               {/* DO Logistics Column */}
                               <div className="space-y-2.5">
-                                <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+                                <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
                                   {dict.LABEL_DELIVERY_DETAILS ||
                                     "Delivery Details"}
                                 </div>
-                                <div className="grid grid-cols-2 gap-y-2 text-xs">
+                                <div className="grid grid-cols-2 gap-y-2 text-xs md:text-sm">
                                   <div className="text-muted-foreground">
                                     {dict.LABEL_PRODUCT || "Product"}:
                                   </div>
@@ -1516,11 +1561,11 @@ export default function InvoicePage() {
 
                               {/* SO Pricing Column */}
                               <div className="space-y-2.5 sm:border-l sm:pl-4">
-                                <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+                                <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
                                   {dict.LABEL_SO_INFORMATION ||
                                     "SO Information"}
                                 </div>
-                                <div className="grid grid-cols-2 gap-y-2 text-xs">
+                                <div className="grid grid-cols-2 gap-y-2 text-xs md:text-sm">
                                   <div className="text-muted-foreground">
                                     {dict.LABEL_UNIT_PRICE || "Unit Price"}:
                                   </div>
@@ -1584,12 +1629,12 @@ export default function InvoicePage() {
 
                             {/* Calculation Section */}
                             <div className="space-y-2.5">
-                              <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+                              <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
                                 {dict.LABEL_CALCULATION_DETAILS ||
                                   "Calculation Details"}
                               </div>
                               {calcDetails.billingReason && (
-                                <div className="rounded border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground">
+                                <div className="rounded border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground md:text-xs">
                                   {calcDetails.billingReason === "exceeds" &&
                                     dict.BILLING_NOTE_EXCEEDS_SENT}
                                   {calcDetails.billingReason ===
@@ -1602,12 +1647,12 @@ export default function InvoicePage() {
                               )}
                               <div className="space-y-2">
                                 {/* Base Price */}
-                                <div className="flex items-center justify-between text-xs">
+                                <div className="flex items-center justify-between text-xs md:text-sm">
                                   <div className="flex flex-col">
                                     <span className="font-medium text-foreground">
                                       {dict.LABEL_BASE_PRICE || "Base Price"}
                                     </span>
-                                    <span className="text-[10px] text-muted-foreground">
+                                    <span className="text-[10px] text-muted-foreground md:text-xs">
                                       {Number(calcDetails.qty).toLocaleString()}{" "}
                                       L × {SITE_CONFIG.currencySymbol}{" "}
                                       {Number(
@@ -1625,13 +1670,13 @@ export default function InvoicePage() {
 
                                 {/* Discount */}
                                 {calcDetails.discountAmount > 0 && (
-                                  <div className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center justify-between text-xs md:text-sm">
                                     <div className="flex flex-col">
                                       <span className="font-medium text-red-600 dark:text-red-400">
                                         {dict.LABEL_PRICE_DISCOUNT ||
                                           "Price Discount"}
                                       </span>
-                                      <span className="text-[10px] text-muted-foreground">
+                                      <span className="text-[10px] text-muted-foreground md:text-xs">
                                         {calcDetails.discountPercent}%
                                       </span>
                                     </div>
@@ -1646,13 +1691,13 @@ export default function InvoicePage() {
 
                                 {/* Delivery Fee */}
                                 {calcDetails.deliveryTotal > 0 && (
-                                  <div className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center justify-between text-xs md:text-sm">
                                     <div className="flex flex-col">
                                       <span className="font-medium text-emerald-600 dark:text-emerald-400">
                                         {dict.LABEL_DELIVERY_FEE ||
                                           "Delivery Fee"}
                                       </span>
-                                      <span className="text-[10px] text-muted-foreground">
+                                      <span className="text-[10px] text-muted-foreground md:text-xs">
                                         {Number(
                                           calcDetails.qty
                                         ).toLocaleString()}{" "}
@@ -1673,7 +1718,7 @@ export default function InvoicePage() {
                                 )}
 
                                 {/* Subtotal Divider */}
-                                <div className="flex items-center justify-between border-t pt-2 text-xs font-bold">
+                                <div className="flex items-center justify-between border-t pt-2 text-xs font-bold md:text-sm">
                                   <span>
                                     {dict.LABEL_SUBTOTAL || "Subtotal"}
                                   </span>
@@ -1692,7 +1737,7 @@ export default function InvoicePage() {
                                     return (
                                       <div
                                         key={idx}
-                                        className="flex items-center justify-between text-xs"
+                                        className="flex items-center justify-between text-xs md:text-sm"
                                       >
                                         <span className="font-medium text-muted-foreground">
                                           {tax.name} ({tax.rate}%)
@@ -1709,11 +1754,11 @@ export default function InvoicePage() {
                                 )}
 
                                 {/* Grand Total */}
-                                <div className="flex items-center justify-between border-t pt-2 text-sm font-bold">
+                                <div className="flex items-center justify-between border-t pt-2 text-sm font-bold md:text-base">
                                   <span>
                                     {dict.LABEL_GRAND_TOTAL || "Grand Total"}
                                   </span>
-                                  <span className="font-mono text-base text-primary">
+                                  <span className="font-mono text-base text-primary md:text-lg">
                                     {SITE_CONFIG.currencySymbol}{" "}
                                     {Math.round(
                                       calcDetails.grandTotal
@@ -1725,112 +1770,6 @@ export default function InvoicePage() {
                           </div>
                         </div>
                       )}
-                    </div>
-
-                    {/* Dates & Status side card */}
-                    <div className="h-fit space-y-6 rounded-lg border bg-muted/10 p-4">
-                      <div className="grid gap-2">
-                        <Label className="flex items-center gap-2">
-                          <Receipt className="size-4" />{" "}
-                          {dict.LABEL_ISSUE_DATE || "Issue Date"}
-                        </Label>
-                        <Input
-                          type="date"
-                          value={formData.issue_date}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              issue_date: e.target.value,
-                            })
-                          }
-                          disabled={viewOnly}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label className="flex items-center gap-2">
-                          <RefreshCw className="size-4" /> Payment Days
-                        </Label>
-                        <NumberInput
-                          value={formData.payment_days}
-                          onChange={(val) => handleDaysChange(val)}
-                          rightBadge="Hari"
-                          disabled={viewOnly}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label className="flex items-center gap-2">
-                          <AlertCircle className="size-4" />{" "}
-                          {dict.LABEL_DUE_DATE || "Due Date"}
-                        </Label>
-                        <Input
-                          type="date"
-                          value={formData.due_date}
-                          onChange={(e) => handleDueDateChange(e.target.value)}
-                          disabled={viewOnly}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Financials & Tax block */}
-                    <div className="space-y-4 md:col-span-3">
-                      <div className="grid gap-2">
-                        <Label>{dict.LABEL_SUBTOTAL}</Label>
-                        <NumberInput
-                          value={formData.subtotal}
-                          disabled
-                          leftBadge={SITE_CONFIG.currencySymbol}
-                          className="bg-muted/30 text-right text-lg font-bold"
-                        />
-                      </div>
-
-                      {/* Aligned Tax Section */}
-                      <div className="space-y-4 rounded-lg border bg-muted/10 p-4">
-                        <Label className="block border-b pb-2 text-xs font-bold tracking-wider text-muted-foreground uppercase">
-                          {dict.LABEL_TAXES || "Taxes"}
-                        </Label>
-                        <div className="space-y-2">
-                          {formData.tax_details
-                            .filter((t) => t.enabled)
-                            .map((tax, idx) => {
-                              const calculatedAmount =
-                                totals.appliedTaxes.find(
-                                  (t) => t.name === tax.name
-                                )?.amount || 0
-                              return (
-                                <div
-                                  key={idx}
-                                  className="flex min-h-10 items-center justify-between rounded border bg-background p-2.5 text-sm"
-                                >
-                                  <span className="text-xs font-semibold text-muted-foreground">
-                                    {tax.name} ({tax.rate}%)
-                                  </span>
-                                  <span className="font-mono text-xs font-semibold">
-                                    {SITE_CONFIG.currencySymbol}{" "}
-                                    {Math.round(
-                                      calculatedAmount
-                                    ).toLocaleString()}
-                                  </span>
-                                </div>
-                              )
-                            })}
-                          {formData.tax_details.filter((t) => t.enabled)
-                            .length === 0 && (
-                            <div className="py-2 text-center text-xs text-muted-foreground italic">
-                              No taxes applied
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between border-t pt-2 font-mono text-lg font-bold">
-                          <span>
-                            {dict.LABEL_GRAND_TOTAL || "Grand Total"}:
-                          </span>
-                          <span className="text-primary">
-                            {SITE_CONFIG.currencySymbol}{" "}
-                            {Math.round(totals.grandTotal).toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
                     </div>
                   </div>
 

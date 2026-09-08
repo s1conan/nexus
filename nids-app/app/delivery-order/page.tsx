@@ -72,6 +72,7 @@ import { Label } from "@/components/ui/label"
 import { cn, constructMultiWordSearch } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
+import { previewNumberFormat } from "@/lib/doc-numbering"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { LiveSearch } from "@/components/live-search"
 import { format } from "date-fns"
@@ -161,6 +162,9 @@ export default function DeliveryOrdersPage() {
   const [remainingSOQty, setRemainingSOQty] = useState<number | null>(null)
   const sealNumberCache = useRef<Record<number, string>>({})
 
+  // Numbering format from settings (for DO number label preview)
+  const [doNumberFormat, setDoNumberFormat] = useState("DO/{YYYY}/{SEQ:3}")
+
   // Form State
   const [formData, setFormData] = useState(() => ({
     do_number: "",
@@ -209,6 +213,16 @@ export default function DeliveryOrdersPage() {
               info[r.name] = r.value
             })
             setCompanyInfo(info)
+          }
+
+          const { data: nRes } = await supabase
+            .from("app_settings")
+            .select("value")
+            .eq("category", "numbering")
+            .eq("name", "delivery-order")
+            .maybeSingle()
+          if (nRes?.value) {
+            setDoNumberFormat(String(nRes.value))
           }
         }
 
@@ -1144,7 +1158,15 @@ export default function DeliveryOrdersPage() {
                         </h3>
 
                         <div className="grid gap-2">
-                          <Label htmlFor="donum">{dict.LABEL_DO_NUMBER}</Label>
+                          <Label
+                            htmlFor="donum"
+                            className="flex items-center justify-between gap-1"
+                          >
+                            {dict.LABEL_DO_NUMBER}
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-normal text-primary">
+                              {previewNumberFormat(doNumberFormat)}
+                            </span>
+                          </Label>
                           <Input
                             id="donum"
                             value={formData.do_number}
@@ -1158,7 +1180,7 @@ export default function DeliveryOrdersPage() {
                               editingItem &&
                               !hasPermission("delivery-order", "edit")
                             }
-                            placeholder={dict.LABEL_AUTO_GENERATED}
+                            placeholder={doNumberFormat}
                           />
                         </div>
 
@@ -1887,7 +1909,7 @@ export default function DeliveryOrdersPage() {
                             />
                           </div>
 
-                          <div className="h-[220px] space-y-3 overflow-y-auto">
+                          <div className="grid h-[130px] grid-cols-1 gap-3 overflow-y-auto md:grid-cols-2">
                             {formData.compartment_details.length === 0 ? (
                               <div className="rounded-lg border-2 border-dashed p-2 text-center text-muted-foreground">
                                 {dict.MSG_SELECT_VEHICLE}
@@ -1896,7 +1918,7 @@ export default function DeliveryOrdersPage() {
                               formData.compartment_details.map((comp, idx) => (
                                 <Card
                                   key={idx}
-                                  className="m-2 p-0 shadow-none ring-0"
+                                  className="p-0 shadow-none ring-0"
                                 >
                                   <div className="mb-2 flex items-center gap-3">
                                     <span className="mt-4 text-base font-bold text-primary">
