@@ -85,6 +85,9 @@ const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
 const PAGE_SIZE = 50
 
+// Sentinel value for the SO field's "Fill SO later" option (so_id stays empty)
+const FILL_SO_LATER_VALUE = "__fill_later__"
+
 interface SortLevel {
   id: string
   column: string
@@ -545,7 +548,12 @@ export default function DeliveryOrdersPage() {
     setIsSaving(true)
     try {
       const { compartment_details, ...payload } = formData
-      const dbPayload = { ...payload, compartments: compartment_details } as any
+      // SO is optional: an empty string would fail the UUID FK, so store null
+      const dbPayload = {
+        ...payload,
+        so_id: payload.so_id || null,
+        compartments: compartment_details,
+      } as any
 
       // Generate document number if empty (for new orders)
       if (!editingItem && !dbPayload.do_number) {
@@ -623,12 +631,18 @@ export default function DeliveryOrdersPage() {
         fetchData(true)
       }
 
-      // Automatically update Sales Order Status
-      if (dbPayload.so_id) {
+      // Automatically update Sales Order Status (covers both the newly linked
+      // SO and a previously linked SO when the link changed or was cleared)
+      const soStatusIds = Array.from(
+        new Set(
+          [dbPayload.so_id, editingItem?.so_id].filter(Boolean) as string[]
+        )
+      )
+      for (const soId of soStatusIds) {
         const { data: allDOs } = await supabase
           .from("delivery_orders")
           .select("quantity")
-          .eq("so_id", dbPayload.so_id)
+          .eq("so_id", soId)
         const totalDOQty = (allDOs || []).reduce(
           (sum: number, doItem: any) => sum + (doItem.quantity || 0),
           0
@@ -637,7 +651,7 @@ export default function DeliveryOrdersPage() {
         const { data: so } = await supabase
           .from("sales_orders")
           .select("quantity, status")
-          .eq("id", dbPayload.so_id)
+          .eq("id", soId)
           .single()
         if (so) {
           let newStatus = so.status
@@ -649,7 +663,7 @@ export default function DeliveryOrdersPage() {
             await supabase
               .from("sales_orders")
               .update({ status: newStatus })
-              .eq("id", dbPayload.so_id)
+              .eq("id", soId)
           }
         }
       }
@@ -1036,6 +1050,14 @@ export default function DeliveryOrdersPage() {
       setSelectedPOInfo(item)
       setSelectedCompanyInfo(item.company)
       setSelectedProductInfo(item.product)
+    } else if (val === FILL_SO_LATER_VALUE) {
+      // "Fill SO later": detach the SO but keep manually entered company,
+      // product, quantity and address so the DO stays valid without an SO
+      setFormData((prev) => ({
+        ...prev,
+        so_id: "",
+      }))
+      setSelectedPOInfo(null)
     } else {
       // Clearing SO should also clear company since it messes with filtering
       setFormData((prev) => ({
@@ -1185,7 +1207,9 @@ export default function DeliveryOrdersPage() {
                         </div>
 
                         <div className="grid gap-2">
-                          <Label>{dict.LABEL_SO_REQUIRED}</Label>
+                          <Label>
+                            {dict.LABEL_SO_REQUIRED} ({dict.LABEL_OPTIONAL})
+                          </Label>
                           <div className="flex gap-2">
                             <div className="flex-1">
                               <LiveSearch
@@ -1264,6 +1288,12 @@ export default function DeliveryOrdersPage() {
                                 ]}
                                 placeholder={dict.PLACEHOLDER_SELECT_SO}
                                 emptyMessage={dict.NO_DATA}
+                                footerOptions={[
+                                  {
+                                    value: FILL_SO_LATER_VALUE,
+                                    label: dict.LABEL_FILL_SO_LATER,
+                                  },
+                                ]}
                               />
                             </div>
                           </div>
@@ -2133,6 +2163,7 @@ export default function DeliveryOrdersPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-8" />
               <TableHead className="px-7">{dict.LABEL_DO_NUMBER}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
               <TableHead>{dict.LABEL_DO_DATE}</TableHead>
@@ -2150,14 +2181,14 @@ export default function DeliveryOrdersPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} className="p-0">
+                <TableCell colSpan={9} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
             ) : orders.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="py-10 text-center text-muted-foreground"
                 >
                   {dict.NO_DATA}
@@ -2176,6 +2207,19 @@ export default function DeliveryOrdersPage() {
                     if (updatedRowId === o.id) setUpdatedRowId(null)
                   }}
                 >
+                  <TableCell className="py-3">
+                    <div
+                      className={cn(
+                        "size-2 rounded-full",
+                        o.so_id ? "bg-green-500" : "bg-red-500"
+                      )}
+                      title={
+                        o.so_id
+                          ? o.po?.so_number || ""
+                          : dict.LABEL_SO_PENDING
+                      }
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{o.do_number}</TableCell>
                   <TableCell>{o.company?.name || "-"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
@@ -2322,7 +2366,7 @@ export default function DeliveryOrdersPage() {
 
             {/* Infinite Scroll Sentinel & Loader */}
             <TableRow ref={observerTarget} className="border-0">
-              <TableCell colSpan={8} className="overflow-hidden border-0 p-0">
+              <TableCell colSpan={9} className="overflow-hidden border-0 p-0">
                 {loadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />

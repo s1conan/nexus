@@ -240,7 +240,7 @@ export default function InvoicePage() {
   }
 
   // Form State
-  const [formData, setFormData] = usePersistedState("invoice_form_data", {
+  const [formData, setFormData] = usePersistedState("invoice_form_data_v2", {
     invoice_number: "",
     company_id: "",
     do_id: "",
@@ -698,6 +698,15 @@ export default function InvoicePage() {
       notify.error(
         "Validation Error",
         "Please select a customer address before saving"
+      )
+      return
+    }
+    // Defense-in-depth: a new invoice must reference a Sales Order via its DO
+    // (existing invoices are left editable for legacy rows without so_id)
+    if (!editingItem && !formData.so_id) {
+      notify.error(
+        dict.MSG_VALIDATION_ERROR,
+        dict.MSG_SO_REQUIRED_FOR_INVOICE
       )
       return
     }
@@ -1452,6 +1461,15 @@ export default function InvoicePage() {
                           value={formData.do_id}
                           onSelect={(val, item) => {
                             if (!item) return
+                            // DOs without an SO cannot be invoiced — block
+                            // selection and point the user to the DO page
+                            if (!item.so) {
+                              notify.error(
+                                dict.MSG_VALIDATION_ERROR,
+                                dict.MSG_SO_REQUIRED_FOR_INVOICE
+                              )
+                              return
+                            }
                             setSelectedCompanyInfo(item.company || null)
                             const soTaxes = Array.isArray(item?.so?.tax_details)
                               ? item.so.tax_details
@@ -1503,7 +1521,22 @@ export default function InvoicePage() {
                             {
                               key: "company.name",
                               header: dict.LABEL_COMPANY_NAME,
-                              className: "w-3/5",
+                              className: "w-2/5",
+                            },
+                            {
+                              key: "so.so_number",
+                              header: dict.LABEL_SO_NUMBER,
+                              className: "w-1/5",
+                              render: (d) =>
+                                d.so?.so_number ? (
+                                  <span className="font-mono">
+                                    {d.so.so_number}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold whitespace-nowrap text-amber-600 dark:text-amber-400">
+                                    {dict.LABEL_SO_PENDING}
+                                  </span>
+                                ),
                             },
                           ]}
                           placeholder={

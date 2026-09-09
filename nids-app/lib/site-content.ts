@@ -234,6 +234,10 @@ export const SITE_CONTENT = {
     LABEL_LINK_TO_DO: "Link to DO",
     BUTTON_EDIT_INVOICE: "Edit Invoice",
     PLACEHOLDER_SELECT_DO: "Search DO number...",
+    LABEL_FILL_SO_LATER: "Fill SO later",
+    LABEL_SO_PENDING: "Pending SO",
+    MSG_SO_REQUIRED_FOR_INVOICE:
+      "This Delivery Order has no Sales Order. Fill the SO number first on the Delivery Order page.",
     BILLING_NOTE_EXCEEDS_SENT:
       "Received quantity exceeds sent quantity. Billed quantity is capped at sent quantity.",
     BILLING_NOTE_EXCEEDS_TOLERANCE:
@@ -831,6 +835,10 @@ export const SITE_CONTENT = {
     LABEL_LINK_TO_DO: "Tautkan ke DO",
     BUTTON_EDIT_INVOICE: "Edit Faktur",
     PLACEHOLDER_SELECT_DO: "Cari nomor DO...",
+    LABEL_FILL_SO_LATER: "Isi SO nanti",
+    LABEL_SO_PENDING: "SO Tertunda",
+    MSG_SO_REQUIRED_FOR_INVOICE:
+      "DO ini belum memiliki Sales Order. Isi nomor SO terlebih dahulu di halaman Delivery Order.",
     BILLING_NOTE_EXCEEDS_SENT:
       "Jumlah diterima melebihi jumlah dikirim. Jumlah ditagih dibatasi pada jumlah dikirim.",
     BILLING_NOTE_EXCEEDS_TOLERANCE:

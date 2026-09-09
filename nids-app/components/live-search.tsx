@@ -30,6 +30,7 @@ export interface SearchColumn<T> {
   header: string
   className: string // Made required to enforce explicit widths
   primary?: boolean
+  render?: (item: T) => React.ReactNode // Custom cell renderer (e.g. badges)
 }
 
 interface LiveSearchProps<T> {
@@ -49,6 +50,10 @@ interface LiveSearchProps<T> {
   defaultDisplay?: string // Initial text to show before data is fetched/available
   allowCustomValue?: boolean
   onCustomValue?: (value: string) => void
+  footerOptions?: {
+    value: string
+    label: string
+  }[] // Pinned non-data options rendered below results (e.g. "Fill later")
 }
 
 /** Resolve dot-notation path like "company.name" to nested value */
@@ -78,6 +83,7 @@ export function LiveSearch<T extends Record<string, any>>({
   defaultDisplay,
   allowCustomValue = false,
   onCustomValue,
+  footerOptions,
 }: LiveSearchProps<T>) {
   const [open, setOpen] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState("")
@@ -316,7 +322,11 @@ export function LiveSearch<T extends Record<string, any>>({
                                 : "text-muted-foreground"
                             )}
                           >
-                            {val != null ? String(val) : "-"}
+                            {col.render
+                              ? col.render(item)
+                              : val != null
+                                ? String(val)
+                                : "-"}
                           </div>
                         )
                       })
@@ -344,6 +354,21 @@ export function LiveSearch<T extends Record<string, any>>({
                   <span>Use &quot;{searchQuery}&quot;</span>
                 </CommandItem>
               )}
+
+              {footerOptions?.map((option) => (
+                <CommandItem
+                  key={`footer-${option.value}`}
+                  value={option.value}
+                  onSelect={() => {
+                    onSelect(option.value, undefined)
+                    setOpen(false)
+                    setSearchQuery("")
+                  }}
+                  className="mt-1 flex w-full cursor-pointer items-center gap-2 rounded-none border-t pt-2 text-muted-foreground"
+                >
+                  <span className="truncate">{option.label}</span>
+                </CommandItem>
+              ))}
             </CommandGroup>
           </CommandList>
         </Command>
