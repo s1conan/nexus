@@ -86,6 +86,8 @@ export interface SalesOrderData {
   id: string
   so_number: string
   so_date: string
+  po_number?: string
+  po_date?: string
   delivery_date: string
   company_name: string
   contact_person?: string
@@ -1172,35 +1174,59 @@ const SalesOrderDocument = ({
           </View>
         </View>
         <View style={a4Styles.blueLine} />
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <View style={a4Styles.row}>
-            <Text style={a4Styles.label}>No</Text>
-            <Text style={a4Styles.colon}>:</Text>
-            <Text>{data.so_number}</Text>
-          </View>
-          <View style={a4Styles.row}>
-            <Text>
-              Palembang,{" "}
-              {format(new Date(data.so_date), "dd MMMM yyyy", {
-                locale: dateLocaleId,
-              })}
-            </Text>
-          </View>
-        </View>
-        <View style={a4Styles.row}>
-          <Text style={a4Styles.label}>Perihal</Text>
-          <Text style={a4Styles.colon}>:</Text>
-          <Text>Sales Order</Text>
-        </View>
-        <View style={a4Styles.row}>
-          <Text style={a4Styles.label}></Text>
-          <Text style={a4Styles.colon}></Text>
+        <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
           <Text>
-            Pengiriman s.d.{" "}
-            {format(new Date(data.delivery_date), "dd MMMM yyyy", {
+            Palembang,{" "}
+            {format(new Date(data.so_date), "dd MMMM yyyy", {
               locale: dateLocaleId,
             })}
           </Text>
+        </View>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginTop: 8,
+          }}
+        >
+          <View style={{ width: "55%" }}>
+            <View style={a4Styles.row}>
+              <Text style={a4Styles.label}>No</Text>
+              <Text style={a4Styles.colon}>:</Text>
+              <Text>{data.so_number}</Text>
+            </View>
+            <View style={a4Styles.row}>
+              <Text style={a4Styles.label}>Perihal</Text>
+              <Text style={a4Styles.colon}>:</Text>
+              <Text>Sales Order</Text>
+            </View>
+            <View style={a4Styles.row}>
+              <Text style={a4Styles.label}></Text>
+              <Text style={a4Styles.colon}></Text>
+              <Text>
+                Pengiriman s.d.{" "}
+                {format(new Date(data.delivery_date), "dd MMMM yyyy", {
+                  locale: dateLocaleId,
+                })}
+              </Text>
+            </View>
+          </View>
+          <View style={{ alignSelf: "flex-start" }}>
+            <View style={a4Styles.row}>
+              <Text style={a4Styles.label}>PO No.</Text>
+              <Text style={a4Styles.colon}>:</Text>
+              <Text>{data.po_number || "-"}</Text>
+            </View>
+            <View style={a4Styles.row}>
+              <Text style={a4Styles.label}>PO Date</Text>
+              <Text style={a4Styles.colon}>:</Text>
+              <Text>
+                {format(new Date(data.po_date || data.so_date), "dd MMMM yyyy", {
+                  locale: dateLocaleId,
+                })}
+              </Text>
+            </View>
+          </View>
         </View>
         <View style={a4Styles.section}>
           <Text style={{ marginBottom: 5 }}>Kepada Yth.</Text>
@@ -2820,6 +2846,9 @@ export async function generateStandardSalesOrderPDF(
       id: so.id,
       so_number: so.so_number,
       so_date: so.so_date,
+      // Customer's PO reference — so_date is the renamed po_date column
+      po_number: so.po_number || undefined,
+      po_date: so.so_date || undefined,
       delivery_date: so.delivery_date,
       company_name: so.company?.name || "-",
       contact_person: so.company?.details?.contact_person || "-",
