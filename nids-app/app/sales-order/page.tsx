@@ -159,6 +159,10 @@ export default function SalesOrdersPage() {
   const [isDraggingFile, setIsDraggingFile] = useState(false)
   const [isProcessingImport, setIsProcessingImport] = useState(false)
   const [fieldFlags, setFieldFlags] = useState<Record<string, FieldFlag>>({})
+  // Set after an AI doc import: the extracted values are authoritative, so
+  // LiveSearch selections must not auto-fill anything and the quotation
+  // search is restricted to the AI-matched company
+  const [isAIImported, setIsAIImported] = useState(false)
   const dragCounter = useRef(0)
 
   // Border/background classes marking AI-suspect fields on the existing
@@ -183,6 +187,19 @@ export default function SalesOrdersPage() {
     Partial:
       "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
     Fulfilled:
+      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+  }
+
+  // Quotation status colors — mirrors app/quotations/page.tsx
+  const quotationStatusStyles: Record<string, string> = {
+    Draft:
+      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
+    Sent: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+    Accepted:
+      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
+    Rejected:
+      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+    Processed:
       "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
   }
 
@@ -234,6 +251,13 @@ export default function SalesOrdersPage() {
     if (quote) {
       setSelectedQuotationInfo(quote)
       setAvailableDiscounts(quote.discounts || [])
+
+      // AI import: the extracted values are authoritative — linking a
+      // quotation must not auto-fill or overwrite any field
+      if (isAIImported) {
+        setFormData((prev) => ({ ...prev, quotation_id: qId }))
+        return
+      }
 
       // Inherit taxes from quotation if available
       const qTaxes = Array.isArray(quote.tax_details) ? quote.tax_details : []
@@ -503,6 +527,7 @@ export default function SalesOrdersPage() {
       })
 
       setFieldFlags({}) // manual open/edit — no AI marks
+      setIsAIImported(false)
 
       setFormData({
         so_number: item.so_number,
@@ -535,6 +560,7 @@ export default function SalesOrdersPage() {
       setSelectedQuotationInfo(null)
       setAvailableDiscounts([])
       setFieldFlags({}) // manual open — no AI marks
+      setIsAIImported(false)
 
       setFormData({
         so_number: "", // Will be auto-generated on save if empty
@@ -579,6 +605,7 @@ export default function SalesOrdersPage() {
     setAiImportOpen(false)
     setEditingItem(null)
     setViewOnly(false)
+    setIsAIImported(true)
     setSelectedQuotationInfo(null)
     setAvailableDiscounts([])
     setSelectedCompanyInfo(match.company)
@@ -853,27 +880,7 @@ export default function SalesOrdersPage() {
           return
         }
 
-        // Handle Quotation Reversion if changed
-        if (
-          editingItem.quotation_id &&
-          editingItem.quotation_id !== payload.quotation_id
-        ) {
-          await supabase
-            .from("quotations")
-            .update({ status: "Accepted" })
-            .eq("id", editingItem.quotation_id)
-        }
-
-        // If a NEW quotation is being linked
-        if (
-          payload.quotation_id &&
-          editingItem.quotation_id !== payload.quotation_id
-        ) {
-          await supabase
-            .from("quotations")
-            .update({ status: "Processed" })
-            .eq("id", payload.quotation_id)
-        }
+        // Quotations are reusable: the linked quotation's status is left untouched
 
         // Check if any data fields have changed compared to original editingItem
         const hasDataChanged =
@@ -983,14 +990,6 @@ export default function SalesOrdersPage() {
         const { error } = await supabase.from("sales_orders").insert([payload])
         if (error) throw error
 
-        // If from quotation, update quotation status to Processed
-        if (payload.quotation_id) {
-          await supabase
-            .from("quotations")
-            .update({ status: "Processed" })
-            .eq("id", payload.quotation_id)
-        }
-
         const docLabel = `[${payload.so_number || formData.so_number}]`
         notify.success(
           dict.MSG_SO_SAVED.replace("%data%", docLabel),
@@ -1031,14 +1030,7 @@ export default function SalesOrdersPage() {
     const docLabel = `[${deleteConfirm.so_number}]`
     const companyName = item?.company?.name || ""
     try {
-      // Revert quotation status if linked
-      if (item?.quotation_id) {
-        await supabase
-          .from("quotations")
-          .update({ status: "Accepted" })
-          .eq("id", item.quotation_id)
-      }
-
+      // Quotations are reusable: no status revert needed on delete
       const { error } = await supabase
         .from("sales_orders")
         .delete()
@@ -1260,7 +1252,7 @@ export default function SalesOrdersPage() {
                         <div className="flex gap-2">
                           <div className="flex-1">
                             <LiveSearch
-                              key="quotation-search"
+                              key={`quotation-search-${formData.so_date}`}
                               data={
                                 selectedQuotationInfo
                                   ? [selectedQuotationInfo]
@@ -1272,7 +1264,15 @@ export default function SalesOrdersPage() {
                                   .select(
                                     "*, company:companies(id, name, nickname), product:products(id, sku, name)"
                                   )
-                                  .eq("status", "Accepted")
+                                // Only quotations still valid on the SO date
+                                if (formData.so_date) {
+                                  q = q.gte("expiry_date", formData.so_date)
+                                }
+                                // After an AI import, only offer quotations
+                                // belonging to the AI-matched company
+                                if (isAIImported && formData.company_id) {
+                                  q = q.eq("company_id", formData.company_id)
+                                }
                                 if (query) {
                                   const quotationSearch =
                                     constructMultiWordSearch(query, [
@@ -1328,7 +1328,22 @@ export default function SalesOrdersPage() {
                                 {
                                   key: "company.name",
                                   header: dict.LABEL_COMPANY_NAME,
-                                  className: "w-3/5",
+                                  className: "w-2/5",
+                                },
+                                {
+                                  key: "status",
+                                  header: dict.LABEL_STATUS,
+                                  className: "w-1/5",
+                                  render: (quote) => (
+                                    <span
+                                      className={cn(
+                                        "inline-flex w-16 items-center justify-center rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase",
+                                        quotationStatusStyles[quote.status]
+                                      )}
+                                    >
+                                      {quote.status}
+                                    </span>
+                                  ),
                                 },
                               ]}
                               placeholder={dict.PLACEHOLDER_SEARCH}
@@ -1621,7 +1636,11 @@ export default function SalesOrdersPage() {
                                   setFormData({
                                     ...formData,
                                     term_of_payment: val,
-                                    discount: disc ? disc.value : 0,
+                                    // Re-picking the current (AI-imported)
+                                    // term must keep the existing discount
+                                    discount: disc
+                                      ? disc.value
+                                      : formData.discount,
                                     delivery_address:
                                       disc?.delivery_address ||
                                       formData.delivery_address,
@@ -1646,6 +1665,21 @@ export default function SalesOrdersPage() {
                                       {d.label}
                                     </SelectItem>
                                   ))}
+                                  {/* Keep an AI-imported term visible even
+                                      when it isn't one of the quotation's
+                                      term options */}
+                                  {isAIImported &&
+                                    formData.term_of_payment &&
+                                    !availableDiscounts.some(
+                                      (d) =>
+                                        d.label === formData.term_of_payment
+                                    ) && (
+                                      <SelectItem
+                                        value={formData.term_of_payment}
+                                      >
+                                        {formData.term_of_payment}
+                                      </SelectItem>
+                                    )}
                                 </SelectContent>
                               </Select>
                             ) : (

@@ -178,6 +178,9 @@ export const SITE_CONTENT = {
 
     // Sales Order Module
     LABEL_SO_NUMBER: "SO Number",
+    LABEL_PO_NUMBER: "PO Number",
+    LABEL_PO_DATE: "PO Date",
+    PLACEHOLDER_ENTER_PO_NUMBER: "Customer PO number",
     LABEL_SO_DATE: "SO Date",
     LABEL_DELIVERY_DATE: "Delivery Date",
     LABEL_QUANTITY: "Quantity",
@@ -779,6 +782,9 @@ export const SITE_CONTENT = {
 
     // Sales Order Module
     LABEL_SO_NUMBER: "Nomor SO",
+    LABEL_PO_NUMBER: "Nomor PO",
+    LABEL_PO_DATE: "Tanggal PO",
+    PLACEHOLDER_ENTER_PO_NUMBER: "Nomor PO pelanggan",
     LABEL_SO_DATE: "Tanggal SO",
     LABEL_DELIVERY_DATE: "Tanggal Pengiriman",
     LABEL_QUANTITY: "Kuantitas",
