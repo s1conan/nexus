@@ -86,6 +86,19 @@ export default function LoginPage() {
     }
   }, [loading, user, profile, router])
 
+  // Show expiry notice when redirected back after an auto-logout
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (!params.get("expired")) return
+    params.delete("expired")
+    const query = params.toString()
+    window.history.replaceState(null, "", query ? `/?${query}` : "/")
+    toast.warning(dict.MSG_SESSION_EXPIRED, {
+      description: dict.MSG_RELOGIN,
+      duration: 8000,
+    })
+  }, [dict])
+
   const toggleLanguage = () => {
     setLanguage(lang === "en" ? "id" : "en")
   }

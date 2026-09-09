@@ -6,6 +6,9 @@ export const SITE_CONFIG = {
   numberLocale: "id-ID",
   dateFormat: "dd/MM/yyyy",
   timeFormat: "HH:mm",
+  // Auto-logout after this many minutes without activity
+  // (covers idle time, computer sleep/hibernate, and a closed browser).
+  sessionTimeoutMinutes: 30,
   assets: {
     loginImage: "/images/company-logo.jpg",
   },

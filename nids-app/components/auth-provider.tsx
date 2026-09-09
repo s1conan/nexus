@@ -13,6 +13,7 @@ import {
 import { createClient } from "@/lib/supabase"
 import { useDictionary } from "./dictionary-provider"
 import { notify } from "@/lib/notifications"
+import { useSessionExpiry } from "@/hooks/use-session-expiry"
 
 interface UserProfile {
   id: string
@@ -86,6 +87,25 @@ export function AuthProvider({
     dictRef.current = dict
   }, [dict])
 
+  // Auto-logout on inactivity / sleep / long-closed browser.
+  // Local-scope signOut: no network call, so it never hangs and still
+  // clears the persisted session cookie/storage.
+  const expireSession = useCallback(async () => {
+    isManualSignOut.current = true
+    try {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith("nids_") && key !== "nids_pref_lang") {
+          localStorage.removeItem(key)
+        }
+      })
+      await supabase.auth.signOut({ scope: "local" })
+    } finally {
+      window.location.href = "/?expired=1"
+    }
+  }, [supabase])
+
+  useSessionExpiry(!!user, expireSession)
+
   const passwordResetRequired = useMemo(() => {
     return !!(user && profile && profile.last_login === null)
   }, [user, profile])
@@ -113,6 +133,26 @@ export function AuthProvider({
 
         if (error) {
           console.error("Auth: [DEBUG] Profile fetch error:", error)
+          // postgrest-js may return { message, code } or the newer nested
+          // { error: { message, code } } shape depending on the version.
+          const flat = error as { message?: string; code?: string }
+          const nested = error as {
+            error?: { message?: string; code?: string }
+          }
+          const errorMessage = String(
+            nested?.error?.message ?? flat?.message ?? ""
+          )
+          const errorCode = String(nested?.error?.code ?? flat?.code ?? "")
+          const isStaleAuth =
+            errorCode === "401" ||
+            errorCode === "PGRST301" ||
+            /jwt expired|invalid api key/i.test(errorMessage)
+          if (isStaleAuth) {
+            console.warn(
+              "Auth: [DEBUG] Stale auth session detected, forcing re-login"
+            )
+            expireSession()
+          }
           return null
         }
 
@@ -132,7 +172,7 @@ export function AuthProvider({
         return null
       }
     },
-    [supabase]
+    [supabase, expireSession]
   )
 
   const syncProfile = useCallback(
@@ -194,7 +234,8 @@ export function AuthProvider({
               path === "/reset-password" ||
               path.startsWith("/auth/") ||
               path.startsWith("/verify/")
-            if (!isPublic) window.location.href = "/"
+            if (!isPublic && !isManualSignOut.current)
+              window.location.href = "/"
           }
         }
       } catch (e) {
