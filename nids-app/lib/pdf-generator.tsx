@@ -2256,7 +2256,7 @@ const InvoiceDocument = ({
                 </Text>
               </View>
               {row.qtySpanPrice ? (
-                <View debug
+                <View
                   style={[
                     invoiceTableStyles.cell,
                     { width: INVOICE_TABLE_COLS.qtyPrice, alignItems: "center"},
@@ -2384,10 +2384,10 @@ const InvoiceDocument = ({
               style={[
                 invoiceTableStyles.cell,
                 invoiceTableStyles.cellLast,
-                { width: INVOICE_TABLE_COLS.full, paddingVertical: 4 },
+                { width: INVOICE_TABLE_COLS.full, paddingVertical: 8 },
               ]}
             >
-              <Text style={{ fontStyle: "italic", fontSize: 12, fontWeight: "bold" }}>
+              <Text style={{ fontStyle: "italic", fontSize: 12, fontWeight: "bold", lineHeight: 1.2 }}>
                 Terbilang : # {numberToIndonesianWords(grandTotal)} Rupiah #
               </Text>
             </View>
@@ -2636,6 +2636,8 @@ export async function generateStandardInvoicePDF(
       customer_npwp: companyDetails.npwp || companyRow?.npwp || undefined,
       do_number: doInfo?.do_number,
       so_number: soInfo?.so_number,
+      // Customer PO reference lives on the linked Sales Order — read via the
+      // DO's SO join, with the invoice's direct SO join as fallback
       po_number: soInfo?.po_number || poInfo?.po_number || undefined,
       po_date: soInfo?.so_date || poInfo?.so_date,
       term_of_payment: termOfPayment,
@@ -2917,7 +2919,7 @@ export async function generateStandardDeliveryOrderPDF(
       quantity: doRecord.quantity || 0,
       delivery_address_label: deliveryAddressLabel,
       delivery_address: doRecord.delivery_address || "-",
-      po_no: doRecord.po.po_number,
+      po_no: doRecord.po?.po_number,
       po_date: doRecord.po?.so_date,
       PIC: doRecord.company?.details?.contact_person,
       PIC_phone: doRecord.company?.details?.phone,
