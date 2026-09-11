@@ -120,11 +120,33 @@ export default function LoginPage() {
     try {
       // 1. Find profile by username OR email
       console.log("Login: Searching for profile record...")
-      const { data: profileRecord, error: lookupError } = await supabase
-        .from("profiles")
-        .select("id, email, is_active, preferred_language")
-        .or(`username.eq.${input},email.eq.${input}`)
-        .maybeSingle()
+      const lookup = () =>
+        supabase
+          .from("profiles")
+          .select("id, email, is_active, preferred_language")
+          .or(`username.eq.${input},email.eq.${input}`)
+          .maybeSingle()
+
+      let { data: profileRecord, error: lookupError } = await lookup()
+
+      // supabase-js attaches the stored (possibly expired) session JWT to
+      // every request. After sleep/hibernate that token is dead and PostgREST
+      // rejects the lookup with 401 — even though we are not logged in yet.
+      // Clear the stale session and retry the lookup unauthenticated.
+      if (
+        lookupError &&
+        (lookupError.code === "401" ||
+          lookupError.code === "PGRST301" ||
+          /jwt expired|invalid api key/i.test(lookupError.message ?? ""))
+      ) {
+        console.warn(
+          "Login: Stale session token detected, clearing and retrying lookup"
+        )
+        await supabase.auth.signOut()
+        const retry = await lookup()
+        profileRecord = retry.data
+        lookupError = retry.error
+      }
 
       if (lookupError) {
         console.error("Login: Database lookup error", lookupError)
