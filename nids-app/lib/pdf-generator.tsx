@@ -149,6 +149,10 @@ export interface InvoiceData {
     branch: string
   }[]
   qr_code_url?: string
+  // When false/undefined the stamp + signature images are replaced by an
+  // empty box (name/title kept) so the document can be wet-stamped and
+  // signed manually. Read from the invoice's linked company details.
+  digital_signature?: boolean
 }
 
 export interface DeliveryOrderCompartment {
@@ -2482,8 +2486,15 @@ const InvoiceDocument = ({
         <View style={{ display: "flex", justifyContent: "space-between" }}>
           <View style={a4Styles.signature}>
             <Text>Hormat Kami,</Text>
-            <Image src={company.logo_url} style={a4Styles.stamp} />
-            <Image src="/images/ttd-indah.png" style={a4Styles.ttd} />
+            {data.digital_signature ? (
+              <>
+                <Image src={company.logo_url} style={a4Styles.stamp} />
+                <Image src="/images/ttd-indah.png" style={a4Styles.ttd} />
+              </>
+            ) : (
+              // Empty box — space reserved for a physical stamp + wet signature
+              <View style={{ height: 70 }} />
+            )}
             <Text style={{ fontWeight: "bold", marginTop: 5 }}>
               Indah Permatasari
             </Text>
@@ -2701,6 +2712,10 @@ export async function generateStandardInvoicePDF(
       delivery_taxable:
         soInfo?.delivery_taxable ?? inv.delivery_taxable ?? false,
       total_amount: inv.total_amount || 0,
+      // Digital stamp/signature is opt-in per customer company — off by
+      // default so the printed invoice leaves an empty box for wet signing
+      digital_signature:
+        (companyRow?.details?.digital_signature ?? false) === true,
       note: inv.is_note_enabled ? inv.note : "",
       is_note_enabled: true,
       bank_accounts: inv.bank_accounts || [],

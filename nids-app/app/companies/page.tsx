@@ -136,6 +136,7 @@ export default function CompaniesPage() {
     cc_emails: "",
     bcc_emails: "",
     is_active: true,
+    digital_signature: false,
   })
 
   // Permission Checks
@@ -330,6 +331,7 @@ export default function CompaniesPage() {
         cc_emails: details.cc_emails || "",
         bcc_emails: details.bcc_emails || "",
         is_active: company.is_active ?? true,
+        digital_signature: details.digital_signature ?? false,
       })
     } else {
       if (!canInsert) return
@@ -348,6 +350,7 @@ export default function CompaniesPage() {
         cc_emails: "",
         bcc_emails: "",
         is_active: true,
+        digital_signature: false,
       })
     }
     setIsOpen(true)
@@ -493,6 +496,7 @@ export default function CompaniesPage() {
         other_info: formData.other_info,
         cc_emails: formData.cc_emails,
         bcc_emails: formData.bcc_emails,
+        digital_signature: formData.digital_signature,
       },
     }
     try {
@@ -733,7 +737,25 @@ export default function CompaniesPage() {
                     </div>
                     {/* Company Contact Info */}
                     <div className="flex flex-col gap-6 rounded-lg border bg-muted/5 p-4 md:col-span-2">
-                      <Label>{dict.LABEL_COMPANY_CONTACT_INFO}</Label>
+                      <div className="flex items-center justify-between gap-3">
+                        <Label>{dict.LABEL_COMPANY_CONTACT_INFO}</Label>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={formData.digital_signature}
+                            onCheckedChange={(checked) =>
+                              setFormData({
+                                ...formData,
+                                digital_signature: checked,
+                              })
+                            }
+                            disabled={viewOnly || !canEdit}
+                          />
+                          <span className="text-[10px] font-bold uppercase text-muted-foreground">
+                            {dict.LABEL_DIGITAL_SIGNATURE ||
+                              "Digital Signature"}
+                          </span>
+                        </div>
+                      </div>
 
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div className="flex flex-col gap-2">

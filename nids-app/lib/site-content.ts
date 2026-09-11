@@ -417,6 +417,7 @@ export const SITE_CONTENT = {
     LABEL_TYPE_SUPPLIER: "Supplier",
     LABEL_TYPE_TRANSPORTER: "Transporter",
     LABEL_COMPANY_CONTACT_INFO: "Company Information",
+    LABEL_DIGITAL_SIGNATURE: "Digital Signature",
     LABEL_CC_EMAILS: "CC Emails",
     PLACEHOLDER_CC_EMAILS: "email1@example.com, email2@example.com",
     TOOLTIP_CC_EMAILS:
@@ -1044,6 +1045,7 @@ export const SITE_CONTENT = {
     LABEL_TYPE_SUPPLIER: "Supplier",
     LABEL_TYPE_TRANSPORTER: "Transporter",
     LABEL_COMPANY_CONTACT_INFO: "Informasi Perusahaan",
+    LABEL_DIGITAL_SIGNATURE: "Tanda Tangan Digital",
     LABEL_CC_EMAILS: "Email CC",
     PLACEHOLDER_CC_EMAILS: "email1@contoh.com, email2@contoh.com",
     TOOLTIP_CC_EMAILS:
