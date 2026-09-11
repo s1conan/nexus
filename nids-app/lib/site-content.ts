@@ -239,6 +239,8 @@ export const SITE_CONTENT = {
     PLACEHOLDER_SELECT_DO: "Search DO number...",
     LABEL_FILL_SO_LATER: "Fill SO later",
     LABEL_SO_PENDING: "Pending SO",
+    LABEL_SO_PENDING_HINT:
+      "This DO cannot be invoiced until its SO number is filled.",
     MSG_SO_REQUIRED_FOR_INVOICE:
       "This Delivery Order has no Sales Order. Fill the SO number first on the Delivery Order page.",
     BILLING_NOTE_EXCEEDS_SENT:
@@ -843,6 +845,8 @@ export const SITE_CONTENT = {
     PLACEHOLDER_SELECT_DO: "Cari nomor DO...",
     LABEL_FILL_SO_LATER: "Isi SO nanti",
     LABEL_SO_PENDING: "SO Tertunda",
+    LABEL_SO_PENDING_HINT:
+      "DO tidak dapat dibuatkan faktur sebelum nomor SO diisi.",
     MSG_SO_REQUIRED_FOR_INVOICE:
       "DO ini belum memiliki Sales Order. Isi nomor SO terlebih dahulu di halaman Delivery Order.",
     BILLING_NOTE_EXCEEDS_SENT:

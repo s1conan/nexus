@@ -163,6 +163,9 @@ export default function DeliveryOrdersPage() {
   const [selectedVehicleInfo, setSelectedVehicleInfo] = useState<any>(null)
   const [availableStock, setAvailableStock] = useState<number | null>(null)
   const [remainingSOQty, setRemainingSOQty] = useState<number | null>(null)
+  // True when the user explicitly chose "Fill SO later" (or is editing a DO
+  // without an SO) — used to show feedback on the SO field
+  const [fillSOLater, setFillSOLater] = useState(false)
   const sealNumberCache = useRef<Record<number, string>>({})
 
   // Numbering format from settings (for DO number label preview)
@@ -486,6 +489,7 @@ export default function DeliveryOrdersPage() {
           seal_number: c.seal_number,
         })),
       })
+      setFillSOLater(!item.so_id)
     } else {
       if (!canInsert) return
       setEditingItem(null)
@@ -497,6 +501,7 @@ export default function DeliveryOrdersPage() {
       setSelectedVehicleInfo(null)
       setAvailableStock(null)
       setRemainingSOQty(null)
+      setFillSOLater(false)
 
       setFormData({
         do_number: "", // Will be auto-generated on save if empty
@@ -1050,6 +1055,7 @@ export default function DeliveryOrdersPage() {
       setSelectedPOInfo(item)
       setSelectedCompanyInfo(item.company)
       setSelectedProductInfo(item.product)
+      setFillSOLater(false)
     } else if (val === FILL_SO_LATER_VALUE) {
       // "Fill SO later": detach the SO but keep manually entered company,
       // product, quantity and address so the DO stays valid without an SO
@@ -1058,6 +1064,7 @@ export default function DeliveryOrdersPage() {
         so_id: "",
       }))
       setSelectedPOInfo(null)
+      setFillSOLater(true)
     } else {
       // Clearing SO should also clear company since it messes with filtering
       setFormData((prev) => ({
@@ -1071,6 +1078,7 @@ export default function DeliveryOrdersPage() {
       setSelectedPOInfo(null)
       setSelectedProductInfo(null)
       setSelectedCompanyInfo(null)
+      setFillSOLater(false)
     }
   }
 
@@ -1286,7 +1294,11 @@ export default function DeliveryOrdersPage() {
                                     className: "w-1/2",
                                   },
                                 ]}
-                                placeholder={dict.PLACEHOLDER_SELECT_SO}
+                                placeholder={
+                                  fillSOLater
+                                    ? dict.LABEL_FILL_SO_LATER
+                                    : dict.PLACEHOLDER_SELECT_SO
+                                }
                                 emptyMessage={dict.NO_DATA}
                                 footerOptions={[
                                   {
@@ -1297,6 +1309,11 @@ export default function DeliveryOrdersPage() {
                               />
                             </div>
                           </div>
+                          {fillSOLater && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              {dict.LABEL_SO_PENDING_HINT}
+                            </p>
+                          )}
                         </div>
 
                         <div className="grid gap-2">
