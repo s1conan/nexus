@@ -124,6 +124,7 @@ export interface InvoiceData {
   so_number?: string
   po_number?: string
   product_name?: string
+  do_refs?: { do_number: string; quantity: number; received_quantity?: number | null }[]
   customer_address?: string
   customer_npwp?: string
   po_date?: string
@@ -2222,6 +2223,18 @@ const InvoiceDocument = ({
             </View>
           </View>
         </View>
+        {data.do_refs && data.do_refs.length > 0 && (
+          <View style={{ marginBottom: 8 }}>
+            <Text style={{ fontWeight: "bold", fontSize: 10 }}>
+              Delivery Order:
+            </Text>
+            {data.do_refs.map((r, i) => (
+              <Text key={i} style={{ fontSize: 9, marginTop: 1 }}>
+                {r.do_number} — {formatNumber(r.quantity)} L
+              </Text>
+            ))}
+          </View>
+        )}
         <View style={invoiceTableStyles.table}>
           <View style={invoiceTableStyles.row}>
             <View
@@ -2606,6 +2619,7 @@ export async function generateStandardInvoicePDF(
     0,
     Math.round(basePrice - discountAmount + quantity * deliveryPricePerLitre)
   )
+  const doRefs = Array.isArray(inv.do_refs) ? inv.do_refs : []
 
   // Customer details for the invoice header block
   const companyRow = Array.isArray(inv.company)
@@ -2657,10 +2671,11 @@ export async function generateStandardInvoicePDF(
       issue_date: inv.issue_date,
       due_date: inv.due_date,
       company_name: companyRow?.name || "-",
-      product_name: doInfo?.product?.name,
+      product_name: soInfo?.product?.name || doInfo?.product?.name,
       customer_address: inv.address || customerAddress,
       customer_npwp: companyDetails.npwp || companyRow?.npwp || undefined,
-      do_number: doInfo?.do_number,
+      do_number: doRefs[0]?.do_number || doInfo?.do_number,
+      do_refs: doRefs,
       so_number: soInfo?.so_number,
       // Customer PO reference lives on the linked Sales Order — read via the
       // DO's SO join, with the invoice's direct SO join as fallback

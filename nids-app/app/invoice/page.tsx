@@ -37,6 +37,8 @@ import {
   ArrowDownZA,
   ArrowUpDown,
   CheckCircle2,
+  Info,
+  Truck,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { SummaryCard } from "@/components/summary-card"
@@ -79,6 +81,7 @@ import {
 } from "@/components/ui/select"
 import { NumberInput } from "@/components/number-input"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
+import { Switch } from "@/components/ui/switch"
 import { usePersistedState } from "@/hooks/use-persisted-state"
 import dynamic from "next/dynamic"
 
@@ -137,15 +140,8 @@ function calculateInvoiceTotals(inv: any): {
   taxTotal: number
   grandTotal: number
 } {
-  const doInfo = Array.isArray(inv?.do) ? inv.do[0] || {} : inv?.do || {}
-  const soInfo = doInfo.so
-    ? Array.isArray(doInfo.so)
-      ? doInfo.so[0] || {}
-      : doInfo.so
-    : Array.isArray(inv?.po)
-      ? inv.po[0] || {}
-      : inv?.po || {}
-  const quantity = calculateBilledQuantity(doInfo) || inv?.quantity || 0
+  const soInfo = Array.isArray(inv?.po) ? inv.po[0] || {} : inv?.po || {}
+  const quantity = Number(inv?.quantity) || 0
   const unitPrice = soInfo?.unit_price || 0
   const deliveryPerLitre = soInfo?.delivery_price_per_litre || 0
   const discountPercent = soInfo?.discount || 0
@@ -240,16 +236,17 @@ export default function InvoicePage() {
   }
 
   // Form State
-  const [formData, setFormData] = usePersistedState("invoice_form_data_v2", {
+  const [formData, setFormData] = usePersistedState("invoice_form_data_v3", {
     invoice_number: "",
     company_id: "",
-    do_id: "",
+    do_ids: [] as string[],
     so_id: "",
     address: "",
     issue_date: INITIAL_ISSUE_DATE,
     due_date: INITIAL_DUE_DATE,
     payment_days: 14,
     subtotal: 0,
+    quantity: 0,
     status: "Draft",
     note: "",
     is_note_enabled: true,
@@ -259,7 +256,11 @@ export default function InvoicePage() {
   })
 
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
-  const [selectedDOInfo, setSelectedDOInfo] = useState<any>(null)
+  const [sourceMode, setSourceMode] = useState<"do" | "so">("do")
+  const [selectedDOs, setSelectedDOs] = useState<any[]>([])
+  const [selectedSOInfo, setSelectedSOInfo] = useState<any>(null)
+  const [soDOs, setSoDOs] = useState<any[]>([])
+  const [doSearchValue, setDoSearchValue] = useState("")
 
   const companyAddresses = useMemo(() => {
     if (!selectedCompanyInfo?.details?.addresses) return []
@@ -299,48 +300,34 @@ export default function InvoicePage() {
     return { subtotal, taxTotal, grandTotal }
   }, [formData])
 
-  const calcDetails = useMemo(() => {
-    if (!selectedDOInfo) return null
-    const qtySent = Number(selectedDOInfo.quantity) || 0
-    const qtyReceived =
-      selectedDOInfo.received_quantity !== null &&
-      selectedDOInfo.received_quantity !== undefined
-        ? Number(selectedDOInfo.received_quantity)
-        : null
+  const invoiceCalc = useMemo(() => {
+    let soInfo: any = null
+    let totalQty = 0
 
-    let qty = qtySent
-    let billingReason = ""
-
-    if (qtyReceived !== null) {
-      if (qtyReceived > qtySent) {
-        qty = qtySent
-        billingReason = "exceeds"
-      } else {
-        const shrinkageLimitPercent =
-          Number(selectedDOInfo.so?.shrinkage_tolerance) || 0
-        const allowedShrinkage = qtySent * (shrinkageLimitPercent / 100)
-        const actualShrinkage = qtySent - qtyReceived
-
-        if (actualShrinkage > allowedShrinkage) {
-          qty = qtyReceived
-          billingReason = "exceeds_tolerance"
-        } else {
-          qty = qtySent
-          billingReason = "within_tolerance"
-        }
-      }
+    if (sourceMode === "so") {
+      soInfo = selectedSOInfo
+      totalQty = Number(selectedSOInfo?.quantity) || 0
+    } else {
+      if (selectedDOs.length === 0) return null
+      soInfo = selectedDOs[0].so
+      totalQty = selectedDOs.reduce(
+        (sum: number, d: any) => sum + calculateBilledQuantity(d),
+        0
+      )
     }
-    const unitPrice = selectedDOInfo.so?.unit_price || 0
-    const basePrice = qty * unitPrice
-    const discountPercent = selectedDOInfo.so?.discount || 0
+
+    if (!soInfo) return null
+
+    const unitPrice = Number(soInfo.unit_price) || 0
+    const discountPercent = Number(soInfo.discount) || 0
+    const deliveryRate = Number(soInfo.delivery_price_per_litre) || 0
+    const deliveryTaxable = soInfo.delivery_taxable ?? false
+    const basePrice = totalQty * unitPrice
     const discountAmount = basePrice * (discountPercent / 100)
     const afterDiscount = basePrice - discountAmount
-    const deliveryRate = selectedDOInfo.so?.delivery_price_per_litre || 0
-    const deliveryTotal = qty * deliveryRate
+    const deliveryTotal = totalQty * deliveryRate
     const subtotal = Math.max(0, Math.round(afterDiscount + deliveryTotal))
-    const deliveryTaxable = selectedDOInfo.so?.delivery_taxable ?? false
 
-    // Quotation workflow: only PPN includes the delivery fee (OAT) in its base
     const appliedTaxes = (formData.tax_details || []).map((t: any) => {
       const rate = Number(t.rate) || 0
       const isPpn = String(t.name || "").toUpperCase().includes("PPN")
@@ -358,8 +345,8 @@ export default function InvoicePage() {
     const grandTotal = subtotal + taxTotal
 
     return {
-      qty,
-      billingReason,
+      soInfo,
+      totalQty,
       unitPrice,
       basePrice,
       discountPercent,
@@ -373,7 +360,7 @@ export default function InvoicePage() {
       taxTotal,
       grandTotal,
     }
-  }, [selectedDOInfo, formData.tax_details])
+  }, [sourceMode, selectedDOs, selectedSOInfo, formData.tax_details])
 
   // Fetch Stats
   const fetchStats = useCallback(async () => {
@@ -456,7 +443,7 @@ export default function InvoicePage() {
         let query = supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name, nickname, details), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, po_number, so_date, tax_details)"
+            "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))"
           )
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -573,6 +560,117 @@ export default function InvoicePage() {
     return () => observer.disconnect()
   }, [fetchData, hasMore, loading, loadingMore])
 
+  const fetchSODOs = useCallback(
+    (soId: string) => {
+      supabase
+        .from("delivery_orders")
+        .select(
+          "id, do_number, quantity, received_quantity, status, so_id"
+        )
+        .eq("so_id", soId)
+        .order("do_number", { ascending: true })
+        .then(({ data }: { data: any }) => {
+          setSoDOs(data || [])
+        })
+    },
+    [supabase]
+  )
+
+  const handleAddDO = (item: any) => {
+    if (!item) return
+    // DOs without an SO cannot be invoiced — block selection
+    if (!item.so) {
+      notify.error(dict.MSG_VALIDATION_ERROR, dict.MSG_SO_REQUIRED_FOR_INVOICE)
+      return
+    }
+    if (selectedDOs.some((d: any) => d.id === item.id)) return
+    if (selectedDOs.length > 0) {
+      const first = selectedDOs[0]
+      if ((first.company?.id || "") !== (item.company?.id || "")) {
+        notify.error(dict.MSG_VALIDATION_ERROR, dict.MSG_DO_SAME_COMPANY_REQUIRED)
+        return
+      }
+      if ((first.so?.id || first.so_id || "") !== (item.so?.id || item.so_id || "")) {
+        notify.error(dict.MSG_VALIDATION_ERROR, dict.MSG_DO_SAME_SO_REQUIRED)
+        return
+      }
+    } else {
+      // First DO locks the company + SO and seeds pricing/tax from its SO
+      const soTaxes = Array.isArray(item?.so?.tax_details)
+        ? item.so.tax_details
+        : []
+      setFormData({
+        ...formData,
+        company_id: item.company?.id || "",
+        so_id: item.so?.id || item.so_id || "",
+        issue_date: item.do_date || formData.issue_date,
+        tax_details: soTaxes,
+        delivery_taxable: item?.so?.delivery_taxable ?? false,
+        address: "",
+      })
+      setSelectedCompanyInfo(item.company || null)
+    }
+    setSelectedDOs((prev) => [...prev, item])
+    setDoSearchValue("")
+  }
+
+  const handleRemoveDO = (doId: string) => {
+    const next = selectedDOs.filter((d: any) => d.id !== doId)
+    setSelectedDOs(next)
+    if (next.length === 0) {
+      setFormData((prev) => ({
+        ...prev,
+        company_id: "",
+        so_id: "",
+        tax_details: [],
+        delivery_taxable: false,
+        address: "",
+        quantity: 0,
+        subtotal: 0,
+      }))
+      setSelectedCompanyInfo(null)
+    }
+  }
+
+  const handleSelectSO = (item: any) => {
+    if (!item) return
+    setSelectedSOInfo(item)
+    setSelectedCompanyInfo(item.company || null)
+    const soTaxes = Array.isArray(item?.tax_details) ? item.tax_details : []
+    setFormData({
+      ...formData,
+      company_id: item.company?.id || "",
+      so_id: item.id,
+      issue_date: item.so_date || formData.issue_date,
+      tax_details: soTaxes,
+      delivery_taxable: item?.delivery_taxable ?? false,
+      address: "",
+      quantity: Number(item.quantity) || 0,
+    })
+    if (item.id) fetchSODOs(item.id)
+  }
+
+  const switchSourceMode = (mode: "do" | "so") => {
+    if (viewOnly || mode === sourceMode) return
+    setSourceMode(mode)
+    setSelectedDOs([])
+    setSelectedSOInfo(null)
+    setSoDOs([])
+    setDoSearchValue("")
+    setFormData((prev) => ({
+      ...prev,
+      do_ids: [],
+      so_id: "",
+      company_id: "",
+      address: "",
+      tax_details: [],
+      delivery_taxable: false,
+      quantity: 0,
+      subtotal: 0,
+    }))
+    setSelectedCompanyInfo(null)
+  }
+
   const handleOpenDialog = (item: any = null, isViewOnly = false) => {
     const shouldBeViewOnly =
       isViewOnly ||
@@ -581,45 +679,13 @@ export default function InvoicePage() {
     if (item) {
       setEditingItem(item)
       setSelectedCompanyInfo(item.company)
+      setSelectedDOs([])
+      setSelectedSOInfo(null)
+      setSoDOs([])
 
-      // Defensively unwrap array or object structures
-      let doInfo = item.do
-      if (Array.isArray(doInfo)) {
-        doInfo = doInfo[0]
-      }
-      if (doInfo) {
-        if (Array.isArray(doInfo.so)) {
-          doInfo.so = doInfo.so[0]
-        }
-        if (Array.isArray(doInfo.product)) {
-          doInfo.product = doInfo.product[0]
-        }
-      }
-      setSelectedDOInfo(doInfo || null)
-
-      // Dynamic fetch fallback to load full DO & SO details
-      if (item.do_id) {
-        supabase
-          .from("delivery_orders")
-          .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
-          )
-          .eq("id", item.do_id)
-          .maybeSingle()
-          .then(({ data, error }: { data: any; error: any }) => {
-            if (!error && data) {
-              setSelectedDOInfo((prev: any) => {
-                if (prev && prev.id === data.id) {
-                  return data
-                }
-                return prev || data
-              })
-              if (data.company) {
-                setSelectedCompanyInfo(data.company)
-              }
-            }
-          })
-      }
+      const itemDoIds = Array.isArray(item.do_ids) ? item.do_ids : []
+      const mode: "do" | "so" = itemDoIds.length > 0 ? "do" : "so"
+      setSourceMode(mode)
 
       const savedTaxes = Array.isArray(item.tax_details) ? item.tax_details : []
       const itemBankAccounts = Array.isArray(item.bank_accounts)
@@ -632,7 +698,6 @@ export default function InvoicePage() {
         )
       )
 
-      // Calculate payment_days from existing due_date/issue_date diff
       const pdDiff = Math.round(
         (new Date(item.due_date).getTime() -
           new Date(item.issue_date).getTime()) /
@@ -642,13 +707,14 @@ export default function InvoicePage() {
       setFormData({
         invoice_number: item.invoice_number,
         company_id: item.company_id,
-        do_id: item.do_id || "",
+        do_ids: itemDoIds,
         so_id: item.so_id || "",
         address: item.address || "",
         issue_date: item.issue_date,
         due_date: item.due_date,
         payment_days: pdDiff > 0 ? pdDiff : 14,
         subtotal: item.subtotal,
+        quantity: Number(item.quantity) || 0,
         status: item.status,
         note: item.note || "",
         is_note_enabled: item.is_note_enabled ?? true,
@@ -656,16 +722,48 @@ export default function InvoicePage() {
         bank_accounts: initialSelectedBanks,
         delivery_taxable: item.delivery_taxable ?? false,
       })
+
+      if (mode === "do" && itemDoIds.length > 0) {
+        supabase
+          .from("delivery_orders")
+          .select(
+            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
+          )
+          .in("id", itemDoIds)
+          .order("do_number", { ascending: true })
+          .then(({ data }: { data: any }) => {
+            if (data && data.length > 0) {
+              setSelectedDOs(data)
+              setSelectedCompanyInfo(data[0].company || item.company)
+            }
+          })
+      } else if (item.so_id) {
+        // Preserve the invoice's stored billed quantity when re-opening
+        // (falls back to the SO quantity for legacy rows without one)
+        const soInfo = item.po
+          ? {
+              ...item.po,
+              quantity:
+                Number(item.quantity) || Number(item.po?.quantity) || 0,
+            }
+          : null
+        setSelectedSOInfo(soInfo)
+        fetchSODOs(item.so_id)
+      }
     } else {
       if (!canInsert) return
       setEditingItem(null)
       setSelectedCompanyInfo(null)
-      setSelectedDOInfo(null)
+      setSelectedDOs([])
+      setSelectedSOInfo(null)
+      setSoDOs([])
+      setSourceMode("do")
+      setDoSearchValue("")
 
       setFormData({
         invoice_number: "",
         company_id: "",
-        do_id: "",
+        do_ids: [],
         so_id: "",
         address: "",
         issue_date: format(new Date(), "yyyy-MM-dd"),
@@ -675,6 +773,7 @@ export default function InvoicePage() {
         ),
         payment_days: 14,
         subtotal: 0,
+        quantity: 0,
         status: "Draft",
         note: "",
         is_note_enabled: true,
@@ -687,11 +786,12 @@ export default function InvoicePage() {
   }
 
   const handleSave = async () => {
-    if (!formData.do_id) {
-      notify.error(
-        "Validation Error",
-        "Please select a Delivery Order before saving"
-      )
+    if (sourceMode === "do" && selectedDOs.length === 0) {
+      notify.error(dict.MSG_VALIDATION_ERROR, dict.MSG_SELECT_AT_LEAST_ONE_DO)
+      return
+    }
+    if (sourceMode === "so" && !selectedSOInfo) {
+      notify.error(dict.MSG_VALIDATION_ERROR, dict.MSG_SELECT_SO)
       return
     }
     if (!formData.address?.trim()) {
@@ -701,24 +801,36 @@ export default function InvoicePage() {
       )
       return
     }
-    // Defense-in-depth: a new invoice must reference a Sales Order via its DO
-    // (existing invoices are left editable for legacy rows without so_id)
-    if (!editingItem && !formData.so_id) {
-      notify.error(
-        dict.MSG_VALIDATION_ERROR,
-        dict.MSG_SO_REQUIRED_FOR_INVOICE
-      )
-      return
-    }
     setIsSaving(true)
     try {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { payment_days, ...cleanFormData } = formData
+      const doRefs = selectedDOs.map((d: any) => ({
+        do_id: d.id,
+        do_number: d.do_number,
+        quantity: Number(d.quantity) || 0,
+        received_quantity:
+          d.received_quantity !== null && d.received_quantity !== undefined
+            ? Number(d.received_quantity)
+            : null,
+      }))
+      const doIds = selectedDOs.map((d: any) => d.id)
+      const soId =
+        sourceMode === "so"
+          ? selectedSOInfo?.id
+          : selectedDOs[0]?.so?.id || selectedDOs[0]?.so_id || ""
+
       const payload = {
         ...cleanFormData,
-        subtotal: calcDetails ? calcDetails.subtotal : formData.subtotal,
-        tax_amount: calcDetails ? calcDetails.taxTotal : totals.taxTotal,
-        total_amount: calcDetails ? calcDetails.grandTotal : totals.grandTotal,
+        do_ids: doIds,
+        do_refs: doRefs,
+        so_id: soId,
+        quantity: invoiceCalc ? invoiceCalc.totalQty : formData.quantity,
+        subtotal: invoiceCalc ? invoiceCalc.subtotal : formData.subtotal,
+        tax_amount: invoiceCalc ? invoiceCalc.taxTotal : totals.taxTotal,
+        total_amount: invoiceCalc
+          ? invoiceCalc.grandTotal
+          : totals.grandTotal,
       }
 
       if (!editingItem && !payload.invoice_number) {
@@ -730,9 +842,19 @@ export default function InvoicePage() {
         payload.invoice_number = data
       }
 
+      const updateDOStatus = async (ids: string[], status: string) => {
+        if (ids.length > 0) {
+          await supabase
+            .from("delivery_orders")
+            .update({ status })
+            .in("id", ids)
+        }
+      }
+
       if (editingItem) {
-        const oldDoId = editingItem.do_id
-        const newDoId = payload.do_id
+        const oldDoIds = Array.isArray(editingItem.do_ids)
+          ? editingItem.do_ids
+          : []
         const newStatus = payload.status
 
         const { error } = await supabase
@@ -741,34 +863,17 @@ export default function InvoicePage() {
           .eq("id", editingItem.id)
         if (error) throw error
 
-        // Update DO statuses
-        if (oldDoId !== newDoId) {
-          if (oldDoId) {
-            await supabase
-              .from("delivery_orders")
-              .update({ status: "Delivered" })
-              .eq("id", oldDoId)
-          }
-          if (newDoId) {
-            await supabase
-              .from("delivery_orders")
-              .update({ status: "Invoiced" })
-              .eq("id", newDoId)
-          }
-        } else if (newDoId) {
-          if (newStatus === "Cancelled") {
-            await supabase
-              .from("delivery_orders")
-              .update({ status: "Delivered" })
-              .eq("id", newDoId)
-          } else if (
-            editingItem.status === "Cancelled" &&
-            newStatus !== "Cancelled"
-          ) {
-            await supabase
-              .from("delivery_orders")
-              .update({ status: "Invoiced" })
-              .eq("id", newDoId)
+        if (newStatus === "Cancelled") {
+          await updateDOStatus(oldDoIds, "Delivered")
+        } else {
+          const removedDoIds = oldDoIds.filter(
+            (id: string) => !doIds.includes(id)
+          )
+          const addedDoIds = doIds.filter((id: string) => !oldDoIds.includes(id))
+          await updateDOStatus(removedDoIds, "Delivered")
+          await updateDOStatus(addedDoIds, "Invoiced")
+          if (editingItem.status === "Cancelled") {
+            await updateDOStatus(doIds, "Invoiced")
           }
         }
 
@@ -776,7 +881,7 @@ export default function InvoicePage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name, nickname, details), do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)), po:sales_orders(id, so_number, po_number, so_date, tax_details)"
+            "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))"
           )
           .eq("id", editingItem.id)
           .single()
@@ -793,12 +898,7 @@ export default function InvoicePage() {
         const { error } = await supabase.from("invoices").insert([payload])
         if (error) throw error
 
-        if (payload.do_id) {
-          await supabase
-            .from("delivery_orders")
-            .update({ status: "Invoiced" })
-            .eq("id", payload.do_id)
-        }
+        await updateDOStatus(doIds, "Invoiced")
         fetchData(true)
       }
 
@@ -854,11 +954,12 @@ export default function InvoicePage() {
         .eq("id", deleteConfirm.id)
       if (error) throw error
 
-      if (item && item.do_id) {
+      const doIds = Array.isArray(item?.do_ids) ? item.do_ids : []
+      if (doIds.length > 0) {
         await supabase
           .from("delivery_orders")
           .update({ status: "Delivered" })
-          .eq("id", item.do_id)
+          .in("id", doIds)
       }
 
       setInvoices((prev) => prev.filter((i) => i.id !== deleteConfirm.id))
@@ -895,17 +996,18 @@ export default function InvoicePage() {
         .eq("id", id)
       if (error) throw error
 
-      if (item.do_id) {
+      const doIds = Array.isArray(item?.do_ids) ? item.do_ids : []
+      if (doIds.length > 0) {
         if (status === "Cancelled" && oldStatus !== "Cancelled") {
           await supabase
             .from("delivery_orders")
             .update({ status: "Delivered" })
-            .eq("id", item.do_id)
+            .in("id", doIds)
         } else if (oldStatus === "Cancelled" && status !== "Cancelled") {
           await supabase
             .from("delivery_orders")
             .update({ status: "Invoiced" })
-            .eq("id", item.do_id)
+            .in("id", doIds)
         }
       }
 
@@ -1103,8 +1205,10 @@ export default function InvoicePage() {
             year: "numeric",
           })
         : "-"
-      const doNumber = inv.do?.do_number || "-"
-      const soNumber = inv.do?.so?.so_number || inv.po?.so_number || "-"
+      const doRefs = Array.isArray(inv.do_refs) ? inv.do_refs : []
+      const doNumber =
+        doRefs.map((r: any) => r.do_number).join(", ") || "-"
+      const soNumber = inv.po?.so_number || "-"
       const totalAmount = inv.total_amount || 0
 
       const emailHtml = `<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff;">
@@ -1197,7 +1301,9 @@ export default function InvoicePage() {
         const searchFields = [
           inv.invoice_number,
           inv.company?.name || "",
-          inv.do?.do_number || "",
+          (Array.isArray(inv.do_refs)
+            ? inv.do_refs.map((r: any) => r.do_number).join(", ")
+            : "") || "",
           inv.po?.so_number || "",
         ]
         return searchFields.some((field) => {
@@ -1283,29 +1389,21 @@ export default function InvoicePage() {
       selectedCompanyInfo?.contact_person ||
       selectedCompanyInfo?.details?.contact_person ||
       "",
-    product_name:
-      selectedDOInfo?.product?.name ||
-      (selectedDOInfo?.product?.sku
-        ? `${selectedDOInfo.product.sku} - ${selectedDOInfo.product.name}`
-        : ""),
-    do_number: selectedDOInfo?.do_number || "",
-    shipment_date: selectedDOInfo?.shipment_date
-      ? format(new Date(selectedDOInfo.shipment_date), "dd MMMM yyyy")
-      : "",
-    delivered_date: selectedDOInfo?.delivered_date
-      ? format(new Date(selectedDOInfo.delivered_date), "dd MMMM yyyy")
-      : "",
-    quantity: selectedDOInfo?.quantity
-      ? new Intl.NumberFormat().format(selectedDOInfo.quantity)
-      : "0",
-    price: selectedDOInfo?.so?.unit_price
-      ? new Intl.NumberFormat().format(selectedDOInfo.so.unit_price)
-      : "0",
+    product_name: invoiceCalc?.soInfo?.product?.name || "",
+    do_number: selectedDOs.map((d: any) => d.do_number).join(", "),
+    shipment_date: "",
+    delivered_date: "",
+    quantity: new Intl.NumberFormat().format(
+      invoiceCalc ? invoiceCalc.totalQty : formData.quantity
+    ),
+    price: new Intl.NumberFormat().format(
+      invoiceCalc ? invoiceCalc.unitPrice : 0
+    ),
     subtotal: new Intl.NumberFormat().format(
-      calcDetails ? calcDetails.subtotal : totals.subtotal
+      invoiceCalc ? invoiceCalc.subtotal : totals.subtotal
     ),
     grand_total: new Intl.NumberFormat().format(
-      calcDetails ? calcDetails.grandTotal : totals.grandTotal
+      invoiceCalc ? invoiceCalc.grandTotal : totals.grandTotal
     ),
     bank_accounts: formData.bank_accounts.map((b: any) => b.name).join(", "),
   }
@@ -1403,149 +1501,273 @@ export default function InvoicePage() {
                           placeholder={dict.LABEL_AUTO_GENERATED}
                         />
                       </div>
-                      {/* DO LiveSearch — Mandatory */}
+                      {/* Invoice Source — DO / SO mode switch */}
                       <div className="grid gap-2">
-                        <Label className="flex items-center gap-1.5">
-                          {dict.LABEL_DO_NUMBER || "Delivery Order"}
+                        <Label>{dict.LABEL_INVOICE_SOURCE || "Invoice Source"}</Label>
+                        <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/10 p-3">
                           <span
-                            className="text-xs font-bold text-destructive"
-                            title="Required"
+                            className={cn(
+                              "text-sm font-medium",
+                              sourceMode !== "do" && "text-muted-foreground"
+                            )}
                           >
-                            *
+                            {dict.LABEL_SOURCE_BY_DO || "By Delivery Order"}
                           </span>
-                        </Label>
-                        <LiveSearch
-                          data={selectedDOInfo ? [selectedDOInfo] : []}
-                          fetchData={async (query) => {
-                            try {
-                              let q = supabase
-                                .from("delivery_orders")
-                                .select(
-                                  "*, company:companies!delivery_orders_company_id_fkey!inner(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
-                                )
-                                .in("status", ["Shipped", "Delivered"])
-                                .limit(8)
-                              if (query) {
-                                const doSearch = constructMultiWordSearch(
-                                  query,
-                                  ["do_number"]
-                                )
-                                const companySearch = constructMultiWordSearch(
-                                  query,
-                                  ["name"]
-                                )
-                                const { data: companies } = companySearch
-                                  ? await supabase
-                                      .from("companies")
-                                      .select("id")
-                                      .or(companySearch)
-                                  : { data: [] }
-                                const companyIds = (companies || []).map(
-                                  (c: any) => c.id
-                                )
-                                const orConditions: string[] = []
-                                if (doSearch) orConditions.push(doSearch)
-                                if (companyIds.length > 0)
-                                  orConditions.push(
-                                    `company_id.in.(${companyIds.join(",")})`
-                                  )
-                                if (orConditions.length > 0)
-                                  q = q.or(orConditions.join(","))
+                          <div className="flex flex-col items-center gap-0.5">
+                            <Switch
+                              checked={sourceMode === "so"}
+                              onCheckedChange={(checked) =>
+                                switchSourceMode(checked ? "so" : "do")
                               }
-                              const { data } = await q
-                              return data || []
-                            } catch {
-                              return []
-                            }
-                          }}
-                          value={formData.do_id}
-                          onSelect={(val, item) => {
-                            if (!item) return
-                            // DOs without an SO cannot be invoiced — block
-                            // selection and point the user to the DO page
-                            if (!item.so) {
-                              notify.error(
-                                dict.MSG_VALIDATION_ERROR,
-                                dict.MSG_SO_REQUIRED_FOR_INVOICE
-                              )
-                              return
-                            }
-                            setSelectedCompanyInfo(item.company || null)
-                            const soTaxes = Array.isArray(item?.so?.tax_details)
-                              ? item.so.tax_details
-                              : []
-                            const qty = calculateBilledQuantity(item)
-                            const uPrice = item?.so?.unit_price || 0
-                            const dPrice =
-                              item?.so?.delivery_price_per_litre || 0
-                            const discountPercent = item?.so?.discount || 0
-                            const baseTotal = qty * uPrice
-                            const discountAmount =
-                              baseTotal * (discountPercent / 100)
-                            const afterDiscount = baseTotal - discountAmount
-                            const calcSubtotal = Math.max(
-                              0,
-                              Math.round(afterDiscount + qty * dPrice)
-                            )
+                              disabled={viewOnly}
+                            />
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">
+                              {sourceMode === "so" ? "SO" : "DO"}
+                            </span>
+                          </div>
+                          <span
+                            className={cn(
+                              "text-sm font-medium",
+                              sourceMode !== "so" && "text-muted-foreground"
+                            )}
+                          >
+                            {dict.LABEL_SOURCE_BY_SO || "By Sales Order"}
+                          </span>
+                        </div>
+                      </div>
 
-                            setFormData({
-                              ...formData,
-                              company_id: item.company?.id || "",
-                              do_id: val,
-                              so_id: item.so?.id || item.so_id || "",
-                              issue_date: item.do_date || formData.issue_date,
-                              subtotal: calcSubtotal,
-                              tax_details: soTaxes,
-                              delivery_taxable: item?.so?.delivery_taxable ?? false,
-                              address: "",
-                            })
-                            setSelectedDOInfo(item)
-                          }}
-                          keyField="id"
-                          displayField={(d: any) =>
-                            `${d.do_number} - ${d.company?.name || ""}`
-                          }
-                          defaultDisplay={
-                            selectedDOInfo
-                              ? `${selectedDOInfo.do_number} - ${selectedDOInfo.company?.name || selectedCompanyInfo?.name || ""}`
-                              : ""
-                          }
-                          searchColumns={["do_number", "company.name"]}
-                          visualColumns={[
-                            {
-                              key: "do_number",
-                              header: dict.LABEL_DO_NUMBER,
-                              className: "w-2/5",
-                              primary: true,
-                            },
-                            {
-                              key: "company.name",
-                              header: dict.LABEL_COMPANY_NAME,
-                              className: "w-2/5",
-                            },
-                            {
-                              key: "so.so_number",
-                              header: dict.LABEL_SO_NUMBER,
-                              className: "w-1/5",
-                              render: (d) =>
-                                d.so?.so_number ? (
+                      {/* DO mode — multi-select picker */}
+                      {sourceMode === "do" && (
+                        <div className="grid gap-2">
+                          <Label className="flex items-center gap-1.5">
+                            {dict.LABEL_DO_NUMBER || "Delivery Order"}
+                            <span
+                              className="text-xs font-bold text-destructive"
+                              title="Required"
+                            >
+                              *
+                            </span>
+                          </Label>
+                          <LiveSearch
+                            data={[]}
+                            fetchData={async (query) => {
+                              try {
+                                let q = supabase
+                                  .from("delivery_orders")
+                                  .select(
+                                    "*, company:companies!delivery_orders_company_id_fkey!inner(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
+                                  )
+                                  .in("status", ["Shipped", "Delivered"])
+                                  .limit(8)
+                                if (query) {
+                                  const doSearch = constructMultiWordSearch(
+                                    query,
+                                    ["do_number"]
+                                  )
+                                  const companySearch = constructMultiWordSearch(
+                                    query,
+                                    ["name"]
+                                  )
+                                  const { data: companies } = companySearch
+                                    ? await supabase
+                                        .from("companies")
+                                        .select("id")
+                                        .or(companySearch)
+                                    : { data: [] }
+                                  const companyIds = (companies || []).map(
+                                    (c: any) => c.id
+                                  )
+                                  const orConditions: string[] = []
+                                  if (doSearch) orConditions.push(doSearch)
+                                  if (companyIds.length > 0)
+                                    orConditions.push(
+                                      `company_id.in.(${companyIds.join(",")})`
+                                    )
+                                  if (orConditions.length > 0)
+                                    q = q.or(orConditions.join(","))
+                                }
+                                const { data } = await q
+                                return data || []
+                              } catch {
+                                return []
+                              }
+                            }}
+                            value={doSearchValue}
+                            onSelect={(_val, item) => handleAddDO(item)}
+                            keyField="id"
+                            displayField={(d: any) =>
+                              `${d.do_number} - ${d.company?.name || ""}`
+                            }
+                            defaultDisplay=""
+                            searchColumns={["do_number", "company.name"]}
+                            visualColumns={[
+                              {
+                                key: "do_number",
+                                header: dict.LABEL_DO_NUMBER,
+                                className: "w-2/5",
+                                primary: true,
+                              },
+                              {
+                                key: "company.name",
+                                header: dict.LABEL_COMPANY_NAME,
+                                className: "w-2/5",
+                              },
+                              {
+                                key: "so.so_number",
+                                header: dict.LABEL_SO_NUMBER,
+                                className: "w-1/5",
+                                render: (d) =>
+                                  d.so?.so_number ? (
+                                    <span className="font-mono">
+                                      {d.so.so_number}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold whitespace-nowrap text-amber-600 dark:text-amber-400">
+                                      {dict.LABEL_SO_PENDING}
+                                    </span>
+                                  ),
+                              },
+                            ]}
+                            placeholder={
+                              dict.LABEL_ADD_DO || "Add DO..."
+                            }
+                            emptyMessage={dict.NO_DATA}
+                            disabled={viewOnly}
+                          />
+                          {selectedDOs.length > 0 && (
+                            <div className="space-y-1.5">
+                              {selectedDOs.map((d: any) => (
+                                <div
+                                  key={d.id}
+                                  className="flex items-center justify-between rounded border bg-background px-3 py-2 text-sm"
+                                >
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <Truck className="size-4 shrink-0 text-muted-foreground" />
+                                    <span className="truncate font-mono font-medium">
+                                      {d.do_number}
+                                    </span>
+                                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                                      {Number(d.quantity || 0).toLocaleString()}{" "}
+                                      L
+                                    </span>
+                                  </div>
+                                  {!viewOnly && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-6 shrink-0 text-destructive"
+                                      onClick={() => handleRemoveDO(d.id)}
+                                    >
+                                      <X className="size-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SO mode — direct Sales Order picker */}
+                      {sourceMode === "so" && (
+                        <div className="grid gap-2">
+                          <Label className="flex items-center gap-1.5">
+                            {dict.LABEL_SO_REQUIRED || "Sales Order"}
+                            <span
+                              className="text-xs font-bold text-destructive"
+                              title="Required"
+                            >
+                              *
+                            </span>
+                          </Label>
+                          <LiveSearch
+                            data={selectedSOInfo ? [selectedSOInfo] : []}
+                            fetchData={async (query) => {
+                              try {
+                                let q = supabase
+                                  .from("sales_orders")
+                                  .select(
+                                    "*, company:companies(id, name, nickname, details), product:products(id, name, sku)"
+                                  )
+                                  .in("status", ["Approved", "Sent"])
+                                  .limit(8)
+                                if (query) {
+                                  const soSearch = constructMultiWordSearch(
+                                    query,
+                                    ["so_number"]
+                                  )
+                                  const companySearch = constructMultiWordSearch(
+                                    query,
+                                    ["name"]
+                                  )
+                                  const { data: companies } = companySearch
+                                    ? await supabase
+                                        .from("companies")
+                                        .select("id")
+                                        .or(companySearch)
+                                    : { data: [] }
+                                  const companyIds = (companies || []).map(
+                                    (c: any) => c.id
+                                  )
+                                  const orConditions: string[] = []
+                                  if (soSearch) orConditions.push(soSearch)
+                                  if (companyIds.length > 0)
+                                    orConditions.push(
+                                      `company_id.in.(${companyIds.join(",")})`
+                                    )
+                                  if (orConditions.length > 0)
+                                    q = q.or(orConditions.join(","))
+                                }
+                                const { data } = await q
+                                return data || []
+                              } catch {
+                                return []
+                              }
+                            }}
+                            value={selectedSOInfo?.id || ""}
+                            onSelect={(_val, item) => handleSelectSO(item)}
+                            keyField="id"
+                            displayField={(s: any) =>
+                              `${s.so_number} - ${s.company?.name || ""}`
+                            }
+                            defaultDisplay={
+                              selectedSOInfo
+                                ? `${selectedSOInfo.so_number} - ${selectedSOInfo.company?.name || selectedCompanyInfo?.name || ""}`
+                                : ""
+                            }
+                            searchColumns={["so_number", "company.name"]}
+                            visualColumns={[
+                              {
+                                key: "so_number",
+                                header: dict.LABEL_SO_NUMBER,
+                                className: "w-2/5",
+                                primary: true,
+                              },
+                              {
+                                key: "company.name",
+                                header: dict.LABEL_COMPANY_NAME,
+                                className: "w-2/5",
+                              },
+                              {
+                                key: "quantity",
+                                header: dict.LABEL_QUANTITY,
+                                className: "w-1/5",
+                                render: (s) => (
                                   <span className="font-mono">
-                                    {d.so.so_number}
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold whitespace-nowrap text-amber-600 dark:text-amber-400">
-                                    {dict.LABEL_SO_PENDING}
+                                    {Number(s.quantity || 0).toLocaleString()} L
                                   </span>
                                 ),
-                            },
-                          ]}
-                          placeholder={
-                            dict.PLACEHOLDER_SELECT_DO || "Search DO number..."
-                          }
-                          emptyMessage={dict.NO_DATA}
-                          disabled={viewOnly}
-                        />
-                      </div>
+                              },
+                            ]}
+                            placeholder={
+                              dict.PLACEHOLDER_SELECT_SO_INVOICE ||
+                              "Search SO number..."
+                            }
+                            emptyMessage={dict.NO_DATA}
+                            disabled={viewOnly}
+                          />
+                        </div>
+                      )}
 
                       {/* Customer Address — required */}
                       <div className="grid gap-2">
@@ -1648,146 +1870,123 @@ export default function InvoicePage() {
                         </div>
                       </div>
 
-                      {/* Grouped DO Data Card — visible after DO selected */}
-                      {selectedDOInfo && calcDetails && (
+                      {/* Invoice Summary Panel — visible after DO(s)/SO selected */}
+                      {invoiceCalc && (
                         <div className="overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm">
-                          {/* Header banner showing DO and SO link */}
+                          {/* Header banner showing summary + SO link */}
                           <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-3">
                             <div className="flex items-center gap-2 text-xs font-semibold text-primary md:text-sm">
-                              <Receipt className="size-4" />
+                              <Info className="size-4" />
                               <span>
-                                {dict.MENU_DELIVERY_ORDER || "Delivery Order"}:{" "}
-                                {selectedDOInfo.do_number}
+                                {dict.LABEL_REVIEW_SUMMARY ||
+                                  "Review Summary"}
                               </span>
                             </div>
                             <div className="text-xs font-medium text-muted-foreground md:text-sm">
                               {dict.MENU_SALES_ORDER || "Sales Order"}:{" "}
                               <span className="font-mono font-semibold">
-                                {selectedDOInfo.so?.so_number || "-"}
+                                {invoiceCalc.soInfo?.so_number || "-"}
                               </span>
                             </div>
                           </div>
 
                           <div className="space-y-4 p-4 text-sm">
-                            {/* Grid for DO & SO Details */}
-                            <div className="grid grid-cols-1 gap-4 border-b pb-4 sm:grid-cols-2">
-                              {/* DO Logistics Column */}
-                              <div className="space-y-2.5">
+                            {/* DO List — DO mode */}
+                            {sourceMode === "do" &&
+                              selectedDOs.length > 0 && (
+                                <div className="space-y-1.5 border-b pb-3">
+                                  <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
+                                    {dict.LABEL_DO_LIST || "DO List"}
+                                  </div>
+                                  {selectedDOs.map((d: any) => (
+                                    <div
+                                      key={d.id}
+                                      className="flex items-center justify-between text-xs md:text-sm"
+                                    >
+                                      <span className="font-mono">
+                                        {d.do_number}
+                                      </span>
+                                      <span className="font-mono">
+                                        {Number(
+                                          calculateBilledQuantity(d)
+                                        ).toLocaleString()}{" "}
+                                        L
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                            {/* Delivery Progress — SO mode */}
+                            {sourceMode === "so" && (
+                              <div className="space-y-1.5 border-b pb-3">
                                 <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
-                                  {dict.LABEL_DELIVERY_DETAILS ||
-                                    "Delivery Details"}
+                                  {dict.LABEL_DELIVERY_PROGRESS ||
+                                    "Delivery Progress"}
                                 </div>
-                                <div className="grid grid-cols-2 gap-y-2 text-xs md:text-sm">
-                                  <div className="text-muted-foreground">
-                                    {dict.LABEL_PRODUCT || "Product"}:
+                                {soDOs.length === 0 ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    {dict.NO_DATA}
                                   </div>
-                                  <div
-                                    className="truncate font-medium"
-                                    title={selectedDOInfo.product?.name}
-                                  >
-                                    {selectedDOInfo.product?.name || "-"}
-                                  </div>
-
-                                  <div className="text-muted-foreground">
-                                    {dict.LABEL_DO_DATE || "DO Date"}:
-                                  </div>
-                                  <div>
-                                    {selectedDOInfo.do_date
-                                      ? format(
-                                          new Date(selectedDOInfo.do_date),
-                                          "dd MMM yyyy"
-                                        )
-                                      : "-"}
-                                  </div>
-
-                                  <div className="text-muted-foreground">
-                                    {dict.LABEL_QTY_SHIPPED || "Qty Shipped"}:
-                                  </div>
-                                  <div className="font-mono">
-                                    {Number(
-                                      selectedDOInfo.quantity || 0
-                                    ).toLocaleString()}{" "}
-                                    L
-                                  </div>
-
-                                  <div className="text-muted-foreground">
-                                    {dict.LABEL_QTY_RECEIVED || "Qty Received"}:
-                                  </div>
-                                  <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                    {selectedDOInfo.received_quantity != null
-                                      ? `${Number(selectedDOInfo.received_quantity).toLocaleString()} L`
-                                      : "-"}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* SO Pricing Column */}
-                              <div className="space-y-2.5 sm:border-l sm:pl-4">
-                                <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
-                                  {dict.LABEL_SO_INFORMATION ||
-                                    "SO Information"}
-                                </div>
-                                <div className="grid grid-cols-2 gap-y-2 text-xs md:text-sm">
-                                  <div className="text-muted-foreground">
-                                    {dict.LABEL_UNIT_PRICE || "Unit Price"}:
-                                  </div>
-                                  <div className="font-mono">
-                                    {SITE_CONFIG.currencySymbol}{" "}
-                                    {Number(
-                                      selectedDOInfo.so?.unit_price || 0
-                                    ).toLocaleString()}
-                                  </div>
-
-                                  <div className="text-muted-foreground">
-                                    {dict.LABEL_PRICE_DISCOUNT ||
-                                      "Price Discount"}
-                                    :
-                                  </div>
-                                  <div className="font-mono">
-                                    {Number(
-                                      selectedDOInfo.so?.discount || 0
-                                    ).toLocaleString()}
-                                    %
-                                  </div>
-
-                                  <div className="text-muted-foreground">
-                                    {dict.LABEL_DELIVERY_FEE || "Delivery Fee"}:
-                                  </div>
-                                  <div className="font-mono">
-                                    {SITE_CONFIG.currencySymbol}{" "}
-                                    {Number(
-                                      selectedDOInfo.so
-                                        ?.delivery_price_per_litre || 0
-                                    ).toLocaleString()}{" "}
-                                    / L
-                                  </div>
-
-                                  <div className="text-muted-foreground">
-                                    {dict.LABEL_SHRINKAGE_TOLERANCE ||
-                                      "Shrinkage Tolerance"}
-                                    :
-                                  </div>
-                                  <div className="font-mono">
-                                    {Number(
-                                      selectedDOInfo.so?.shrinkage_tolerance ||
+                                ) : (
+                                  <>
+                                    {soDOs.map((d: any) => (
+                                      <div
+                                        key={d.id}
+                                        className="flex items-center justify-between text-xs md:text-sm"
+                                      >
+                                        <span className="font-mono">
+                                          {d.do_number}
+                                        </span>
+                                        <span className="flex items-center gap-2">
+                                          <span className="font-mono">
+                                            {Number(
+                                              d.quantity || 0
+                                            ).toLocaleString()}{" "}
+                                            L
+                                          </span>
+                                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                                            {d.status}
+                                          </span>
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {(() => {
+                                      const receivedTotal = soDOs.reduce(
+                                        (sum: number, d: any) =>
+                                          sum +
+                                          (d.received_quantity != null
+                                            ? Number(d.received_quantity)
+                                            : 0),
                                         0
-                                    ).toLocaleString()}
-                                    %
-                                  </div>
-
-                                  <div className="text-muted-foreground">
-                                    {dict.LABEL_SHRINKAGE_IN_PRICE ||
-                                      "In Price"}
-                                    :
-                                  </div>
-                                  <div className="font-mono">
-                                    {selectedDOInfo.so?.shrinkage_in_price
-                                      ? "Yes"
-                                      : "No"}
-                                  </div>
-                                </div>
+                                      )
+                                      const soQty =
+                                        Number(invoiceCalc.soInfo?.quantity) ||
+                                        0
+                                      if (
+                                        soQty <= 0 ||
+                                        receivedTotal >= soQty
+                                      )
+                                        return null
+                                      return (
+                                        <div className="flex items-start gap-2 rounded border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                                          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                                          <span>
+                                            {dict.MSG_INCOMPLETE_DELIVERY.replace(
+                                              "%delivered%",
+                                              receivedTotal.toLocaleString()
+                                            ).replace(
+                                              "%total%",
+                                              soQty.toLocaleString()
+                                            )}
+                                          </span>
+                                        </div>
+                                      )
+                                    })()}
+                                  </>
+                                )}
                               </div>
-                            </div>
+                            )}
 
                             {/* Calculation Section */}
                             <div className="space-y-2.5">
@@ -1795,18 +1994,6 @@ export default function InvoicePage() {
                                 {dict.LABEL_CALCULATION_DETAILS ||
                                   "Calculation Details"}
                               </div>
-                              {calcDetails.billingReason && (
-                                <div className="rounded border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground md:text-xs">
-                                  {calcDetails.billingReason === "exceeds" &&
-                                    dict.BILLING_NOTE_EXCEEDS_SENT}
-                                  {calcDetails.billingReason ===
-                                    "exceeds_tolerance" &&
-                                    dict.BILLING_NOTE_EXCEEDS_TOLERANCE}
-                                  {calcDetails.billingReason ===
-                                    "within_tolerance" &&
-                                    dict.BILLING_NOTE_WITHIN_TOLERANCE}
-                                </div>
-                              )}
                               <div className="space-y-2">
                                 {/* Base Price */}
                                 <div className="flex items-center justify-between text-xs md:text-sm">
@@ -1815,23 +2002,25 @@ export default function InvoicePage() {
                                       {dict.LABEL_BASE_PRICE || "Base Price"}
                                     </span>
                                     <span className="text-[10px] text-muted-foreground md:text-xs">
-                                      {Number(calcDetails.qty).toLocaleString()}{" "}
+                                      {Number(
+                                        invoiceCalc.totalQty
+                                      ).toLocaleString()}{" "}
                                       L × {SITE_CONFIG.currencySymbol}{" "}
                                       {Number(
-                                        calcDetails.unitPrice
+                                        invoiceCalc.unitPrice
                                       ).toLocaleString()}
                                     </span>
                                   </div>
                                   <span className="font-mono font-medium">
                                     {SITE_CONFIG.currencySymbol}{" "}
                                     {Math.round(
-                                      calcDetails.basePrice
+                                      invoiceCalc.basePrice
                                     ).toLocaleString()}
                                   </span>
                                 </div>
 
                                 {/* Discount */}
-                                {calcDetails.discountAmount > 0 && (
+                                {invoiceCalc.discountAmount > 0 && (
                                   <div className="flex items-center justify-between text-xs md:text-sm">
                                     <div className="flex flex-col">
                                       <span className="font-medium text-red-600 dark:text-red-400">
@@ -1839,20 +2028,20 @@ export default function InvoicePage() {
                                           "Price Discount"}
                                       </span>
                                       <span className="text-[10px] text-muted-foreground md:text-xs">
-                                        {calcDetails.discountPercent}%
+                                        {invoiceCalc.discountPercent}%
                                       </span>
                                     </div>
                                     <span className="font-mono font-medium text-red-600 dark:text-red-400">
                                       - {SITE_CONFIG.currencySymbol}{" "}
                                       {Math.round(
-                                        calcDetails.discountAmount
+                                        invoiceCalc.discountAmount
                                       ).toLocaleString()}
                                     </span>
                                   </div>
                                 )}
 
                                 {/* Delivery Fee */}
-                                {calcDetails.deliveryTotal > 0 && (
+                                {invoiceCalc.deliveryTotal > 0 && (
                                   <div className="flex items-center justify-between text-xs md:text-sm">
                                     <div className="flex flex-col">
                                       <span className="font-medium text-emerald-600 dark:text-emerald-400">
@@ -1861,11 +2050,11 @@ export default function InvoicePage() {
                                       </span>
                                       <span className="text-[10px] text-muted-foreground md:text-xs">
                                         {Number(
-                                          calcDetails.qty
+                                          invoiceCalc.totalQty
                                         ).toLocaleString()}{" "}
                                         L × {SITE_CONFIG.currencySymbol}{" "}
                                         {Number(
-                                          calcDetails.deliveryRate
+                                          invoiceCalc.deliveryRate
                                         ).toLocaleString()}
                                         /L
                                       </span>
@@ -1873,7 +2062,7 @@ export default function InvoicePage() {
                                     <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400">
                                       + {SITE_CONFIG.currencySymbol}{" "}
                                       {Math.round(
-                                        calcDetails.deliveryTotal
+                                        invoiceCalc.deliveryTotal
                                       ).toLocaleString()}
                                     </span>
                                   </div>
@@ -1887,13 +2076,13 @@ export default function InvoicePage() {
                                   <span className="font-mono">
                                     {SITE_CONFIG.currencySymbol}{" "}
                                     {Math.round(
-                                      calcDetails.subtotal
+                                      invoiceCalc.subtotal
                                     ).toLocaleString()}
                                   </span>
                                 </div>
 
                                 {/* Taxes */}
-                                {calcDetails.appliedTaxes.map(
+                                {invoiceCalc.appliedTaxes.map(
                                   (tax: any, idx: number) => {
                                     if (!tax.enabled) return null
                                     return (
@@ -1923,7 +2112,7 @@ export default function InvoicePage() {
                                   <span className="font-mono text-base text-primary md:text-lg">
                                     {SITE_CONFIG.currencySymbol}{" "}
                                     {Math.round(
-                                      calcDetails.grandTotal
+                                      invoiceCalc.grandTotal
                                     ).toLocaleString()}
                                   </span>
                                 </div>
@@ -2204,22 +2393,22 @@ export default function InvoicePage() {
                       <div className="font-mono text-sm font-bold">
                         {i.invoice_number}
                       </div>
-                      {i.do && (
-                        <div className="font-mono text-[11px] text-muted-foreground">
-                          DO: {i.do.do_number}
+                      {Array.isArray(i.do_refs) && i.do_refs.length > 0 && (
+                        <div className="max-w-[220px] truncate font-mono text-[11px] text-muted-foreground" title={i.do_refs.map((r: any) => r.do_number).join(", ")}>
+                          DO: {i.do_refs.map((r: any) => r.do_number).join(", ")}
                         </div>
                       )}
                     </TableCell>
                     <TableCell>
                       <div>{i.company?.name || "-"}</div>
-                      {i.do?.product && (
+                      {i.po?.product && (
                         <div
                           className="max-w-[220px] truncate text-[11px] text-muted-foreground"
-                          title={i.do.product.name}
+                          title={i.po.product.name}
                         >
-                          {i.do.product.sku
-                            ? `${i.do.product.sku} - ${i.do.product.name}`
-                            : i.do.product.name}
+                          {i.po.product.sku
+                            ? `${i.po.product.sku} - ${i.po.product.name}`
+                            : i.po.product.name}
                         </div>
                       )}
                     </TableCell>
@@ -2232,14 +2421,6 @@ export default function InvoicePage() {
                         {dict.LABEL_DUE_DATE?.split(" ")[0] || "Due"}:{" "}
                         {format(new Date(i.due_date), "dd MMM yyyy")}
                       </div>
-                      {i.do && (
-                        <div className="mt-0.5 border-t pt-0.5 text-[10px] text-muted-foreground">
-                          Sent:{" "}
-                          {format(new Date(i.do.shipment_date), "dd MMM yyyy")}
-                          {i.do.delivered_date &&
-                            ` | Deliv: ${format(new Date(i.do.delivered_date), "dd MMM yyyy")}`}
-                        </div>
-                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="font-mono font-bold">
@@ -2251,11 +2432,9 @@ export default function InvoicePage() {
                         {SITE_CONFIG.currencySymbol}{" "}
                         {Number(i.paid_amount).toLocaleString()}
                       </div>
-                      {i.do && (
-                        <div className="font-mono text-[11px] text-muted-foreground">
-                          Qty: {Number(i.do.quantity || 0).toLocaleString()} L
-                        </div>
-                      )}
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        Qty: {Number(i.quantity || 0).toLocaleString()} L
+                      </div>
                     </TableCell>
                     <TableCell className="text-center align-middle">
                       <span

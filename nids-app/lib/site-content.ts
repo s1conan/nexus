@@ -326,6 +326,27 @@ export const SITE_CONTENT = {
     LABEL_SORT: "Sort",
     LABEL_APPLY: "Apply",
 
+    // Invoice Module (multi-DO / SO source)
+    LABEL_INVOICE_SOURCE: "Invoice Source",
+    LABEL_SOURCE_BY_DO: "By Delivery Order",
+    LABEL_SOURCE_BY_SO: "By Sales Order",
+    LABEL_ADD_DO: "Add DO",
+    LABEL_SELECTED_DOS: "Selected Delivery Orders",
+    LABEL_DO_LIST: "DO List",
+    LABEL_TOTAL_QUANTITY: "Total Quantity",
+    LABEL_REVIEW_SUMMARY: "Review Summary",
+    LABEL_INVOICE_SUMMARY: "Invoice Summary",
+    LABEL_DELIVERY_PROGRESS: "Delivery Progress",
+    MSG_SELECT_AT_LEAST_ONE_DO: "Select at least one Delivery Order.",
+    MSG_SELECT_SO: "Select a Sales Order.",
+    MSG_DO_SAME_SO_REQUIRED:
+      "All Delivery Orders must share the same Sales Order.",
+    MSG_DO_SAME_COMPANY_REQUIRED:
+      "All Delivery Orders must belong to the same company.",
+    MSG_INCOMPLETE_DELIVERY:
+      "Delivery is incomplete: %delivered% of %total% L delivered.",
+    PLACEHOLDER_SELECT_SO_INVOICE: "Search SO number...",
+
     // Permission Messages
     MSG_ACCESS_DENIED: "Access Denied",
     MSG_NO_PERMISSION: "You do not have permission to view this page.",
@@ -931,6 +952,26 @@ export const SITE_CONTENT = {
     MSG_CONFIRM_EMAIL_DO: "Apakah Anda yakin ingin mengirim DO ini ke",
     LABEL_SORT: "Urutkan",
     LABEL_APPLY: "Terapkan",
+
+    // Invoice Module (multi-DO / SO source)
+    LABEL_INVOICE_SOURCE: "Sumber Faktur",
+    LABEL_SOURCE_BY_DO: "Berdasarkan DO",
+    LABEL_SOURCE_BY_SO: "Berdasarkan SO",
+    LABEL_ADD_DO: "Tambah DO",
+    LABEL_SELECTED_DOS: "DO Terpilih",
+    LABEL_DO_LIST: "Daftar DO",
+    LABEL_TOTAL_QUANTITY: "Total Kuantitas",
+    LABEL_REVIEW_SUMMARY: "Ringkasan Tinjauan",
+    LABEL_INVOICE_SUMMARY: "Ringkasan Faktur",
+    LABEL_DELIVERY_PROGRESS: "Progres Pengiriman",
+    MSG_SELECT_AT_LEAST_ONE_DO: "Pilih minimal satu DO.",
+    MSG_SELECT_SO: "Pilih Sales Order.",
+    MSG_DO_SAME_SO_REQUIRED: "Semua DO harus memiliki SO yang sama.",
+    MSG_DO_SAME_COMPANY_REQUIRED:
+      "Semua DO harus milik perusahaan yang sama.",
+    MSG_INCOMPLETE_DELIVERY:
+      "Pengiriman belum lengkap: %delivered% dari %total% L terkirim.",
+    PLACEHOLDER_SELECT_SO_INVOICE: "Cari nomor SO...",
 
     // Permission Messages
     MSG_ACCESS_DENIED: "Akses Ditolak",

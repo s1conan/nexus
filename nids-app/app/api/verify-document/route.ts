@@ -42,12 +42,12 @@ export async function POST(request: Request) {
         table: "invoices",
         numberField: "invoice_number",
         // Must match the shape passed to the PDF generator at generation time
-        // (see app/invoice/page.tsx) so the computed hash matches the QR hash.
+        // (see app/invoice/page.tsx fetchData) so the computed hash matches the
+        // QR hash. Keep the join columns byte-identical to the page's select.
         select: `
           *,
-          company:companies(id, name),
-          do:delivery_orders(id, do_number, do_date, shipment_date, delivered_date, quantity, received_quantity, product:products(id, name, sku), so:sales_orders(id, so_number, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, delivery_taxable)),
-          po:sales_orders(id, so_number, tax_details)
+          company:companies(id, name, nickname, details),
+          po:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))
         `,
       },
       "delivery-order": {
