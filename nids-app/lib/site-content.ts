@@ -328,8 +328,8 @@ export const SITE_CONTENT = {
 
     // Invoice Module (multi-DO / SO source)
     LABEL_INVOICE_SOURCE: "Invoice Source",
-    LABEL_SOURCE_BY_DO: "By Delivery Order",
-    LABEL_SOURCE_BY_SO: "By Sales Order",
+    LABEL_SOURCE_BY_DO: "Delivery Order",
+    LABEL_SOURCE_BY_SO: "Sales Order",
     LABEL_ADD_DO: "Add DO",
     LABEL_SELECTED_DOS: "Selected Delivery Orders",
     LABEL_DO_LIST: "DO List",
@@ -955,8 +955,8 @@ export const SITE_CONTENT = {
 
     // Invoice Module (multi-DO / SO source)
     LABEL_INVOICE_SOURCE: "Sumber Faktur",
-    LABEL_SOURCE_BY_DO: "Berdasarkan DO",
-    LABEL_SOURCE_BY_SO: "Berdasarkan SO",
+    LABEL_SOURCE_BY_DO: "Surat Jalan",
+    LABEL_SOURCE_BY_SO: "Pesanan Penjualan",
     LABEL_ADD_DO: "Tambah DO",
     LABEL_SELECTED_DOS: "DO Terpilih",
     LABEL_DO_LIST: "Daftar DO",

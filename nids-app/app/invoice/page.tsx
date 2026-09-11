@@ -152,18 +152,18 @@ function calculateInvoiceTotals(inv: any): {
   const deliveryTaxable =
     soInfo?.delivery_taxable ?? inv?.delivery_taxable ?? false
   const taxDetails = Array.isArray(inv?.tax_details) ? inv.tax_details : []
-  const taxTotal = taxDetails.reduce(
-    (sum: number, t: any) => {
-      if (!t?.enabled) return sum
-      const isPpn = String(t?.name || "").toUpperCase().includes("PPN")
-      const taxableBase =
-        afterDiscount + (deliveryTaxable && isPpn ? deliveryTotal : 0)
-      return (
-        sum + Math.round((Math.max(0, taxableBase) * (Number(t?.rate) || 0)) / 100)
-      )
-    },
-    0
-  )
+  const taxTotal = taxDetails.reduce((sum: number, t: any) => {
+    if (!t?.enabled) return sum
+    const isPpn = String(t?.name || "")
+      .toUpperCase()
+      .includes("PPN")
+    const taxableBase =
+      afterDiscount + (deliveryTaxable && isPpn ? deliveryTotal : 0)
+    return (
+      sum +
+      Math.round((Math.max(0, taxableBase) * (Number(t?.rate) || 0)) / 100)
+    )
+  }, 0)
   return { subtotal, taxTotal, grandTotal: subtotal + taxTotal }
 }
 
@@ -234,6 +234,88 @@ export default function InvoicePage() {
     Overdue:
       "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
   }
+
+  // 1-char status badges for the DO/SO pickers — colors mirror the DO/SO pages
+  const statusBadge = (
+    status: string | undefined,
+    map: Record<string, { label: string; className: string }>
+  ) => {
+    const fallback = {
+      label: "?",
+      className:
+        "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
+    }
+    const s = (status && map[status]) || fallback
+    return (
+      <span
+        title={status || "-"}
+        className={`inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] leading-none font-bold ${s.className}`}
+      >
+        {s.label}
+      </span>
+    )
+  }
+  const doStatusBadge = (status: string | undefined) =>
+    statusBadge(status, {
+      Draft: {
+        label: "D",
+        className:
+          "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
+      },
+      Shipped: {
+        label: "S",
+        className:
+          "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
+      },
+      Delivered: {
+        label: "✓",
+        className:
+          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+      },
+      Invoiced: {
+        label: "I",
+        className:
+          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
+      },
+      Cancelled: {
+        label: "X",
+        className:
+          "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+      },
+    })
+  const soStatusBadge = (status: string | undefined) =>
+    statusBadge(status, {
+      Draft: {
+        label: "D",
+        className:
+          "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
+      },
+      Sent: {
+        label: "S",
+        className:
+          "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+      },
+      Approved: {
+        label: "A",
+        className:
+          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
+      },
+      Rejected: {
+        label: "R",
+        className:
+          "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+      },
+      Partial: {
+        label: "P",
+        className:
+          "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
+      },
+      Fulfilled: {
+        label: "✓",
+        className:
+          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+      },
+    })
 
   // Form State
   const [formData, setFormData] = usePersistedState("invoice_form_data_v3", {
@@ -330,7 +412,9 @@ export default function InvoicePage() {
 
     const appliedTaxes = (formData.tax_details || []).map((t: any) => {
       const rate = Number(t.rate) || 0
-      const isPpn = String(t.name || "").toUpperCase().includes("PPN")
+      const isPpn = String(t.name || "")
+        .toUpperCase()
+        .includes("PPN")
       const taxableBase =
         afterDiscount + (deliveryTaxable && isPpn ? deliveryTotal : 0)
       const amount = t.enabled
@@ -564,9 +648,7 @@ export default function InvoicePage() {
     (soId: string) => {
       supabase
         .from("delivery_orders")
-        .select(
-          "id, do_number, quantity, received_quantity, status, so_id"
-        )
+        .select("id, do_number, quantity, received_quantity, status, so_id")
         .eq("so_id", soId)
         .order("do_number", { ascending: true })
         .then(({ data }: { data: any }) => {
@@ -587,10 +669,16 @@ export default function InvoicePage() {
     if (selectedDOs.length > 0) {
       const first = selectedDOs[0]
       if ((first.company?.id || "") !== (item.company?.id || "")) {
-        notify.error(dict.MSG_VALIDATION_ERROR, dict.MSG_DO_SAME_COMPANY_REQUIRED)
+        notify.error(
+          dict.MSG_VALIDATION_ERROR,
+          dict.MSG_DO_SAME_COMPANY_REQUIRED
+        )
         return
       }
-      if ((first.so?.id || first.so_id || "") !== (item.so?.id || item.so_id || "")) {
+      if (
+        (first.so?.id || first.so_id || "") !==
+        (item.so?.id || item.so_id || "")
+      ) {
         notify.error(dict.MSG_VALIDATION_ERROR, dict.MSG_DO_SAME_SO_REQUIRED)
         return
       }
@@ -632,8 +720,24 @@ export default function InvoicePage() {
     }
   }
 
-  const handleSelectSO = (item: any) => {
-    if (!item) return
+  const handleSelectSO = (val: string, item: any) => {
+    if (!item) {
+      // Clear button — reset the SO selection
+      setSelectedSOInfo(null)
+      setSoDOs([])
+      setFormData((prev) => ({
+        ...prev,
+        so_id: "",
+        company_id: "",
+        address: "",
+        tax_details: [],
+        delivery_taxable: false,
+        quantity: 0,
+        subtotal: 0,
+      }))
+      setSelectedCompanyInfo(null)
+      return
+    }
     setSelectedSOInfo(item)
     setSelectedCompanyInfo(item.company || null)
     const soTaxes = Array.isArray(item?.tax_details) ? item.tax_details : []
@@ -743,8 +847,7 @@ export default function InvoicePage() {
         const soInfo = item.po
           ? {
               ...item.po,
-              quantity:
-                Number(item.quantity) || Number(item.po?.quantity) || 0,
+              quantity: Number(item.quantity) || Number(item.po?.quantity) || 0,
             }
           : null
         setSelectedSOInfo(soInfo)
@@ -828,9 +931,7 @@ export default function InvoicePage() {
         quantity: invoiceCalc ? invoiceCalc.totalQty : formData.quantity,
         subtotal: invoiceCalc ? invoiceCalc.subtotal : formData.subtotal,
         tax_amount: invoiceCalc ? invoiceCalc.taxTotal : totals.taxTotal,
-        total_amount: invoiceCalc
-          ? invoiceCalc.grandTotal
-          : totals.grandTotal,
+        total_amount: invoiceCalc ? invoiceCalc.grandTotal : totals.grandTotal,
       }
 
       if (!editingItem && !payload.invoice_number) {
@@ -869,7 +970,9 @@ export default function InvoicePage() {
           const removedDoIds = oldDoIds.filter(
             (id: string) => !doIds.includes(id)
           )
-          const addedDoIds = doIds.filter((id: string) => !oldDoIds.includes(id))
+          const addedDoIds = doIds.filter(
+            (id: string) => !oldDoIds.includes(id)
+          )
           await updateDOStatus(removedDoIds, "Delivered")
           await updateDOStatus(addedDoIds, "Invoiced")
           if (editingItem.status === "Cancelled") {
@@ -1206,8 +1309,7 @@ export default function InvoicePage() {
           })
         : "-"
       const doRefs = Array.isArray(inv.do_refs) ? inv.do_refs : []
-      const doNumber =
-        doRefs.map((r: any) => r.do_number).join(", ") || "-"
+      const doNumber = doRefs.map((r: any) => r.do_number).join(", ") || "-"
       const soNumber = inv.po?.so_number || "-"
       const totalAmount = inv.total_amount || 0
 
@@ -1408,6 +1510,36 @@ export default function InvoicePage() {
     bank_accounts: formData.bank_accounts.map((b: any) => b.name).join(", "),
   }
 
+  // Shared DO/SO source-mode switch — defined outside the mode conditionals
+  // so `sourceMode` isn't narrowed and it renders in both modes
+  const sourceModeSwitch = (
+    <div className="flex-start flex items-center gap-5 rounded-lg bg-muted/10 p-2">
+      <span
+        className={cn(
+          "text-sm font-medium",
+          sourceMode !== "do" && "text-muted-foreground"
+        )}
+      >
+        {dict.LABEL_SOURCE_BY_DO}
+      </span>
+      <div className="flex flex-col items-center gap-0.5">
+        <Switch
+          checked={sourceMode === "so"}
+          onCheckedChange={(checked) => switchSourceMode(checked ? "so" : "do")}
+          disabled={viewOnly}
+        />
+      </div>
+      <span
+        className={cn(
+          "text-sm font-medium",
+          sourceMode !== "so" && "text-muted-foreground"
+        )}
+      >
+        {dict.LABEL_SOURCE_BY_SO}
+      </span>
+    </div>
+  )
+
   if (!canView && !loading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
@@ -1501,54 +1633,24 @@ export default function InvoicePage() {
                           placeholder={dict.LABEL_AUTO_GENERATED}
                         />
                       </div>
-                      {/* Invoice Source — DO / SO mode switch */}
-                      <div className="grid gap-2">
-                        <Label>{dict.LABEL_INVOICE_SOURCE || "Invoice Source"}</Label>
-                        <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/10 p-3">
-                          <span
-                            className={cn(
-                              "text-sm font-medium",
-                              sourceMode !== "do" && "text-muted-foreground"
-                            )}
-                          >
-                            {dict.LABEL_SOURCE_BY_DO || "By Delivery Order"}
-                          </span>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <Switch
-                              checked={sourceMode === "so"}
-                              onCheckedChange={(checked) =>
-                                switchSourceMode(checked ? "so" : "do")
-                              }
-                              disabled={viewOnly}
-                            />
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground">
-                              {sourceMode === "so" ? "SO" : "DO"}
-                            </span>
-                          </div>
-                          <span
-                            className={cn(
-                              "text-sm font-medium",
-                              sourceMode !== "so" && "text-muted-foreground"
-                            )}
-                          >
-                            {dict.LABEL_SOURCE_BY_SO || "By Sales Order"}
-                          </span>
-                        </div>
-                      </div>
 
                       {/* DO mode — multi-select picker */}
                       {sourceMode === "do" && (
                         <div className="grid gap-2">
-                          <Label className="flex items-center gap-1.5">
-                            {dict.LABEL_DO_NUMBER || "Delivery Order"}
-                            <span
-                              className="text-xs font-bold text-destructive"
-                              title="Required"
-                            >
-                              *
-                            </span>
-                          </Label>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="flex items-center gap-1.5">
+                              {dict.LABEL_DO_NUMBER || "Delivery Order"}
+                              <span
+                                className="text-xs font-bold text-destructive"
+                                title="Required"
+                              >
+                                *
+                              </span>
+                            </Label>
+                            {sourceModeSwitch}
+                          </div>
                           <LiveSearch
+                            key={`do-picker-${selectedDOs.length}`}
                             data={[]}
                             fetchData={async (query) => {
                               try {
@@ -1559,15 +1661,31 @@ export default function InvoicePage() {
                                   )
                                   .in("status", ["Shipped", "Delivered"])
                                   .limit(8)
+                                // Once a first DO is chosen, only DOs of the
+                                // same SO + company may be added
+                                if (selectedDOs.length > 0) {
+                                  const first = selectedDOs[0]
+                                  const lockedSoId = first.so?.id || first.so_id
+                                  if (lockedSoId) q = q.eq("so_id", lockedSoId)
+                                  if (first.company?.id)
+                                    q = q.eq("company_id", first.company.id)
+                                  const takenIds = selectedDOs.map(
+                                    (d: any) => d.id
+                                  )
+                                  if (takenIds.length > 0)
+                                    q = q.not(
+                                      "id",
+                                      "in",
+                                      `(${takenIds.join(",")})`
+                                    )
+                                }
                                 if (query) {
                                   const doSearch = constructMultiWordSearch(
                                     query,
                                     ["do_number"]
                                   )
-                                  const companySearch = constructMultiWordSearch(
-                                    query,
-                                    ["name"]
-                                  )
+                                  const companySearch =
+                                    constructMultiWordSearch(query, ["name"])
                                   const { data: companies } = companySearch
                                     ? await supabase
                                         .from("companies")
@@ -1602,6 +1720,12 @@ export default function InvoicePage() {
                             searchColumns={["do_number", "company.name"]}
                             visualColumns={[
                               {
+                                key: "status",
+                                header: "",
+                                className: "w-8 shrink-0",
+                                render: (d) => doStatusBadge(d.status),
+                              },
+                              {
                                 key: "do_number",
                                 header: dict.LABEL_DO_NUMBER,
                                 className: "w-2/5",
@@ -1628,9 +1752,7 @@ export default function InvoicePage() {
                                   ),
                               },
                             ]}
-                            placeholder={
-                              dict.LABEL_ADD_DO || "Add DO..."
-                            }
+                            placeholder={dict.LABEL_ADD_DO || "Add DO..."}
                             emptyMessage={dict.NO_DATA}
                             disabled={viewOnly}
                           />
@@ -1671,15 +1793,18 @@ export default function InvoicePage() {
                       {/* SO mode — direct Sales Order picker */}
                       {sourceMode === "so" && (
                         <div className="grid gap-2">
-                          <Label className="flex items-center gap-1.5">
-                            {dict.LABEL_SO_REQUIRED || "Sales Order"}
-                            <span
-                              className="text-xs font-bold text-destructive"
-                              title="Required"
-                            >
-                              *
-                            </span>
-                          </Label>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label className="flex items-center gap-1.5">
+                              {dict.LABEL_SO_REQUIRED || "Sales Order"}
+                              <span
+                                className="text-xs font-bold text-destructive"
+                                title="Required"
+                              >
+                                *
+                              </span>
+                            </Label>
+                            {sourceModeSwitch}
+                          </div>
                           <LiveSearch
                             data={selectedSOInfo ? [selectedSOInfo] : []}
                             fetchData={async (query) => {
@@ -1689,17 +1814,20 @@ export default function InvoicePage() {
                                   .select(
                                     "*, company:companies(id, name, nickname, details), product:products(id, name, sku)"
                                   )
-                                  .in("status", ["Approved", "Sent"])
+                                  .in("status", [
+                                    "Sent",
+                                    "Approved",
+                                    "Partial",
+                                    "Fulfilled",
+                                  ])
                                   .limit(8)
                                 if (query) {
                                   const soSearch = constructMultiWordSearch(
                                     query,
                                     ["so_number"]
                                   )
-                                  const companySearch = constructMultiWordSearch(
-                                    query,
-                                    ["name"]
-                                  )
+                                  const companySearch =
+                                    constructMultiWordSearch(query, ["name"])
                                   const { data: companies } = companySearch
                                     ? await supabase
                                         .from("companies")
@@ -1725,7 +1853,7 @@ export default function InvoicePage() {
                               }
                             }}
                             value={selectedSOInfo?.id || ""}
-                            onSelect={(_val, item) => handleSelectSO(item)}
+                            onSelect={(val, item) => handleSelectSO(val, item)}
                             keyField="id"
                             displayField={(s: any) =>
                               `${s.so_number} - ${s.company?.name || ""}`
@@ -1737,6 +1865,12 @@ export default function InvoicePage() {
                             }
                             searchColumns={["so_number", "company.name"]}
                             visualColumns={[
+                              {
+                                key: "status",
+                                header: "",
+                                className: "w-8 shrink-0",
+                                render: (s) => soStatusBadge(s.status),
+                              },
                               {
                                 key: "so_number",
                                 header: dict.LABEL_SO_NUMBER,
@@ -1878,8 +2012,7 @@ export default function InvoicePage() {
                             <div className="flex items-center gap-2 text-xs font-semibold text-primary md:text-sm">
                               <Info className="size-4" />
                               <span>
-                                {dict.LABEL_REVIEW_SUMMARY ||
-                                  "Review Summary"}
+                                {dict.LABEL_REVIEW_SUMMARY || "Review Summary"}
                               </span>
                             </div>
                             <div className="text-xs font-medium text-muted-foreground md:text-sm">
@@ -1892,30 +2025,29 @@ export default function InvoicePage() {
 
                           <div className="space-y-4 p-4 text-sm">
                             {/* DO List — DO mode */}
-                            {sourceMode === "do" &&
-                              selectedDOs.length > 0 && (
-                                <div className="space-y-1.5 border-b pb-3">
-                                  <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
-                                    {dict.LABEL_DO_LIST || "DO List"}
-                                  </div>
-                                  {selectedDOs.map((d: any) => (
-                                    <div
-                                      key={d.id}
-                                      className="flex items-center justify-between text-xs md:text-sm"
-                                    >
-                                      <span className="font-mono">
-                                        {d.do_number}
-                                      </span>
-                                      <span className="font-mono">
-                                        {Number(
-                                          calculateBilledQuantity(d)
-                                        ).toLocaleString()}{" "}
-                                        L
-                                      </span>
-                                    </div>
-                                  ))}
+                            {sourceMode === "do" && selectedDOs.length > 0 && (
+                              <div className="space-y-1.5 border-b pb-3">
+                                <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
+                                  {dict.LABEL_DO_LIST || "DO List"}
                                 </div>
-                              )}
+                                {selectedDOs.map((d: any) => (
+                                  <div
+                                    key={d.id}
+                                    className="flex items-center justify-between text-xs md:text-sm"
+                                  >
+                                    <span className="font-mono">
+                                      {d.do_number}
+                                    </span>
+                                    <span className="font-mono">
+                                      {Number(
+                                        calculateBilledQuantity(d)
+                                      ).toLocaleString()}{" "}
+                                      L
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
 
                             {/* Delivery Progress — SO mode */}
                             {sourceMode === "so" && (
@@ -1945,7 +2077,7 @@ export default function InvoicePage() {
                                             ).toLocaleString()}{" "}
                                             L
                                           </span>
-                                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase">
                                             {d.status}
                                           </span>
                                         </span>
@@ -1963,10 +2095,7 @@ export default function InvoicePage() {
                                       const soQty =
                                         Number(invoiceCalc.soInfo?.quantity) ||
                                         0
-                                      if (
-                                        soQty <= 0 ||
-                                        receivedTotal >= soQty
-                                      )
+                                      if (soQty <= 0 || receivedTotal >= soQty)
                                         return null
                                       return (
                                         <div className="flex items-start gap-2 rounded border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
@@ -2394,8 +2523,14 @@ export default function InvoicePage() {
                         {i.invoice_number}
                       </div>
                       {Array.isArray(i.do_refs) && i.do_refs.length > 0 && (
-                        <div className="max-w-[220px] truncate font-mono text-[11px] text-muted-foreground" title={i.do_refs.map((r: any) => r.do_number).join(", ")}>
-                          DO: {i.do_refs.map((r: any) => r.do_number).join(", ")}
+                        <div
+                          className="max-w-[220px] truncate font-mono text-[11px] text-muted-foreground"
+                          title={i.do_refs
+                            .map((r: any) => r.do_number)
+                            .join(", ")}
+                        >
+                          DO:{" "}
+                          {i.do_refs.map((r: any) => r.do_number).join(", ")}
                         </div>
                       )}
                     </TableCell>
