@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS public.invoices (
   invoice_number TEXT UNIQUE NOT NULL,
   company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
   so_id UUID REFERENCES public.sales_orders(id) ON DELETE SET NULL, -- Optional link to PO
-  do_id UUID REFERENCES public.delivery_orders(id) ON DELETE SET NULL, -- Optional link to DO
+  do_ids UUID[] DEFAULT '{}', -- Linked Delivery Orders (empty for SO-direct invoices)
+  quantity NUMERIC(12,2) NOT NULL DEFAULT 0, -- Billed total quantity
+  do_refs JSONB NOT NULL DEFAULT '[]'::jsonb, -- Snapshot of linked DO numbers/quantities
   issue_date DATE NOT NULL DEFAULT CURRENT_DATE,
   due_date DATE NOT NULL,
   subtotal NUMERIC(15,2) NOT NULL DEFAULT 0,
