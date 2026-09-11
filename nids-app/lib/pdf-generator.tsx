@@ -341,6 +341,11 @@ function parseHtmlToComponents(htmlString: string): React.ReactNode[] {
   return parts
 }
 
+// Shared image opacity for all PDF documents — tweak in one place only.
+// WATERMARK: page background logo; STAMP: signature-area company stamp.
+const WATERMARK_OPACITY = 0.2
+const STAMP_OPACITY = 0.6
+
 const a4Styles = StyleSheet.create({
   page: {
     paddingHorizontal: 26,
@@ -351,7 +356,7 @@ const a4Styles = StyleSheet.create({
   },
   backgroundImage: {
     position: "absolute",
-    opacity: "0.15",
+    opacity: WATERMARK_OPACITY,
     top: 85,
     left: 0,
     right: 0,
@@ -428,7 +433,7 @@ const a4Styles = StyleSheet.create({
     width: 80,
   },
   stamp: {
-    opacity: "0.6",
+    opacity: STAMP_OPACITY,
     width: 70,
     height: 70,
     objectFit: "contain",
@@ -469,7 +474,7 @@ const a5Styles = StyleSheet.create({
   },
   backgroundImage: {
     position: "absolute",
-    opacity: "0.10",
+    opacity: WATERMARK_OPACITY,
     top: 15,
     left: 0,
     right: 0,
@@ -552,7 +557,7 @@ const a5Styles = StyleSheet.create({
   },
   stamp: {
     position: "absolute",
-    opacity: "0.65",
+    opacity: STAMP_OPACITY,
     width: 70,
     height: 70,
     objectFit: "contain",
@@ -1310,24 +1315,26 @@ const SalesOrderDocument = ({
               </View>
             </View>
           )}
-          <View style={a4Styles.tableRow}>
-            <View style={[a4Styles.cell, { width: 160 }]}>
-              <Text style={{ fontWeight: "bold" }}>
-                Total Setelah Diskon & Susut
-              </Text>
+          {(data.discount > 0 || shrinkageEnabled) && (
+            <View style={a4Styles.tableRow}>
+              <View style={[a4Styles.cell, { width: 160 }]}>
+                <Text style={{ fontWeight: "bold" }}>
+                  Total Setelah Diskon & Susut
+                </Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 60 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, { width: 80 }]}>
+                <Text></Text>
+              </View>
+              <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
+                <Text style={{ fontWeight: "bold" }}>
+                  {formatNumber(afterDiscount)}
+                </Text>
+              </View>
             </View>
-            <View style={[a4Styles.cell, { width: 60 }]}>
-              <Text></Text>
-            </View>
-            <View style={[a4Styles.cell, { width: 80 }]}>
-              <Text></Text>
-            </View>
-            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
-              <Text style={{ fontWeight: "bold" }}>
-                {formatNumber(afterDiscount)}
-              </Text>
-            </View>
-          </View>
+          )}
           {data.delivery_price_per_litre > 0 && (
             <View style={a4Styles.tableRow}>
               <View style={[a4Styles.cell, { width: 160 }]}>
@@ -1376,7 +1383,6 @@ const SalesOrderDocument = ({
             <View
               style={[
                 a4Styles.cell,
-                a4Styles.headerCell,
                 a4Styles.right,
                 { width: 80 },
               ]}
@@ -2109,14 +2115,16 @@ const InvoiceDocument = ({
       pricePerLitre: discountPerLitre,
       total: Math.round(discountAmount),
     })
+    // Only meaningful when a discount actually reduced the price — otherwise
+    // it would duplicate the product row above it
+    invoiceRows.push({
+      desc: "Harga Setelah Discount",
+      bold: true,
+      totalBold: true,
+      pricePerLitre: netPerLitre,
+      total: Math.round(afterDiscount),
+    })
   }
-  invoiceRows.push({
-    desc: "Harga Setelah Discount",
-    bold: true,
-    totalBold: true,
-    pricePerLitre: netPerLitre,
-    total: Math.round(afterDiscount),
-  })
   const oatRow: InvoiceRow = {
     desc: "OAT",
     pricePerLitreRaw: formatNumber(data.delivery_price_per_litre),
