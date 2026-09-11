@@ -570,21 +570,9 @@ export default function DeliveryOrdersPage() {
         dbPayload.do_number = data
       }
 
-      if (editingItem) {
-        const { error } = await supabase
-          .from("delivery_orders")
-          .update(dbPayload)
-          .eq("id", editingItem.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from("delivery_orders")
-          .insert([dbPayload])
-        if (error) throw error
-      }
-
-      // Auto-create an Accepted deposit when the supplier's active stock cannot
-      // cover the full DO quantity (price starts at 0; corrected on Deposits page).
+      // Auto-create an Accepted deposit BEFORE the DO row is written, so the
+      // inventory ledger has the IN entry before any OUT is booked (price
+      // starts at 0; corrected on the Deposits page).
       let autoDeposit: {
         created: boolean
         deposit_number?: string
@@ -612,6 +600,19 @@ export default function DeliveryOrdersPage() {
         )
         if (autoDepositError) throw autoDepositError
         autoDeposit = data
+      }
+
+      if (editingItem) {
+        const { error } = await supabase
+          .from("delivery_orders")
+          .update(dbPayload)
+          .eq("id", editingItem.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from("delivery_orders")
+          .insert([dbPayload])
+        if (error) throw error
       }
 
       if (editingItem) {
