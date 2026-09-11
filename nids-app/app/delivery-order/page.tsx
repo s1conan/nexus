@@ -1842,7 +1842,6 @@ export default function DeliveryOrdersPage() {
                               // List ALL suppliers; stock shown as 0 when no
                               // active deposit exists (auto-deposit covers it on save)
                               fetchData={async (query) => {
-                                if (!formData.product_id) return []
                                 let q = supabase
                                   .from("companies")
                                   .select("id, name")
@@ -1856,6 +1855,19 @@ export default function DeliveryOrdersPage() {
                                   )
                                   if (searchStr) q = q.or(searchStr)
                                 }
+                                if (!formData.product_id) {
+                                  // Stock not computable without a product;
+                                  // still list suppliers with stock 0
+                                  const { data, error } = await q
+                                  if (error) throw error
+                                  return (data || []).map(
+                                    (c: { id: string; name: string }) => ({
+                                      supplier_id: c.id,
+                                      name: c.name,
+                                      current_stock: 0,
+                                    })
+                                  )
+                                }
                                 const [stockRes, companiesRes] =
                                   await Promise.all([
                                     supabase
@@ -1864,6 +1876,8 @@ export default function DeliveryOrdersPage() {
                                       .eq("product_id", formData.product_id),
                                     q,
                                   ])
+                                if (companiesRes.error)
+                                  throw companiesRes.error
                                 const stockMap = new Map<string, number>(
                                   (stockRes.data || []).map(
                                     (s: {
