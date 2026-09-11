@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   Command,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -258,10 +257,16 @@ export function LiveSearch<T extends Record<string, any>>({
             )}
           </div>
           <CommandList className="max-h-[300px] overflow-y-auto">
+            {/* Explicit empty state: cmdk's CommandEmpty is count-based, so any
+                registered item (e.g. footerOptions) suppresses it — render the
+                empty message ourselves so it always shows when no results */}
             {!isLoading && displayData.length === 0 && (
-              <CommandEmpty className="py-4 text-center text-sm text-muted-foreground">
+              <div
+                role="presentation"
+                className="py-4 text-center text-sm text-muted-foreground"
+              >
                 {emptyMessage}
-              </CommandEmpty>
+              </div>
             )}
             <CommandGroup>
               {/* Optional multi-column visual header */}
