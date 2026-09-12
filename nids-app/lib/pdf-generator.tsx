@@ -124,7 +124,11 @@ export interface InvoiceData {
   so_number?: string
   po_number?: string
   product_name?: string
-  do_refs?: { do_number: string; quantity: number; received_quantity?: number | null }[]
+  do_refs?: {
+    do_number: string
+    quantity: number
+    received_quantity?: number | null
+  }[]
   customer_address?: string
   customer_npwp?: string
   po_date?: string
@@ -1156,13 +1160,18 @@ const SalesOrderDocument = ({
   const discountAmount = subtotal * (data.discount / 100)
   const afterDiscount = effectiveSubtotal - discountAmount
   const deliveryTotal = data.quantity * data.delivery_price_per_litre
-  const taxableAmount =
-    afterDiscount + (data.delivery_taxable ? deliveryTotal : 0)
+  // Delivery fee is only ever taxed by PPN — other taxes (PBBKB, etc.)
+  // are always computed on the product amount alone.
   const enabledTaxes = data.tax_details.filter((t) => t.enabled)
-  const taxLines = enabledTaxes.map((t) => ({
-    name: t.name,
-    amount: Math.round(Math.max(0, taxableAmount) * (Number(t.rate) / 100)),
-  }))
+  const taxLines = enabledTaxes.map((t) => {
+    const isPpn = isPpnTax(t.name)
+    const taxableBase =
+      afterDiscount + (data.delivery_taxable && isPpn ? deliveryTotal : 0)
+    return {
+      name: t.name,
+      amount: Math.round(Math.max(0, taxableBase) * (Number(t.rate) / 100)),
+    }
+  })
   const grandTotal =
     afterDiscount +
     deliveryTotal +
@@ -1231,9 +1240,13 @@ const SalesOrderDocument = ({
               <Text style={a4Styles.label}>PO Date</Text>
               <Text style={a4Styles.colon}>:</Text>
               <Text>
-                {format(new Date(data.po_date || data.so_date), "dd MMMM yyyy", {
-                  locale: dateLocaleId,
-                })}
+                {format(
+                  new Date(data.po_date || data.so_date),
+                  "dd MMMM yyyy",
+                  {
+                    locale: dateLocaleId,
+                  }
+                )}
               </Text>
             </View>
           </View>
@@ -1384,13 +1397,7 @@ const SalesOrderDocument = ({
             <View style={[a4Styles.cell, { width: 80 }]}>
               <Text></Text>
             </View>
-            <View
-              style={[
-                a4Styles.cell,
-                a4Styles.right,
-                { width: 80 },
-              ]}
-            >
+            <View style={[a4Styles.cell, a4Styles.right, { width: 80 }]}>
               <Text style={{ fontWeight: "bold" }}>
                 {formatNumber(grandTotal)}
               </Text>
@@ -2030,6 +2037,9 @@ const invoiceTableStyles = StyleSheet.create({
     flexDirection: "column",
     justifyContent: "center",
   },
+  cellHeader: {
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
+  },
   cellLast: {
     borderRight: 0,
   },
@@ -2043,12 +2053,11 @@ const invoiceTableStyles = StyleSheet.create({
 // never shifts between renders; merged spans combine the raw percentages
 const INVOICE_TABLE_COLS = {
   no: "5%",
-  desc: "33%",
-  qty: "14%",
-  price: "23%",
-  qtyPrice: "37%",
+  desc: "36%",
+  qty: "17%",
+  price: "17%",
+  qtyPrice: "34%",
   total: "25%",
-  noDescQty: "52%",
   full: "100%",
 }
 
@@ -2082,7 +2091,8 @@ const InvoiceDocument = ({
   const grandTotal =
     Math.round(afterDiscount + deliveryTotal) +
     taxLines.reduce((sum, t) => sum + t.amount, 0)
-  const discountPerLitre = data.quantity > 0 ? discountAmount / data.quantity : 0
+  const discountPerLitre =
+    data.quantity > 0 ? discountAmount / data.quantity : 0
   const netPerLitre = data.unit_price - discountPerLitre
   const showDelivery = data.delivery_price_per_litre > 0
   const formatDateShort = (value?: string) =>
@@ -2105,7 +2115,8 @@ const InvoiceDocument = ({
 
   const invoiceRows: InvoiceRow[] = [
     {
-      desc: data.product_name || (data.so_number ? `SO: ${data.so_number}` : "-"),
+      desc:
+        data.product_name || (data.so_number ? `SO: ${data.so_number}` : "-"),
       bold: true,
       qty: formatNumber(data.quantity),
       pricePerLitre: data.unit_price,
@@ -2193,9 +2204,13 @@ const InvoiceDocument = ({
           <View style={{ width: 290 }}>
             <Text>Kepada Yth:</Text>
             <View style={{ marginTop: 5 }}>
-              <Text style={{ fontWeight: "bold", fontSize: 12 }}>{data.company_name}</Text>
+              <Text style={{ fontWeight: "bold", fontSize: 12 }}>
+                {data.company_name}
+              </Text>
               {addressLines.map((line, i) => (
-                <Text style={{ marginTop: 5 }} key={i}>{line}</Text>
+                <Text style={{ marginTop: 5 }} key={i}>
+                  {line}
+                </Text>
               ))}
             </View>
             <Text style={{ marginTop: 14 }}>
@@ -2248,7 +2263,7 @@ const InvoiceDocument = ({
           </View>
         )}
         <View style={invoiceTableStyles.table}>
-          <View style={invoiceTableStyles.row}>
+          <View style={[invoiceTableStyles.row, invoiceTableStyles.cellHeader]}>
             <View
               style={[
                 invoiceTableStyles.cell,
@@ -2260,6 +2275,7 @@ const InvoiceDocument = ({
             <View
               style={[
                 invoiceTableStyles.cell,
+
                 { width: INVOICE_TABLE_COLS.desc, alignItems: "center" },
               ]}
             >
@@ -2301,7 +2317,12 @@ const InvoiceDocument = ({
               >
                 <Text>{i + 1}</Text>
               </View>
-              <View style={[invoiceTableStyles.cell, { width: INVOICE_TABLE_COLS.desc }]}>
+              <View
+                style={[
+                  invoiceTableStyles.cell,
+                  { width: INVOICE_TABLE_COLS.desc },
+                ]}
+              >
                 <Text style={row.bold ? { fontWeight: "bold" } : undefined}>
                   {row.desc}
                 </Text>
@@ -2310,7 +2331,10 @@ const InvoiceDocument = ({
                 <View
                   style={[
                     invoiceTableStyles.cell,
-                    { width: INVOICE_TABLE_COLS.qtyPrice, alignItems: "center"},
+                    {
+                      width: INVOICE_TABLE_COLS.qtyPrice,
+                      alignItems: "center",
+                    },
                   ]}
                 >
                   <Text>{row.qty || ""}</Text>
@@ -2402,16 +2426,15 @@ const InvoiceDocument = ({
               style={[
                 invoiceTableStyles.cell,
                 {
-                  width: INVOICE_TABLE_COLS.noDescQty,
+                  width: "75%",
                   alignItems: "center",
+                  backgroundColor: "rgba(0, 128, 255, 0.3)",
                 },
               ]}
             >
               <Text style={{ fontWeight: "bold" }}>TOTAL</Text>
             </View>
-            <View style={[invoiceTableStyles.cell, { width: INVOICE_TABLE_COLS.price }]}>
-              <Text></Text>
-            </View>
+
             <View
               style={[
                 invoiceTableStyles.cell,
@@ -2421,6 +2444,7 @@ const InvoiceDocument = ({
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "space-between",
+                  backgroundColor: "rgba(0, 128, 255, 0.3)",
                 },
               ]}
             >
@@ -2438,7 +2462,14 @@ const InvoiceDocument = ({
                 { width: INVOICE_TABLE_COLS.full, paddingVertical: 8 },
               ]}
             >
-              <Text style={{ fontStyle: "italic", fontSize: 12, fontWeight: "bold", lineHeight: 1.2 }}>
+              <Text
+                style={{
+                  fontStyle: "italic",
+                  fontSize: 12,
+                  fontWeight: "bold",
+                  lineHeight: 1.2,
+                }}
+              >
                 Terbilang : # {numberToIndonesianWords(grandTotal)} Rupiah #
               </Text>
             </View>
