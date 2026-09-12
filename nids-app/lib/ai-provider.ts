@@ -54,8 +54,28 @@ export type ExtractedSO = {
       }[]
     | null
   confidence: Record<string, string> | null
-  flagged_fields?: string[] | null
   warnings: string[] | null
+  flagged_fields?: string[] | null
+}
+
+export type ExtractedDO = {
+  sj_number: string | null
+  sj_date: string | null
+  po_number: string | null
+  company_name: string | null
+  delivery_address: string | null
+  transporter_name: string | null
+  driver_name: string | null
+  vehicle_number: string | null
+  supplier_name: string | null
+  product_description: string | null
+  quantity: number | null
+  quantity_raw?: string | null
+  quantity_unit?: string | null
+  seal_numbers: string[] | null
+  confidence: Record<string, string> | null
+  warnings: string[] | null
+  flagged_fields?: string[] | null
 }
 
 export type ExtractedFile = {
@@ -569,6 +589,188 @@ export async function extractSOFromFiles(
   return { data: processed, raw: content }
 }
 
+const DO_PROMPT = `You are a document-extraction assistant for a Delivery Order (DO) system.
+You will receive Surat Jalan documents (delivery/shipping notes issued by transporters or
+suppliers), possibly with PO documents attached. Scan the document from TOP TO BOTTOM in
+reading order and assign each piece of text to the matching field by its ROLE — layouts and
+labels differ between companies; a field is defined by its MEANING, not by a fixed word.
+
+Field roles:
+- Surat Jalan number: the delivery note's own document number (e.g. "193/ABS/SJ/VIII/2026"),
+  usually under the "SURAT JALAN" title.
+- Document date: the issue date of the Surat Jalan (e.g. "Palembang, 30 Agustus 2026" ->
+  2026-08-30).
+- PO number: the customer Purchase Order referenced in the document ("PO No.").
+- Customer (company_name): the party the goods are SHIPPED TO ("Shipped To", "Kepada") —
+  NEVER the supplier/transporter/letterhead issuing the document.
+- Delivery address: the shipping location ("Location", "Delivery To").
+- Transporter: the transport company ("Transportir", "Transporter").
+- Driver: the driver's name ("Driver").
+- Vehicle: the vehicle license plate ("No. Pol", "No. Polisi", license plate).
+- Supplier: the goods supplier (often the letterhead company).
+- Product: the goods description ("BBM B40 INDUSTRI", "SOLAR") — the DESCRIPTION column of
+  the goods table. One row = one item; never merge rows.
+- Quantity: the shipped quantity and its unit ("16.000 LITER" -> quantity 16000, unit
+  "LITER"). Indonesian formatting: dots group thousands.
+- Seal numbers: the seal/segel numbers ("SEGEL", "Seal") in the order printed.
+
+Schema (fill ONLY from what you actually found; null when absent — NEVER guess):
+
+{
+  "sj_number": "Surat Jalan number, or null",
+  "sj_date": "document date YYYY-MM-DD, or null",
+  "po_number": "referenced customer PO number, or null",
+  "company_name": "the CUSTOMER goods are shipped to — NEVER the supplier/transporter/letterhead, or null",
+  "delivery_address": "shipping location/address, or null",
+  "transporter_name": "transport company name, or null",
+  "driver_name": "driver name, or null",
+  "vehicle_number": "vehicle license plate, or null",
+  "supplier_name": "goods supplier name, or null",
+  "product_description": "goods description, or null",
+  "quantity": number or null,
+  "quantity_raw": "quantity VERBATIM from the document, or null",
+  "quantity_unit": "unit e.g. LITER, or null",
+  "seal_numbers": ["0002967", "0002968"] or null,
+  "confidence": {"field": "high|medium|low"},
+  "warnings": ["only meaningful, unresolved issues"],
+  "flagged_fields": ["schema field names with extraction problems"] or null
+}
+
+Conventions:
+- NUMBERS: numeric fields are plain numbers. Indonesian style: dots group thousands
+  ("16.000" = 16000). For quantity_raw copy the text VERBATIM.
+- DATES: ISO (YYYY-MM-DD). Two-digit years are always the current century; month-name dates
+  ("30 Agustus 2026") are never ambiguous.
+- Add a confidence entry for every extracted field.
+- Warnings: few and meaningful — only unresolved ambiguity, illegible text, or missing
+  key fields (customer, quantity).`
+
+/**
+ * DO (Surat Jalan) extraction — same plumbing as the SO extraction but with
+ * the DO prompt and schema. No tax/discount post-processing: a Surat Jalan
+ * carries none of those.
+ */
+export async function extractDOFromFiles(
+  files: ExtractedFile[],
+  supplierName?: string | null
+): Promise<{ data: ExtractedDO; raw: string }> {
+  const apiKey = process.env.AI_API_KEY
+  const model = process.env.AI_MODEL
+
+  if (process.env.AI_PROVIDER !== "openrouter") {
+    throw new Error(
+      "AI_PROVIDER must be set to 'openrouter' in environment variables."
+    )
+  }
+  if (!apiKey) throw new Error("AI_API_KEY is not configured.")
+  if (!model) throw new Error("AI_MODEL is not configured.")
+
+  const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer":
+        process.env.NEXT_PUBLIC_APP_URL || "https://nids.local",
+      "X-Title": "Nexus Integrated Distribution System",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: DO_PROMPT },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                "Extract the Delivery Order fields from the attached document(s) and respond with only the JSON object." +
+                (supplierName
+                  ? ` IMPORTANT: Our company is "${supplierName}" — we are the SUPPLIER/TRANSPORTER. company_name must be the CUSTOMER the goods are shipped to ("Shipped To"), NEVER "${supplierName}" or any name matching it. If the only company you can find is "${supplierName}", return null for company_name and add a warning.`
+                  : ""),
+            },
+            ...buildFileParts(files),
+          ],
+        },
+      ],
+      max_tokens: 4000,
+      ...(isReasoningModel(model) ? {} : { temperature: 0 }),
+    }),
+  })
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "")
+    throw new Error(
+      `AI provider error (${response.status}): ${body.slice(0, 500)}`
+    )
+  }
+
+  const result = await response.json()
+  const content: string | undefined = result?.choices?.[0]?.message?.content
+  if (!content) {
+    throw new Error("AI provider returned an empty response.")
+  }
+
+  const parsed = parseModelJson(content) as unknown as ExtractedDO
+  console.log("[AI Extract DO] raw model response:", content)
+
+  // Normalize quantity from its raw text (Indonesian formats)
+  if (parsed.quantity_raw) {
+    const q = parseIdNumber(parsed.quantity_raw, true)
+    if (q !== null) parsed.quantity = q
+  }
+
+  // Guard: the supplier must never end up as the customer
+  if (
+    supplierName &&
+    parsed.company_name &&
+    Math.max(
+      fuzzyScore(supplierName, parsed.company_name),
+      fuzzyScore(parsed.company_name, supplierName)
+    ) >= 0.6
+  ) {
+    parsed.warnings = [
+      ...(parsed.warnings || []),
+      "The AI returned the supplier name as the customer company — removed automatically. Select the customer manually.",
+    ]
+    parsed.company_name = null
+    parsed.confidence = {
+      ...(parsed.confidence || {}),
+      company_name: "low",
+    }
+  }
+
+  console.log(
+    "[AI Extract DO] after server processing:",
+    JSON.stringify(parsed, null, 2)
+  )
+  return { data: parsed, raw: content }
+}
+
+/**
+ * Deterministic sanity audit for DO extractions. A Surat Jalan has no
+ * arithmetic identities to verify (no taxes/discounts) — only sanity checks.
+ */
+export function auditDO(
+  data: ExtractedDO,
+  language: "en" | "id" = "en"
+): { warnings: string[]; flaggedFields: string[] } {
+  const warnings: string[] = []
+  const flaggedFields: string[] = []
+  const msg = AUDIT_MESSAGES[language]
+
+  if (data.quantity != null && data.quantity <= 0) {
+    flaggedFields.push("quantity")
+    warnings.push(msg.notPositive("quantity", data.quantity))
+  }
+  if (data.sj_date && isNaN(new Date(data.sj_date).getTime())) {
+    flaggedFields.push("sj_date")
+    warnings.push(msg.invalidDate("sj_date", data.sj_date))
+  }
+
+  return { warnings, flaggedFields }
+}
+
 /**
  * Bilingual message catalog for the deterministic audit. Field names stay in
  * English (they are schema keys); the explanation text is localized.
@@ -608,6 +810,8 @@ const AUDIT_MESSAGES = {
       `${field} out of range: ${value} (expected ${min}-${max})`,
     notPositive: (field: string, value: number) =>
       `${field} must be greater than 0 (got ${value})`,
+    invalidDate: (field: string, value: string) =>
+      `${field} is not a valid date: ${value}`,
   },
   id: {
     productTotal: (stated: string, computed: string, diff: string) =>
@@ -634,6 +838,8 @@ const AUDIT_MESSAGES = {
       `${field} di luar rentang: ${value} (seharusnya ${min}-${max})`,
     notPositive: (field: string, value: number) =>
       `${field} harus lebih dari 0 (ditemukan ${value})`,
+    invalidDate: (field: string, value: string) =>
+      `${field} bukan tanggal yang valid: ${value}`,
   },
 }
 

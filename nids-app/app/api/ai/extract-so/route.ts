@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import {
   auditArithmetic,
+  auditDO,
+  extractDOFromFiles,
   extractSOFromFiles,
   validateFiles,
   // verifyExtraction, // LLM verifier — kept for future use if code checks
@@ -40,26 +42,48 @@ export async function POST(request: Request) {
       }))
     )
 
-    let knownTaxRates: Record<string, number> | undefined
-    const rawTaxRates = formData.get("tax_rates")
-    if (typeof rawTaxRates === "string" && rawTaxRates) {
-      try {
-        knownTaxRates = JSON.parse(rawTaxRates)
-      } catch {
-        // ignore malformed payload; extraction proceeds without known rates
-      }
-    }
-
-    const { data, raw } = await extractSOFromFiles(
-      extractedFiles,
-      (formData.get("supplier_name") as string | null) || null,
-      knownTaxRates
-    )
-
     // Deterministic code audit — instant, exact math, bilingual messages
     const codeStart = performance.now()
-    const { warnings: codeWarnings, flaggedFields: codeFlaggedFields } =
-      auditArithmetic(data, language)
+
+    // Document type: "so" (PO extraction, default) or "do" (Surat Jalan)
+    const docType = formData.get("doc_type") === "do" ? "do" : "so"
+    const supplierName = (formData.get("supplier_name") as string | null) || null
+
+    let data: object
+    let raw: string
+    let codeWarnings: string[]
+    let codeFlaggedFields: string[]
+
+    if (docType === "do") {
+      const result = await extractDOFromFiles(extractedFiles, supplierName)
+      data = result.data
+      raw = result.raw
+      const audit = auditDO(result.data, language)
+      codeWarnings = audit.warnings
+      codeFlaggedFields = audit.flaggedFields
+    } else {
+      let knownTaxRates: Record<string, number> | undefined
+      const rawTaxRates = formData.get("tax_rates")
+      if (typeof rawTaxRates === "string" && rawTaxRates) {
+        try {
+          knownTaxRates = JSON.parse(rawTaxRates)
+        } catch {
+          // ignore malformed payload; extraction proceeds without known rates
+        }
+      }
+
+      const result = await extractSOFromFiles(
+        extractedFiles,
+        supplierName,
+        knownTaxRates
+      )
+      data = result.data
+      raw = result.raw
+      const audit = auditArithmetic(result.data, language)
+      codeWarnings = audit.warnings
+      codeFlaggedFields = audit.flaggedFields
+    }
+
     const codeMs = Math.round(performance.now() - codeStart)
 
     // // LLM verifier — disabled for now (code audit covers the arithmetic

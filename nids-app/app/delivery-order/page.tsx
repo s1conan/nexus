@@ -38,6 +38,7 @@ import {
   ArrowUpAZ,
   ArrowDownZA,
   RefreshCw,
+  FileUp,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/number-input"
@@ -69,7 +70,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { cn, constructMultiWordSearch } from "@/lib/utils"
+import { cn, constructMultiWordSearch, formatBulletList } from "@/lib/utils"
+import { fuzzyScore } from "@/lib/fuzzy-match"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { previewNumberFormat } from "@/lib/doc-numbering"
@@ -77,6 +79,12 @@ import { RichTextEditor } from "@/components/rich-text-editor"
 import { LiveSearch } from "@/components/live-search"
 import { format } from "date-fns"
 import { generateStandardDeliveryOrderPDF } from "@/lib/pdf-generator"
+import {
+  DOAIImportDialog,
+  type DOImportMeta,
+} from "@/components/do-ai-import-dialog"
+import type { ExtractedDO } from "@/lib/ai-provider"
+import { autoMatchDO, type DOMatch } from "@/lib/do-auto-match"
 import dynamic from "next/dynamic"
 import { ButtonLoader } from "@/components/button-loader"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
@@ -84,6 +92,8 @@ import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
 const PAGE_SIZE = 50
+
+type FieldFlag = "low" | "warning"
 
 // Sentinel value for the SO field's "Fill SO later" option (so_id stays empty)
 const FILL_SO_LATER_VALUE = "__fill_later__"
@@ -170,6 +180,22 @@ export default function DeliveryOrdersPage() {
 
   // Numbering format from settings (for DO number label preview)
   const [doNumberFormat, setDoNumberFormat] = useState("DO/{YYYY}/{SEQ:3}")
+
+  // AI Import state
+  const [doImportOpen, setDoImportOpen] = useState(false)
+  const [isDraggingFile, setIsDraggingFile] = useState(false)
+  const [isProcessingImport, setIsProcessingImport] = useState(false)
+  const [fieldFlags, setFieldFlags] = useState<Record<string, FieldFlag>>({})
+  const dragCounter = useRef(0)
+
+  // Border/background classes marking AI-suspect fields on the existing
+  // controls — no wrapper elements, layout untouched
+  const flagClass = (...fields: (FieldFlag | undefined)[]) => {
+    const flag = fields.find(Boolean)
+    if (flag === "warning") return "border-red-500/60 bg-red-500/5"
+    if (flag === "low") return "border-amber-500/60 bg-amber-500/5"
+    return ""
+  }
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -427,6 +453,189 @@ export default function DeliveryOrdersPage() {
     }
   }
 
+  // Apply AI-extracted Surat Jalan data to a new DO form
+  const handleDOAIApply = (
+    data: ExtractedDO,
+    match: DOMatch,
+    meta?: DOImportMeta
+  ) => {
+    setDoImportOpen(false)
+    setEditingItem(null)
+    setViewOnly(false)
+
+    // Field marks: AI low confidence → amber; flagged fields → red (red wins)
+    const flags: Record<string, FieldFlag> = {}
+    for (const [field, level] of Object.entries(data.confidence ?? {})) {
+      if (level === "low") flags[field] = "low"
+    }
+    for (const field of data.flagged_fields ?? []) {
+      flags[field] = "warning"
+    }
+    setFieldFlags(flags)
+
+    // SO cascade when the document's PO number matches an Approved/Partial SO
+    if (match.so) {
+      handleSOSelect(match.so.id, {
+        ...match.so,
+        company: match.company ?? match.so.company,
+        product: match.product ?? match.so.product,
+      })
+      // The Surat Jalan quantity may differ from the SO total (partial delivery)
+      const soQty = data.quantity
+      if (soQty != null) {
+        setFormData((prev) => ({ ...prev, quantity: soQty }))
+      }
+    } else {
+      // No matching SO: direct fill + "Fill SO later"
+      handleSOSelect(FILL_SO_LATER_VALUE, null)
+      if (match.company) {
+        setFormData((prev) => ({ ...prev, company_id: match.company!.id }))
+        setSelectedCompanyInfo(match.company)
+      }
+      if (match.product) {
+        setFormData((prev) => ({ ...prev, product_id: match.product!.id }))
+        setSelectedProductInfo(match.product)
+      }
+      const directQty = data.quantity
+      if (directQty != null) {
+        setFormData((prev) => ({ ...prev, quantity: directQty }))
+      }
+      // Fuzzy-match the extracted address against the company's saved addresses
+      let deliveryAddress = data.delivery_address || ""
+      const companyDetails = match.company?.details as
+        | { addresses?: { label: string; address: string }[] }
+        | undefined
+      const savedAddresses = companyDetails?.addresses || []
+      if (deliveryAddress && savedAddresses.length > 0) {
+        const best = savedAddresses.reduce(
+          (acc, addr) => {
+            const score = Math.max(
+              fuzzyScore(deliveryAddress, addr.address),
+              fuzzyScore(addr.address, deliveryAddress)
+            )
+            return score > acc.score ? { addr, score } : acc
+          },
+          { addr: null as { label: string; address: string } | null, score: 0 }
+        )
+        if (best.addr && best.score >= 0.6) {
+          deliveryAddress = best.addr.address
+        }
+      }
+      setFormData((prev) => ({ ...prev, delivery_address: deliveryAddress }))
+    }
+
+    // Transporter / supplier origin
+    if (match.transporter) {
+      setFormData((prev) => ({
+        ...prev,
+        transporter_id: match.transporter!.id,
+      }))
+      setSelectedTransporterInfo(match.transporter)
+    }
+    if (match.supplier) {
+      setFormData((prev) => ({ ...prev, supplier_id: match.supplier!.id }))
+      setSelectedSupplierInfo({
+        supplier_id: match.supplier.id,
+        name: match.supplier.name,
+        current_stock: 0,
+      })
+    }
+
+    // Vehicle: selection creates the seal rows from the vehicle's seal count
+    const seals = data.seal_numbers ?? []
+    let overflowSeals: string[] = []
+    if (match.vehicle) {
+      handleVehicleSelect(match.vehicle.id, match.vehicle)
+      const expectedRows =
+        match.vehicle.number_of_seals ||
+        (Array.isArray(match.vehicle.compartments)
+          ? match.vehicle.compartments.length
+          : 0) ||
+        1
+      if (seals.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          compartment_details: prev.compartment_details.map((c, i) => ({
+            ...c,
+            seal_number: seals[i] ?? c.seal_number,
+          })),
+        }))
+        if (seals.length > expectedRows) {
+          overflowSeals = seals.slice(expectedRows)
+        }
+      }
+    } else if (seals.length > 0) {
+      overflowSeals = seals
+    }
+
+    // Driver + date + note (SJ number + overflow seals land in the note)
+    const noteParts: string[] = []
+    if (data.sj_number) {
+      noteParts.push(`${dict.IMPORT_DOC_SJ_NUMBER}: ${data.sj_number}`)
+    }
+    if (overflowSeals.length > 0) {
+      noteParts.push(`Seal numbers: ${overflowSeals.join(", ")}`)
+    }
+    setFormData((prev) => ({
+      ...prev,
+      driver_info: {
+        name: data.driver_name || prev.driver_info?.name || "",
+        phone: prev.driver_info?.phone || "",
+      },
+      do_date: data.sj_date || prev.do_date,
+      note: noteParts.length > 0
+        ? [prev.note, ...noteParts].filter(Boolean).join("<br/>")
+        : prev.note,
+    }))
+
+    // Warnings + timing info follow the data into BOTH paths (dialog apply
+    // and drag-drop shortcut) so the user always sees them
+    const warnings = Array.from(
+      new Set([...(data.warnings || []), ...(meta?.warnings ?? [])])
+    )
+    if (overflowSeals.length > 0 && match.vehicle) {
+      warnings.push(
+        lang === "id"
+          ? `Segel lebih banyak dari jumlah seal kendaraan — kelebihan dipindah ke catatan`
+          : `More seals than the vehicle's seal count — overflow moved to the note`
+      )
+    }
+    if (warnings.length > 0) {
+      notify.warning(
+        dict.IMPORT_DOC_WARNINGS,
+        formatBulletList(warnings),
+        12000
+      )
+    }
+    if (meta?.timings) {
+      const fmtDur = (ms: number) =>
+        ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
+      notify.info(
+        dict.IMPORT_DOC_TIMINGS,
+        dict
+          .IMPORT_DOC_TIMINGS_DETAIL.replace(
+            "%upload%",
+            fmtDur(meta.timings.upload_parse_ms)
+          )
+          .replace(
+            "%ai%",
+            fmtDur(
+              Math.max(
+                0,
+                meta.timings.total_ms -
+                  meta.timings.upload_parse_ms -
+                  meta.timings.code_ms
+              )
+            )
+          )
+          .replace("%verify%", fmtDur(meta.timings.code_ms))
+          .replace("%total%", fmtDur(meta.timings.total_ms))
+      )
+    }
+
+    setIsOpen(true)
+  }
+
   // Permission Checks
   const canView = hasPermission("delivery-order", "view")
   const canInsert = hasPermission("delivery-order", "insert")
@@ -454,6 +663,7 @@ export default function DeliveryOrdersPage() {
   // Open Dialog
   const handleOpenDialog = (item: any = null, isViewOnly = false) => {
     setViewOnly(isViewOnly)
+    setFieldFlags({}) // manual open/edit — no AI marks
     if (item) {
       setEditingItem(item)
       setSelectedCompanyInfo(item.company)
@@ -524,6 +734,81 @@ export default function DeliveryOrdersPage() {
       })
     }
     setIsOpen(true)
+  }
+
+  // Drag-and-drop shortcut: validate -> extract via AI -> auto-match -> open form
+  const handleDOAIImportFiles = async (incoming: File[]) => {
+    const allowed = ["application/pdf", "image/png", "image/jpeg", "image/webp"]
+    const valid = incoming.filter((f) => {
+      if (!allowed.includes(f.type)) {
+        notify.error(
+          dict.IMPORT_DOC_INVALID_TYPE_TITLE,
+          `${f.name}: ${dict.IMPORT_DOC_INVALID_TYPE_DESC}`
+        )
+        return false
+      }
+      if (f.size > 10 * 1024 * 1024) {
+        notify.error(
+          dict.IMPORT_DOC_TOO_LARGE_TITLE,
+          `${f.name}: ${dict.IMPORT_DOC_TOO_LARGE_DESC}`
+        )
+        return false
+      }
+      return true
+    })
+    if (valid.length === 0) return
+    if (valid.length > 4) {
+      notify.error(dict.IMPORT_DOC_TOO_LARGE_TITLE, dict.IMPORT_DOC_LIMITS)
+      return
+    }
+
+    setIsProcessingImport(true)
+    try {
+      const body = new FormData()
+      valid.forEach((file) => body.append("files", file))
+      // app_settings "company" category keys the supplier name as "name"
+      if (companyInfo?.name) {
+        body.append("supplier_name", companyInfo.name)
+      }
+      body.append("language", lang)
+      body.append("doc_type", "do")
+
+      const res = await fetch("/api/ai/extract-so", {
+        method: "POST",
+        body,
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error || dict.IMPORT_DOC_FAILED_DESC)
+      }
+
+      const data = json.data as ExtractedDO
+      // Code-audit flagged fields ride along on the data so handleDOAIApply
+      // can mark the corresponding form controls
+      data.flagged_fields = [
+        ...(data.flagged_fields ?? []),
+        ...(Array.isArray(json.code_flagged_fields)
+          ? json.code_flagged_fields
+          : []),
+      ]
+      const match = await autoMatchDO(supabase, data)
+
+      // Warnings + timings are surfaced inside handleDOAIApply (same as the
+      // dialog path)
+      handleDOAIApply(data, match, {
+        warnings: [
+          ...(Array.isArray(json.code_warnings) ? json.code_warnings : []),
+        ],
+        timings: json.timings ?? null,
+      })
+    } catch (err) {
+      notify.error(
+        dict.IMPORT_DOC_FAILED_TITLE,
+        err instanceof Error ? err.message : dict.IMPORT_DOC_FAILED_DESC
+      )
+    } finally {
+      setIsProcessingImport(false)
+    }
   }
 
   // Actions
@@ -1142,6 +1427,49 @@ export default function DeliveryOrdersPage() {
               )}
             />
           </Button>
+          <Button
+            variant={isDraggingFile ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setDoImportOpen(true)}
+            disabled={!canInsert || isProcessingImport}
+            title={dict.BUTTON_IMPORT_DOC}
+            className={cn(
+              "transition-all duration-150",
+              isDraggingFile &&
+                "scale-105 ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
+            )}
+            onDragEnter={(e) => {
+              e.preventDefault()
+              dragCounter.current += 1
+              if (canInsert && !isProcessingImport) setIsDraggingFile(true)
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              dragCounter.current -= 1
+              if (dragCounter.current <= 0) {
+                dragCounter.current = 0
+                setIsDraggingFile(false)
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              dragCounter.current = 0
+              setIsDraggingFile(false)
+              if (!canInsert || isProcessingImport) return
+              const dropped = Array.from(e.dataTransfer.files)
+              if (dropped.length > 0) handleDOAIImportFiles(dropped)
+            }}
+          >
+            {isProcessingImport ? (
+              <ButtonLoader />
+            ) : (
+              <FileUp data-icon="inline-start" />
+            )}
+            {isProcessingImport
+              ? dict.IMPORT_DOC_ANALYZING
+              : dict.BUTTON_IMPORT_DOC}
+          </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
               <Button
@@ -1223,6 +1551,9 @@ export default function DeliveryOrdersPage() {
                             <div className="flex-1">
                               <LiveSearch
                                 key="so-search"
+                                className={flagClass(
+                                  fieldFlags.po_number
+                                )}
                                 data={
                                   selectedPOInfo
                                     ? [
@@ -1320,6 +1651,7 @@ export default function DeliveryOrdersPage() {
                         <div className="grid gap-2">
                           <Label>{dict.LABEL_COMPANY_NAME}</Label>
                           <LiveSearch
+                            className={flagClass(fieldFlags.company_name)}
                             data={
                               selectedCompanyInfo ? [selectedCompanyInfo] : []
                             }
@@ -1379,6 +1711,9 @@ export default function DeliveryOrdersPage() {
                         <div className="grid gap-2">
                           <Label>{dict.LABEL_SKU}</Label>
                           <LiveSearch
+                            className={flagClass(
+                              fieldFlags.product_description
+                            )}
                             data={
                               selectedProductInfo ? [selectedProductInfo] : []
                             }
@@ -1469,6 +1804,9 @@ export default function DeliveryOrdersPage() {
                             </div>
                             <NumberInput
                               id="qty"
+                              containerClassName={flagClass(
+                                fieldFlags.quantity
+                              )}
                               value={formData.quantity}
                               onChange={(val) =>
                                 setFormData({ ...formData, quantity: val })
@@ -1534,6 +1872,7 @@ export default function DeliveryOrdersPage() {
                             <Label>{dict.LABEL_DO_DATE}</Label>
                             <Input
                               type="date"
+                              className={flagClass(fieldFlags.sj_date)}
                               value={formData.do_date}
                               onChange={(e) =>
                                 setFormData({
@@ -1591,7 +1930,12 @@ export default function DeliveryOrdersPage() {
                                 }
                                 disabled={isFromSO}
                               >
-                                <SelectTrigger className="h-12 w-full">
+                                <SelectTrigger
+                                className={cn(
+                                  "h-12 w-full",
+                                  flagClass(fieldFlags.delivery_address)
+                                )}
+                              >
                                   <SelectValue
                                     placeholder={dict.PLACEHOLDER_SELECT_ADDRESS}
                                   />
@@ -1622,7 +1966,10 @@ export default function DeliveryOrdersPage() {
                                   })
                                 }
                                 placeholder={dict.PLACEHOLDER_ENTER_ADDRESS}
-                                className="h-12"
+                                className={cn(
+                                  "h-12",
+                                  flagClass(fieldFlags.delivery_address)
+                                )}
                               />
                             )}
                           </div>
@@ -1630,6 +1977,9 @@ export default function DeliveryOrdersPage() {
                           <div className="grid gap-2">
                             <Label>{dict.LABEL_TRANSPORTER}</Label>
                             <LiveSearch
+                              className={flagClass(
+                                fieldFlags.transporter_name
+                              )}
                               data={
                                 selectedTransporterInfo
                                   ? [selectedTransporterInfo]
@@ -1684,6 +2034,7 @@ export default function DeliveryOrdersPage() {
                               {dict.LABEL_DRIVER_NAME}
                             </Label>
                             <LiveSearch
+                              className={flagClass(fieldFlags.driver_name)}
                               data={
                                 formData.driver_info?.name
                                   ? [
@@ -1927,6 +2278,7 @@ export default function DeliveryOrdersPage() {
                               <Car className="size-4" /> {dict.LABEL_VEHICLE}
                             </Label>
                             <LiveSearch
+                              className={flagClass(fieldFlags.vehicle_number)}
                               data={
                                 selectedVehicleInfo ? [selectedVehicleInfo] : []
                               }
@@ -2540,6 +2892,12 @@ export default function DeliveryOrdersPage() {
         </DialogContent>
       </Dialog>
 
+      <DOAIImportDialog
+        open={doImportOpen}
+        onOpenChange={setDoImportOpen}
+        onApply={handleDOAIApply}
+        supplierName={companyInfo?.name}
+      />
       <DeleteConfirmationDialog
         isOpen={deleteConfirm !== null}
         onOpenChange={(open) => !open && setDeleteConfirm(null)}

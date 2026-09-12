@@ -205,6 +205,7 @@ export const SITE_CONTENT = {
     IMPORT_DOC_ANALYZING: "Analyzing...",
     IMPORT_DOC_USE_DATA: "Use This Data",
     IMPORT_DOC_WARNINGS: "AI Warnings",
+    IMPORT_DOC_SJ_NUMBER: "Surat Jalan No.",
     IMPORT_DOC_TIMINGS: "Processing time",
     IMPORT_DOC_TIMINGS_DETAIL:
       "Upload %upload% · AI analysis %ai% · Verification %verify% · Total %total%",
@@ -833,6 +834,7 @@ export const SITE_CONTENT = {
     IMPORT_DOC_ANALYZING: "Menganalisis...",
     IMPORT_DOC_USE_DATA: "Gunakan Data Ini",
     IMPORT_DOC_WARNINGS: "Peringatan AI",
+    IMPORT_DOC_SJ_NUMBER: "No. Surat Jalan",
     IMPORT_DOC_TIMINGS: "Waktu proses",
     IMPORT_DOC_TIMINGS_DETAIL:
       "Unggah %upload% · Analisis AI %ai% · Verifikasi %verify% · Total %total%",
