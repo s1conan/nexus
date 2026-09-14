@@ -1290,10 +1290,12 @@ export default function InvoicePage() {
       ]
 
       // Build email HTML
+      // Use the name of the contact person whose email was selected
+      const selectedContact = doc.contacts?.find(
+        (c: any) => c.email && c.email === doc.customerEmail
+      )
       const customerName =
-        inv.company?.details?.contact_person ||
-        inv.company?.name ||
-        "Valued Customer"
+        selectedContact?.name || inv.company?.name || "Valued Customer"
       const issueDateStr = inv.issue_date
         ? new Date(inv.issue_date).toLocaleDateString("en-GB", {
             day: "2-digit",
@@ -1367,8 +1369,8 @@ export default function InvoicePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: doc.customerEmail,
-          cc: ccList,
-          bcc: bccList,
+          ...(ccList.length > 0 && { cc: ccList }),
+          ...(bccList.length > 0 && { bcc: bccList }),
           subject: `Invoice ${doc.title} - PT Anugerah Buana Sriwijaya`,
           html: emailHtml,
           attachments,

@@ -726,8 +726,8 @@ export default function PaymentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: doc.customerEmail,
-          cc: ccList,
-          bcc: bccList,
+          ...(ccList.length > 0 && { cc: ccList }),
+          ...(bccList.length > 0 && { bcc: bccList }),
           subject: `Payment Confirmation ${p.payment_number} - PT Anugerah Buana Sriwijaya`,
           html: emailHtml,
           attachments,

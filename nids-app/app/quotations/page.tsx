@@ -947,8 +947,12 @@ export default function QuotationsPage() {
       ]
 
       // Build email HTML
+      // Use the name of the contact person whose email was selected
+      const selectedContact = doc.contacts?.find(
+        (c: any) => c.email && c.email === doc.customerEmail
+      )
       const customerName =
-        q.contact_person || q.company?.name || "Valued Customer"
+        selectedContact?.name || q.company?.name || "Valued Customer"
       const quoteDate = q.quotation_date
         ? new Date(q.quotation_date).toLocaleDateString("en-GB", {
             day: "2-digit",
@@ -976,17 +980,17 @@ export default function QuotationsPage() {
         : ""
 
       const emailHtml = `<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff;">
-        <div style="background: #00955c; padding: 32px 40px; text-align: center;">
+        <div style="background: #dc2626; padding: 32px 40px; text-align: center;">
           <h1 style="color: #ffffff; font-size: 28px; margin: 0 0 4px 0; font-weight: 700; letter-spacing: -0.5px;">PT Anugerah Buana Sriwijaya</h1>
           <p style="color: rgba(255,255,255,0.9); font-size: 14px; margin: 0;">Industrial Fuel Distributor</p>
         </div>
         <div style="background: #f8fafc; padding: 20px 40px; border-bottom: 1px solid #e2e8f0; text-align: center;">
-          <span style="display: inline-block; background: #00955c; color: white; padding: 8px 24px; border-radius: 20px; font-size: 14px; font-weight: 600; letter-spacing: 0.5px;">QUOTATION</span>
+          <span style="display: inline-block; background: #dc2626; color: white; padding: 8px 24px; border-radius: 20px; font-size: 14px; font-weight: 600; letter-spacing: 0.5px;">QUOTATION</span>
         </div>
         <div style="padding: 40px;">
-          <p style="color: #1e293b; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">Dear <strong style="color: #00955c;">${customerName}</strong>,</p>
+          <p style="color: #1e293b; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">Dear <strong style="color: #dc2626;">${customerName}</strong>,</p>
           <p style="color: #475569; font-size: 15px; line-height: 1.7; margin: 0 0 20px 0;">Thank you for your interest in our products and services. Please find below the details of our quotation for your consideration.</p>
-          <div style="background: #f8fafc; border-radius: 8px; padding: 24px; margin: 24px 0; border-left: 4px solid #00955c;">
+          <div style="background: #f8fafc; border-radius: 8px; padding: 24px; margin: 24px 0; border-left: 4px solid #dc2626;">
             <h3 style="color: #1e293b; font-size: 16px; margin: 0 0 16px 0; font-weight: 600;">Quotation Details</h3>
             <table style="width: 100%; border-collapse: collapse;">
               <tr>
@@ -1026,8 +1030,8 @@ export default function QuotationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: doc.customerEmail,
-          cc: ccList,
-          bcc: bccList,
+          ...(ccList.length > 0 && { cc: ccList }),
+          ...(bccList.length > 0 && { bcc: bccList }),
           subject: `Quotation ${doc.title} - PT Anugerah Buana Sriwijaya`,
           html: emailHtml,
           attachments,

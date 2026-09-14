@@ -1218,10 +1218,12 @@ export default function DeliveryOrdersPage() {
       ]
 
       // Build email HTML
+      // Use the name of the contact person whose email was selected
+      const selectedContact = doc.contacts?.find(
+        (c: any) => c.email && c.email === doc.customerEmail
+      )
       const customerName =
-        doRecord.company?.details?.contact_person ||
-        doRecord.company?.name ||
-        "Valued Customer"
+        selectedContact?.name || doRecord.company?.name || "Valued Customer"
       const deliveryDate = doRecord.do_date
         ? new Date(doRecord.do_date).toLocaleDateString("en-GB", {
             day: "2-digit",
@@ -1304,8 +1306,8 @@ export default function DeliveryOrdersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: doc.customerEmail,
-          cc: ccList,
-          bcc: bccList,
+          ...(ccList.length > 0 && { cc: ccList }),
+          ...(bccList.length > 0 && { bcc: bccList }),
           subject: `Delivery Order ${doc.title} - PT Anugerah Buana Sriwijaya`,
           html: emailHtml,
           attachments,
