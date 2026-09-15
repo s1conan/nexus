@@ -1663,6 +1663,7 @@ export default function DeliveryOrdersPage() {
                                 .from("companies")
                                 .select("id, name, details")
                                 .contains("type", ["Customer"])
+                                .eq("is_active", true)
                                 .limit(8)
                               if (query) {
                                 const searchStr = constructMultiWordSearch(
@@ -1724,6 +1725,7 @@ export default function DeliveryOrdersPage() {
                               let q = supabase
                                 .from("products")
                                 .select("id, sku, name")
+                                .eq("is_active", true)
                                 .limit(8)
                               if (query) {
                                 const searchStr = constructMultiWordSearch(
@@ -1992,6 +1994,7 @@ export default function DeliveryOrdersPage() {
                                   .from("companies")
                                   .select("id, name")
                                   .contains("type", ["Transporter"])
+                                  .eq("is_active", true)
                                   .limit(8)
                                 if (query) {
                                   const searchStr = constructMultiWordSearch(
@@ -2200,6 +2203,7 @@ export default function DeliveryOrdersPage() {
                                   .from("companies")
                                   .select("id, name")
                                   .contains("type", ["Supplier"])
+                                  .eq("is_active", true)
                                   .order("name")
                                   .limit(8)
                                 if (query) {
@@ -2288,6 +2292,7 @@ export default function DeliveryOrdersPage() {
                                 let q = supabase
                                   .from("vehicles")
                                   .select("*")
+                                  .eq("is_active", true)
                                   .limit(8)
                                 if (query) {
                                   const searchStr = constructMultiWordSearch(

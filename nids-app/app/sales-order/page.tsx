@@ -1365,6 +1365,7 @@ export default function SalesOrdersPage() {
                               .from("companies")
                               .select("id, name, details")
                               .contains("type", ["Customer"])
+                              .eq("is_active", true)
                               .limit(8)
                             if (query) {
                               const searchStr = constructMultiWordSearch(
@@ -1429,6 +1430,7 @@ export default function SalesOrdersPage() {
                             let q = supabase
                               .from("products")
                               .select("id, sku, name")
+                              .eq("is_active", true)
                               .limit(8)
                             if (query) {
                               const searchStr = constructMultiWordSearch(

@@ -655,6 +655,7 @@ export default function DepositsPage() {
                               "id, name, contact_person:details->contact_person"
                             )
                             .contains("type", ["Supplier"])
+                            .eq("is_active", true)
                             .limit(8)
                           if (query) {
                             const searchStr = constructMultiWordSearch(query, [
@@ -705,6 +706,7 @@ export default function DepositsPage() {
                           let q = supabase
                             .from("products")
                             .select("id, sku, name")
+                            .eq("is_active", true)
                             .limit(8)
                           if (query) {
                             const searchStr = constructMultiWordSearch(query, [

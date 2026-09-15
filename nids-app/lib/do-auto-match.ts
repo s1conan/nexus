@@ -56,9 +56,19 @@ export async function autoMatchDO(
   }
 
   const [companiesRes, productsRes, vehiclesRes, soRes] = await Promise.all([
-    supabase.from("companies").select("id, name, details").contains("type", ["Customer"]),
-    supabase.from("products").select("id, sku, name"),
-    supabase.from("vehicles").select("id, license_number, number_of_seals, compartments"),
+    supabase
+      .from("companies")
+      .select("id, name, details")
+      .contains("type", ["Customer"])
+      .eq("is_active", true),
+    supabase
+      .from("products")
+      .select("id, sku, name")
+      .eq("is_active", true),
+    supabase
+      .from("vehicles")
+      .select("id, license_number, number_of_seals, compartments")
+      .eq("is_active", true),
     data.po_number
       ? supabase
           .from("sales_orders")

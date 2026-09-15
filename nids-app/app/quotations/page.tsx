@@ -1292,6 +1292,7 @@ export default function QuotationsPage() {
                               .from("companies")
                               .select("id, name, type, details")
                               .contains("type", ["Customer"])
+                              .eq("is_active", true)
                               .limit(8)
                             if (query) {
                               const searchStr = constructMultiWordSearch(
@@ -1389,6 +1390,7 @@ export default function QuotationsPage() {
                               let q = supabase
                                 .from("products")
                                 .select("id, sku, name, base_price")
+                                .eq("is_active", true)
                                 .limit(8)
                               if (query) {
                                 const searchStr = constructMultiWordSearch(

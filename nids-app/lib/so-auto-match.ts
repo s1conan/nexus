@@ -57,8 +57,9 @@ export async function autoMatchSO(
     supabase
       .from("companies")
       .select("id, name, nickname, details")
-      .contains("type", ["Customer"]),
-    supabase.from("products").select("id, sku, name"),
+      .contains("type", ["Customer"])
+      .eq("is_active", true),
+    supabase.from("products").select("id, sku, name").eq("is_active", true),
   ])
 
   if (data.company_name && companiesRes.data) {
