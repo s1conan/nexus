@@ -86,7 +86,10 @@ import { usePersistedState } from "@/hooks/use-persisted-state"
 import dynamic from "next/dynamic"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
-import { generateStandardInvoicePDF } from "@/lib/pdf-generator"
+import {
+  generateStandardInvoicePDF,
+  generateStandardDeliveryOrderPDF,
+} from "@/lib/pdf-generator"
 
 const PAGE_SIZE = 50
 
@@ -1288,6 +1291,73 @@ export default function InvoicePage() {
           content: (pdfDataUri as string).split(",")[1],
         },
       ]
+
+      // Attach Delivery Order PDF(s) when requested
+      if (doc.includeDOPdfs) {
+        const doRefs = Array.isArray(inv.do_refs) ? inv.do_refs : []
+        let doIds = doRefs
+          .map((r: any) => r.do_id)
+          .filter((id: any) => !!id)
+
+        // For SO-direct invoices (no do_refs), resolve DOs via the Sales Order
+        if (doIds.length === 0 && inv.so_id) {
+          const { data: soDos } = await supabase
+            .from("delivery_orders")
+            .select("id")
+            .eq("so_id", inv.so_id)
+          doIds = (soDos || []).map((d: any) => d.id).filter((id: any) => !!id)
+        }
+
+        if (doIds.length > 0) {
+          const { data: doRecords, error: doError } = await supabase
+            .from("delivery_orders")
+            .select(
+              "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, po_number, quantity, so_date, delivery_address), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
+            )
+            .in("id", doIds)
+          if (doError) {
+            notify.error("Failed to load Delivery Orders", doError.message)
+          } else if (doRecords && doRecords.length > 0) {
+            for (const doRecord of doRecords) {
+              try {
+                const doDataUri = await generateStandardDeliveryOrderPDF(
+                  companyInfo,
+                  doRecord,
+                  { save: false, output: "datauri" }
+                )
+                if (doDataUri) {
+                  attachments.push({
+                    filename: `DO - ${doRecord.company?.nickname || doRecord.company?.name || ""} - ${doRecord.do_number}.pdf`,
+                    content: (doDataUri as string).split(",")[1],
+                  })
+                }
+              } catch (doPdfErr: any) {
+                notify.error(
+                  `Failed to generate DO ${doRecord.do_number} PDF`,
+                  doPdfErr.message
+                )
+              }
+            }
+          }
+        } else {
+          notify.error(
+            "No Delivery Order found",
+            "No linked Delivery Order could be found for this invoice."
+          )
+        }
+      }
+
+      // Append any user-uploaded extra files (tax invoice, PO, scanned DO, etc.)
+      if (Array.isArray(doc.extraFiles) && doc.extraFiles.length > 0) {
+        for (const file of doc.extraFiles) {
+          if (file?.filename && file?.content) {
+            attachments.push({
+              filename: file.filename,
+              content: file.content,
+            })
+          }
+        }
+      }
 
       // Build email HTML
       // Use the name of the contact person whose email was selected
@@ -2758,6 +2828,12 @@ export default function InvoicePage() {
             download: "Download PDF",
             sendEmail: "Send to Customer",
             confirmEmail: "Are you sure you want to send this invoice to",
+          }}
+          attachmentOptions={{
+            enabled: true,
+            doRefs: Array.isArray(previewDoc.raw?.do_refs)
+              ? previewDoc.raw.do_refs
+              : [],
           }}
           onDownload={handleDownload}
           onSendEmail={handleSendEmail}

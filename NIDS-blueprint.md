@@ -47,6 +47,7 @@ Managing the money, partial billing, and funding.
 *   **Invoices:**
     *   Generated against Sales Orders or specific Delivery Orders.
     *   Inherits tax configuration through the propagation chain.
+    *   **Email Attachments:** When sending an invoice by email, the auto-generated invoice PDF is always attached, and the user can optionally add the auto-generated Delivery Order (DO) PDF(s) (resolved from linked DOs, or via the Sales Order for SO-direct invoices) plus any user-selected files (tax invoice, customer PO, scanned DO). Files are attached per-send only and never persisted to storage.
 *   **Payments & Verification:**
     *   Support for partial payments and installments.
     *   **Verification Workflow:** Payments move from Pending → Verified. Only Verified payments update the Invoice balance and status.
@@ -56,6 +57,7 @@ Managing the money, partial billing, and funding.
 Reducing manual work and increasing transparency.
 
 *   **Email Automation:** Automatic distribution of Quotations and Invoices to clients with configurable CC recipients.
+*   **Email Attachments:** Document emails support on-the-fly attachments—auto-generated PDFs (invoice, delivery order) and user-selected files—sent directly without persisting files to storage.
 *   **Document Verification (QR):** Every official document includes a QR code linking to `api/verify-document`, allowing third parties to verify the authenticity of a printed NIDS document.
 
 ## 7. Reporting & Analytics

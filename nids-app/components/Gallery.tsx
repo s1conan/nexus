@@ -15,6 +15,8 @@ import {
   Maximize,
   ArrowLeftRight,
   ArrowUpDown,
+  Paperclip,
+  X,
 } from "lucide-react"
 import {
   Dialog,
@@ -25,6 +27,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "./ui/button"
+import { Switch } from "./ui/switch"
 import { cn } from "@/lib/utils"
 import { notify } from "@/lib/notifications"
 import { pdfjs, Document, Page } from "react-pdf"
@@ -41,6 +44,11 @@ const PDF_OPTIONS = {
 
 import "react-pdf/dist/Page/AnnotationLayer.css"
 import "react-pdf/dist/Page/TextLayer.css"
+type ExtraAttachment = {
+  filename: string
+  content: string // Base64 encoded string
+}
+
 type Doc = {
   title: string
   description: string
@@ -52,6 +60,13 @@ type Doc = {
   ccEmails?: string
   bccEmails?: string
   raw?: any
+  extraFiles?: ExtraAttachment[]
+  includeDOPdfs?: boolean
+}
+
+type AttachmentOptions = {
+  enabled: boolean
+  doRefs?: { do_number: string }[]
 }
 
 type GalleryProps = {
@@ -68,6 +83,7 @@ type GalleryProps = {
     sendEmail: string
     confirmEmail: string
   }
+  attachmentOptions?: AttachmentOptions
   onDownload?: (doc: Doc) => void
   onSendEmail?: (doc: Doc) => Promise<void>
   onClose?: () => void
@@ -77,6 +93,7 @@ export default function Gallery({
   docs,
   initialIndex,
   labels,
+  attachmentOptions,
   onDownload,
   onSendEmail,
   onClose,
@@ -96,6 +113,11 @@ export default function Gallery({
   const [selectedEmail, setSelectedEmail] = useState("")
   const [ccEmails, setCcEmails] = useState("")
   const [bccEmails, setBccEmails] = useState("")
+
+  // Extra attachment state (only used when attachmentOptions.enabled)
+  const [includeDOPdfs, setIncludeDOPdfs] = useState(false)
+  const [extraFiles, setExtraFiles] = useState<ExtraAttachment[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // PDF State
   const [numPages, setNumPages] = useState<number | null>(null)
@@ -230,6 +252,8 @@ export default function Gallery({
       setSelectedEmail(availableContacts[0].email || "")
       setCcEmails(activeDoc.ccEmails || "")
       setBccEmails(activeDoc.bccEmails || "")
+      setIncludeDOPdfs(false)
+      setExtraFiles([])
       setIsEmailDialogOpen(true)
     } else {
       // Fallback to original behavior if no contacts array is provided
@@ -249,13 +273,40 @@ export default function Gallery({
     if (!activeDoc || !onSendEmail) return
     try {
       setIsSending(true)
-      await onSendEmail({ ...activeDoc, customerEmail: emailToUse, ccEmails, bccEmails })
+      await onSendEmail({
+        ...activeDoc,
+        customerEmail: emailToUse,
+        ccEmails,
+        bccEmails,
+        includeDOPdfs,
+        extraFiles,
+      })
     } catch (error) {
       console.error("Failed to send email:", error)
     } finally {
       setIsSending(false)
       setIsEmailDialogOpen(false)
     }
+  }
+
+  function addExtraFiles(fileList: FileList | null) {
+    if (!fileList) return
+    Array.from(fileList).forEach((file) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const result = reader.result as string
+        const content = result.split(",")[1] || ""
+        setExtraFiles((prev) => [
+          ...prev,
+          { filename: file.name, content },
+        ])
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  function removeExtraFile(idx: number) {
+    setExtraFiles((prev) => prev.filter((_, i) => i !== idx))
   }
 
   function handleZoomIn() {
@@ -586,6 +637,109 @@ export default function Gallery({
                 Comma-separated. These will be BCC&apos;d on this email.
               </span>
             </div>
+
+            {/* Extra Attachments (only when enabled) */}
+            {attachmentOptions?.enabled && (
+              <div className="mt-2 flex flex-col gap-2.5 border-t border-border/60 pt-3">
+                <label className="text-[10px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                  Attachments
+                </label>
+
+                {/* Invoice PDF is always attached */}
+                <div className="flex items-center gap-2 rounded border bg-muted/30 px-2 py-1.5">
+                  <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-xs">
+                    Invoice PDF{" "}
+                    <span className="text-muted-foreground/60">
+                      (attached automatically)
+                    </span>
+                  </span>
+                </div>
+
+                {/* Auto-generated Delivery Order PDF(s) */}
+                <div
+                  className={cn(
+                    "flex items-center justify-between gap-3 rounded border px-2 py-1.5",
+                    includeDOPdfs
+                      ? "border-primary/50 bg-primary/5"
+                      : "bg-muted/30"
+                  )}
+                >
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-xs font-medium">
+                      Delivery Order (DO) PDF
+                    </span>
+                    <span className="truncate text-[10px] text-muted-foreground/70">
+                      {attachmentOptions.doRefs &&
+                      attachmentOptions.doRefs.length > 0
+                        ? attachmentOptions.doRefs
+                            .map((r) => r.do_number)
+                            .join(", ")
+                        : "Auto-generate DO(s) linked to this invoice"}
+                    </span>
+                  </div>
+                  <Switch
+                    size="sm"
+                    checked={includeDOPdfs}
+                    onCheckedChange={setIncludeDOPdfs}
+                  />
+                </div>
+
+                {/* Uploaded files (tax invoice, customer PO, scanned DO) */}
+                <div className="flex flex-col gap-1.5">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      addExtraFiles(e.target.files)
+                      e.target.value = ""
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Paperclip className="size-3.5" />
+                    Add files (tax invoice, PO, scanned DO)
+                  </Button>
+                  <span className="text-[9px] text-muted-foreground/50">
+                    Files are attached to this email only and are not saved.
+                  </span>
+                </div>
+
+                {extraFiles.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {extraFiles.map((file, idx) => (
+                      <div
+                        key={`${file.filename}-${idx}`}
+                        className="flex items-center justify-between rounded border bg-muted/30 px-2 py-1"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                          <span className="truncate text-xs">
+                            {file.filename}
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-6 shrink-0"
+                          onClick={() => removeExtraFile(idx)}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
