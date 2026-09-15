@@ -1,7 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useMemo, startTransition } from "react"
-import { useDictionary } from "./dictionary-provider"
+import React, { useState, useEffect, useRef, startTransition } from "react"
 import { cn } from "@/lib/utils"
 
 interface NumberInputProps extends Omit<
@@ -18,6 +17,13 @@ interface NumberInputProps extends Omit<
   containerClassName?: string
 }
 
+// Inputs always use English (en-US) formatting: "." is the decimal separator
+// and "," is the thousand separator. Static display (labels, tables) keeps
+// using the Indonesian format via SITE_CONFIG.numberLocale elsewhere.
+const FORMAT_LOCALE = "en-US"
+const DECIMAL = "."
+const GROUP = ","
+
 export function NumberInput({
   value,
   onChange,
@@ -30,7 +36,6 @@ export function NumberInput({
   className,
   ...props
 }: NumberInputProps) {
-  const { config } = useDictionary()
   const [displayValue, setDisplayValue] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -40,27 +45,19 @@ export function NumberInput({
     value: "",
   })
 
+  // Whether zero should render as empty (initial state or after user clears the field)
+  const zeroAsEmptyRef = useRef(true)
+
   // Backward compatibility for badge prop
   const effectiveLeftBadge =
     leftBadge || (badge && badgePosition === "left" ? badge : null)
   const effectiveRightBadge =
     rightBadge || (badge && badgePosition === "right" ? badge : null)
 
-  const locale = config.numberLocale || "en-US"
-
-  // Robust separator detection
-  const separators = useMemo(() => {
-    const parts = new Intl.NumberFormat(locale).formatToParts(1111.1)
-    return {
-      decimal: parts.find((p) => p.type === "decimal")?.value || ".",
-      thousand: parts.find((p) => p.type === "group")?.value || ",",
-    }
-  }, [locale])
-
-  // Helper to format based on locale
+  // Helper to format based on the fixed input locale
   const formatValue = (num: number) => {
-    if (num === 0 && displayValue === "") return ""
-    return new Intl.NumberFormat(locale, {
+    if (num === 0 && zeroAsEmptyRef.current) return ""
+    return new Intl.NumberFormat(FORMAT_LOCALE, {
       maximumFractionDigits: 20,
     }).format(num)
   }
@@ -70,13 +67,18 @@ export function NumberInput({
     if (value !== undefined && value !== null) {
       const formatted = formatValue(value)
       // Only update if the formatted value differs from current display
-      // This prevents erasing user input while typing
       if (formatted !== displayValue) {
-        startTransition(() => { setDisplayValue(formatted) })
+        // Don't clobber in-progress typing: if the current display parses to
+        // the same value (e.g. "15." while value is 15), keep the user's input
+        // so the decimal separator they just typed isn't erased
+        const currentRaw = displayValue.replaceAll(GROUP, "")
+        const currentParsed = parseFloat(currentRaw)
+        if (isNaN(currentParsed) || currentParsed !== value) {
+          startTransition(() => { setDisplayValue(formatted) })
+        }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, locale, separators, displayValue])
+  }, [value, displayValue])
 
   // Restore cursor position after update
   useEffect(() => {
@@ -91,45 +93,53 @@ export function NumberInput({
   }, [displayValue])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Track cursor position against the raw DOM value (pre-normalization) so
+    // the cursor-diff calculation compares strings with the same comma
+    // structure as the formatted display, otherwise the cursor drifts when
+    // typing in the middle of a group-formatted number
+    const selectionStart = e.target.selectionStart
+    cursorRef.current = { position: selectionStart, value: e.target.value }
+
     let nextValue = e.target.value
 
-    // Allow both . and , as decimal separators for better UX, but normalize to locale
-    const otherDecimal = separators.decimal === "." ? "," : "."
-    if (nextValue.endsWith(otherDecimal)) {
-      nextValue = nextValue.slice(0, -1) + separators.decimal
-    }
-
-    // Track cursor position and current value before update
-    const selectionStart = e.target.selectionStart
-    cursorRef.current = { position: selectionStart, value: nextValue }
-
-    // Remove thousand separators for parsing
-    const rawNumber = nextValue
-      .replaceAll(separators.thousand, "")
-      .replace(separators.decimal, ".")
+    // Normalize commas. Grouping commas come from our own auto-formatting, so a
+    // comma followed by 3+ digits is a thousand separator and must be stripped
+    // (covers shifted positions too, e.g. "100,000" + typed "0" -> "100,0000").
+    // A trailing comma, or one followed by only 1-2 digits, is a typed decimal
+    // keystroke (e.g. "100," or "100,5") and is normalized to ".".
+    const firstComma = nextValue.indexOf(",")
+    const commaIsGrouping =
+      firstComma !== -1 && /^\d{3,}/.test(nextValue.slice(firstComma + 1))
+    nextValue = commaIsGrouping
+      ? nextValue.replaceAll(GROUP, "")
+      : nextValue.replaceAll(",", DECIMAL)
 
     if (nextValue === "") {
       onChange?.(0)
+      zeroAsEmptyRef.current = true
       setDisplayValue("")
       return
     }
+    zeroAsEmptyRef.current = false
 
     // Check if it's a valid number or a valid partial number (e.g. "1.", "1.0")
     // This regex allows digits, one decimal separator, and optional leading minus
-    const partialRegex = new RegExp(`^-?\\d*(\\${separators.decimal}\\d*)?$`)
-    const cleanValue = nextValue.replaceAll(separators.thousand, "")
+    const partialRegex = /^-?\d*(\.\d*)?$/
+    // Collapse redundant leading zeros ("05" -> "5", "00.5" -> "0.5"),
+    // but keep "0." so decimal values starting with zero still work
+    const cleanValue = nextValue.replace(/^(-?)0+(?=\d)/, "$10")
 
     if (partialRegex.test(cleanValue)) {
-      const parsed = parseFloat(rawNumber)
+      const parsed = parseFloat(cleanValue)
       if (!isNaN(parsed)) {
         onChange?.(parsed)
       }
 
       // Apply live formatting for thousand separators if there's no decimal separator currently
-      if (!cleanValue.includes(separators.decimal) && !isNaN(parsed)) {
+      if (!cleanValue.includes(DECIMAL) && !isNaN(parsed)) {
         setDisplayValue(formatValue(parsed))
       } else {
-        setDisplayValue(nextValue)
+        setDisplayValue(cleanValue)
       }
     }
   }
