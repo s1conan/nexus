@@ -352,7 +352,7 @@ function parseHtmlToComponents(htmlString: string): React.ReactNode[] {
 // Shared image opacity for all PDF documents — tweak in one place only.
 // WATERMARK: page background logo; STAMP: signature-area company stamp.
 const WATERMARK_OPACITY = 0.2
-const STAMP_OPACITY = 0.6
+const STAMP_OPACITY = 0.8
 
 const a4Styles = StyleSheet.create({
   page: {
@@ -450,10 +450,10 @@ const a4Styles = StyleSheet.create({
   },
   ttd: {
     position: "absolute",
-    top: 5,
-    left: 0,
-    width: 100,
-    height: 70,
+    top: 30,
+    left: 30,
+    width: 70,
+    height: 49,
     objectFit: "fill",
     objectPosition: "center",
   },
@@ -1121,7 +1121,7 @@ const QuotationDocument = ({
         <View style={{ display: "flex", justifyContent: "space-between" }}>
           <View style={a4Styles.signature}>
             <Text>Hormat Kami,</Text>
-            <Image src={company.logo_url} style={a4Styles.stamp} />
+            <Image src="/images/abs-stamp.png" style={a4Styles.stamp} />
             <Image src="/images/ttd-indah.png" style={a4Styles.ttd} />
             <Text style={{ fontWeight: "bold", marginTop: 5 }}>
               Indah Permatasari
@@ -1728,7 +1728,7 @@ const DeliveryOrderDocument = ({
             <Text style={a5Styles.signatureTitle}>Supplier</Text>
             <Text style={[a5Styles.signatureSpace]}></Text>
             <Text style={[a5Styles.signatureFooter, { borderTop: 0 }]}> </Text>
-            <Image src={company.logo_url} style={[a5Styles.stamp]} />
+            <Image src="/images/abs-stamp.png" style={[a5Styles.stamp]} />
             <Text style={[a5Styles.signatureFooter, { textAlign: "center" }]}>
               {company.name}
             </Text>
@@ -2519,7 +2519,7 @@ const InvoiceDocument = ({
             <Text>Hormat Kami,</Text>
             {data.digital_signature ? (
               <>
-                <Image src={company.logo_url} style={a4Styles.stamp} />
+                <Image src="/images/abs-stamp.png" style={a4Styles.stamp} />
                 <Image src="/images/ttd-indah.png" style={a4Styles.ttd} />
               </>
             ) : (
