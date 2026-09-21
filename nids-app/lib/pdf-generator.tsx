@@ -628,13 +628,11 @@ const QuotationDocument = ({
       ? 0
       : Math.round(data.base_price * (d.value / 100))
     const baseABS = isDirect ? directPrice : data.base_price - discountValue
-    const shrinkageAmount = isDirect
-      ? shrinkageEnabled
-        ? Math.round(directPrice * (Number(data.shrinkage) / 100))
-        : 0
-      : shrinkageEnabled
-        ? Math.round(data.base_price * (Number(data.shrinkage) / 100))
-        : 0
+    // Shrinkage tolerance is computed from the after-discount price
+    // ("Harga Setelah Diskon" row), not the pre-discount base price
+    const shrinkageAmount = shrinkageEnabled
+      ? Math.round(baseABS * (Number(data.shrinkage) / 100))
+      : 0
     return { d, isDirect, directPrice, discountValue, baseABS, shrinkageAmount }
   })
   const discountColumnWidth = Math.max(

@@ -16,6 +16,39 @@ interface SendEmailOptions {
   }[]
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/**
+ * Normalize a recipient field (string or array) into a clean list of addresses.
+ * Accepts comma/semicolon-separated strings, trims whitespace, drops empties.
+ */
+function normalizeRecipients(
+  value: string | string[] | undefined
+): string[] | undefined {
+  if (!value) return undefined
+  const list = Array.isArray(value) ? value : value.split(/[,;]/)
+  const cleaned = list.map((entry) => entry.trim()).filter(Boolean)
+  return cleaned.length > 0 ? cleaned : undefined
+}
+
+/**
+ * Validate recipients before sending. Throws immediately (halting the send)
+ * if any address is malformed, naming the field and the offending addresses.
+ */
+function validateRecipients(
+  field: "to" | "cc" | "bcc",
+  list: string[] | undefined
+) {
+  if (!list) return
+  const invalid = list.filter((entry) => !EMAIL_REGEX.test(entry))
+  if (invalid.length > 0) {
+    throw new Error(
+      `Invalid email address in "${field}": ${invalid.join(", ")}. ` +
+        `Each address must follow the format email@example.com.`
+    )
+  }
+}
+
 /**
  * Shared utility for sending emails via Resend.
  * This can be used in server-side routes or background jobs.
@@ -30,6 +63,17 @@ export async function sendEmail({
   category,
   attachments,
 }: SendEmailOptions) {
+  const toList = normalizeRecipients(to)
+  const ccList = normalizeRecipients(cc)
+  const bccList = normalizeRecipients(bcc)
+
+  if (!toList) {
+    throw new Error('Missing or empty recipient in "to".')
+  }
+  validateRecipients("to", toList)
+  validateRecipients("cc", ccList)
+  validateRecipients("bcc", bccList)
+
   const defaultFrom =
     category === "auth"
       ? process.env.RESEND_FROM_EMAIL_AUTH ||
@@ -39,9 +83,9 @@ export async function sendEmail({
   try {
     const { data, error } = await resend.emails.send({
       from: from || defaultFrom,
-      to,
-      cc,
-      bcc,
+      to: toList,
+      cc: ccList,
+      bcc: bccList,
       subject,
       html,
       attachments,
