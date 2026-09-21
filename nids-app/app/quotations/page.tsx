@@ -70,6 +70,7 @@ import {
 import { SectionLoader } from "@/components/section-loader"
 import { Checkbox } from "@/components/ui/checkbox"
 import { notify } from "@/lib/notifications"
+import { aiTranslate } from "@/lib/ai-translate"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { LiveSearch } from "@/components/live-search"
 import {
@@ -1049,7 +1050,7 @@ export default function QuotationsPage() {
         updateStatus(q.id, "Sent")
       } else throw new Error(result.error)
     } catch (err: any) {
-      notify.error("Failed to send email", err.message)
+      notify.error(dict.ERR_EMAIL_FAILED, err.message, aiTranslate(err.message))
     }
   }
 

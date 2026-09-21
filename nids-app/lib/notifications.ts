@@ -22,6 +22,41 @@ const dispatchNotification = (
   }
 }
 
+const dispatchNotificationUpdate = (id: string, description: string) => {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("nids-notification-update", {
+        detail: { id, description },
+      })
+    )
+  }
+}
+
+/**
+ * Replaces the description of an already-shown toast (and its notification
+ * history entry) once a translation promise resolves. Used together with
+ * aiTranslate: the original text is shown immediately, then swapped for the
+ * translated text when it arrives.
+ */
+const applyTranslation = (
+  toastId: string | number,
+  notificationId: string,
+  title: string,
+  translation: Promise<string> | string | undefined
+) => {
+  if (!translation) return
+  Promise.resolve(translation)
+    .then((translated) => {
+      if (!translated) return
+      // Sonner: re-invoking toast with the same id updates it in place
+      toast(title, { id: toastId, description: translated })
+      dispatchNotificationUpdate(notificationId, translated)
+    })
+    .catch(() => {
+      /* translation is best-effort; original text stays */
+    })
+}
+
 /**
  * Standardized Notification Utility for NIDS
  *
@@ -42,12 +77,33 @@ export const notify = {
     })
   },
 
-  error: (title: string, description?: string, duration = 7000) => {
-    dispatchNotification("error", title, description, false)
-    return toast.error(title, {
+  error: (
+    title: string,
+    description?: string,
+    translation?: Promise<string> | string,
+    duration = 7000
+  ) => {
+    const notificationId = Math.random().toString(36).substring(2, 9)
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("nids-notification", {
+          detail: {
+            id: notificationId,
+            type: "error",
+            title,
+            description: description || "",
+            timestamp: new Date().toISOString(),
+            isDb: false,
+          },
+        })
+      )
+    }
+    const toastId = toast.error(title, {
       description,
       duration,
     })
+    applyTranslation(toastId, notificationId, title, translation)
+    return toastId
   },
 
   warning: (title: string, description?: string, duration = 6000) => {

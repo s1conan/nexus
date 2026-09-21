@@ -56,6 +56,7 @@ import { Label } from "@/components/ui/label"
 import { cn, constructMultiWordSearch } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
+import { aiTranslate } from "@/lib/ai-translate"
 import { LiveSearch } from "@/components/live-search"
 import { format } from "date-fns"
 import { ButtonLoader } from "@/components/button-loader"
@@ -746,10 +747,8 @@ export default function PaymentsPage() {
         )
       } else throw new Error(result.error)
     } catch (err: unknown) {
-      notify.error(
-        "Failed to send email",
-        err instanceof Error ? err.message : String(err)
-      )
+      const message = err instanceof Error ? err.message : String(err)
+      notify.error(dict.ERR_EMAIL_FAILED, message, aiTranslate(message))
     }
   }
 
