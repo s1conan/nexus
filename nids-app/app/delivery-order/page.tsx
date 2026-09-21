@@ -70,10 +70,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { cn, constructMultiWordSearch, formatBulletList } from "@/lib/utils"
+import {
+  cn,
+  constructMultiWordSearch,
+  constructIdInFilter,
+  searchRelatedIds,
+  formatBulletList,
+} from "@/lib/utils"
 import { fuzzyScore } from "@/lib/fuzzy-match"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
+import { aiTranslate } from "@/lib/ai-translate"
 import { previewNumberFormat } from "@/lib/doc-numbering"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { LiveSearch } from "@/components/live-search"
@@ -277,14 +284,28 @@ export default function DeliveryOrdersPage() {
         query = query.order("created_at", { ascending: false })
 
         if (debouncedSearchQuery) {
-          const searchStr = constructMultiWordSearch(debouncedSearchQuery, [
+          // PostgREST or() does not support related fields (company.name,
+          // product.sku), so resolve them to ids and match via in() filters.
+          const [companyIds, productIds] = await Promise.all([
+            searchRelatedIds(supabase, "companies", debouncedSearchQuery, [
+              "name",
+            ]),
+            searchRelatedIds(supabase, "products", debouncedSearchQuery, [
+              "sku",
+            ]),
+          ])
+          const orConditions: string[] = []
+          const localSearch = constructMultiWordSearch(debouncedSearchQuery, [
             "do_number",
-            "company.name",
-            "product.sku",
             "driver_info->>name",
             "vehicle_number",
           ])
-          if (searchStr) query = query.or(searchStr)
+          if (localSearch) orConditions.push(localSearch)
+          const companyFilter = constructIdInFilter(companyIds, "company_id")
+          if (companyFilter) orConditions.push(companyFilter)
+          const productFilter = constructIdInFilter(productIds, "product_id")
+          if (productFilter) orConditions.push(productFilter)
+          if (orConditions.length > 0) query = query.or(orConditions.join(","))
         }
 
         // Pending PO filter: Delivered DOs without SO
@@ -370,8 +391,6 @@ export default function DeliveryOrdersPage() {
           .eq("supplier_id", formData.supplier_id)
           .eq("product_id", formData.product_id)
           .single()
-        console.log("data:", data)
-        console.log("error:", error)
         if (error && error.code !== "PGRST116") {
           console.error("Error fetching stock:", error)
         }
@@ -855,37 +874,10 @@ export default function DeliveryOrdersPage() {
         dbPayload.do_number = data
       }
 
-      // Auto-create an Accepted deposit BEFORE the DO row is written, so the
-      // inventory ledger has the IN entry before any OUT is booked (price
-      // starts at 0; corrected on the Deposits page).
-      let autoDeposit: {
-        created: boolean
-        deposit_number?: string
-      } | null = null
-      if (
-        dbPayload.supplier_id &&
-        dbPayload.product_id &&
-        (dbPayload.quantity || 0) > 0 &&
-        dbPayload.status !== "Cancelled"
-      ) {
-        const { data: depositNumber } = await supabase.rpc(
-          "generate_document_number",
-          { p_doc_type: "deposit", p_company_id: dbPayload.supplier_id }
-        )
-        const { data, error: autoDepositError } = await supabase.rpc(
-          "create_do_auto_deposit",
-          {
-            p_supplier_id: dbPayload.supplier_id,
-            p_product_id: dbPayload.product_id,
-            p_quantity: dbPayload.quantity,
-            p_deposit_number: depositNumber || null,
-            p_do_number: dbPayload.do_number,
-            p_do_date: dbPayload.do_date,
-          }
-        )
-        if (autoDepositError) throw autoDepositError
-        autoDeposit = data
-      }
+      // Auto-deposit sync (create on insufficient stock, quantity/pair/cancel
+      // mirroring, release on delete) is handled by the handle_do_inventory DB
+      // trigger, so it covers every write path including the status buttons.
+      // Price starts at 0; corrected on the Deposits page.
 
       if (editingItem) {
         const { error } = await supabase
@@ -960,13 +952,24 @@ export default function DeliveryOrdersPage() {
       }
 
       const docLabel = `[${dbPayload.do_number || formData.do_number}]`
-      const autoDepositNote = autoDeposit?.created
-        ? "\n" +
-          dict.MSG_AUTO_DEPOSIT_CREATED.replace(
-            "%data%",
-            `[${autoDeposit.deposit_number}]`
-          )
-        : ""
+      // On a brand-new DO, any auto-deposit tagged with this DO number was just
+      // created by the DB trigger — surface the "price is 0" hint.
+      let autoDepositNote = ""
+      if (!editingItem && dbPayload.do_number) {
+        const { data: newAutoDeposit } = await supabase
+          .from("deposits")
+          .select("deposit_number")
+          .eq("auto_source_do_number", dbPayload.do_number)
+          .limit(1)
+        if (newAutoDeposit && newAutoDeposit.length > 0) {
+          autoDepositNote =
+            "\n" +
+            dict.MSG_AUTO_DEPOSIT_CREATED.replace(
+              "%data%",
+              `[${newAutoDeposit[0].deposit_number}]`
+            )
+        }
+      }
       if (editingItem) {
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace("%data%", docLabel),
@@ -1326,7 +1329,7 @@ export default function DeliveryOrdersPage() {
         )
       } else throw new Error(result.error)
     } catch (err: any) {
-      notify.error("Failed to send email", err.message)
+      notify.error(dict.ERR_EMAIL_FAILED, err.message, aiTranslate(err.message))
     }
   }
 
