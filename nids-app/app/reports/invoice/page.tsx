@@ -108,7 +108,7 @@ export default function InvoiceReportPage() {
     return { totalAmount, count: filteredInvoices.length }
   }, [filteredInvoices])
 
-  const canViewReport = hasPermission("invoice", "view")
+  const canViewReport = hasPermission("invoice-report", "view")
 
   if (!canViewReport && !loading) {
     return (
@@ -129,7 +129,7 @@ export default function InvoiceReportPage() {
       <div className="page-header">
         <h1 className="page-title">
           <Receipt className="mr-2 inline-block size-5 text-primary" />
-          {dict.MENU_REPORTS_INVOICE || "Invoice Report"}
+          {dict.MENU_INVOICE || "Invoice Report"}
         </h1>
       </div>
 
@@ -185,7 +185,7 @@ export default function InvoiceReportPage() {
           </div>
         </div>
 
-        <div className="grid w-40 gap-1.5">
+        <div className="grid w-40 gap-1.5 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1">
           <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
             {dict.LABEL_FROM_DATE || "From"}
           </label>
@@ -200,7 +200,7 @@ export default function InvoiceReportPage() {
           </div>
         </div>
 
-        <div className="grid w-40 gap-1.5">
+        <div className="grid w-40 gap-1.5 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1">
           <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
             {dict.LABEL_TO_DATE || "To"}
           </label>

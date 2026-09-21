@@ -101,7 +101,7 @@ export default function ProfitLossReportPage() {
   const grossMargin = revenue > 0 ? (grossProfit / revenue) * 100 : 0
 
   // We are reusing invoice permission for P&L for now, or we can use 'inventory'
-  const canViewReport = hasPermission("invoice", "view")
+  const canViewReport = hasPermission("invoice-report", "view")
 
   if (!canViewReport && !loading) {
     return (

@@ -128,7 +128,7 @@ export default function DeliveryReportPage() {
     }
   }, [filteredOrders])
 
-  const canViewReport = hasPermission("delivery-order", "view")
+  const canViewReport = hasPermission("delivery-order-report", "view")
 
   if (!canViewReport && !loading) {
     return (
@@ -149,7 +149,7 @@ export default function DeliveryReportPage() {
       <div className="page-header">
         <h1 className="page-title">
           <Truck className="mr-2 inline-block size-5 text-primary" />
-          {dict.MENU_SHIPMENTS || "Delivery Report"}
+          {dict.MENU_DELIVERY_ORDER || "Delivery Report"}
         </h1>
       </div>
 
@@ -234,7 +234,7 @@ export default function DeliveryReportPage() {
           </div>
         </div>
 
-        <div className="grid w-40 gap-1.5">
+        <div className="grid w-40 gap-1.5 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1">
           <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
             {dict.LABEL_FROM_DATE || "From"}
           </label>
@@ -249,7 +249,7 @@ export default function DeliveryReportPage() {
           </div>
         </div>
 
-        <div className="grid w-40 gap-1.5">
+        <div className="grid w-40 gap-1.5 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1">
           <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
             {dict.LABEL_TO_DATE || "To"}
           </label>

@@ -39,7 +39,7 @@ export default function InventoryReportPage() {
   const [searchQuery, setSearchQuery] = useState("")
 
   // Permission Checks
-  const canViewValue = hasPermission("inventory", "print") // Permission to see financial values
+  const canViewValue = hasPermission("inventory-report", "print") // Permission to see financial values
 
   async function fetchInventory() {
     setLoading(true)

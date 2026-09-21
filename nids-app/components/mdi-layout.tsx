@@ -313,8 +313,41 @@ export function MdiLayout() {
     }
 
     window.addEventListener("nids-notification", handleNotification)
-    return () =>
+
+    // Update an existing notification's description (e.g. after AI translation)
+    const handleNotificationUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string; description: string }>
+      const { id, description } = customEvent.detail || {}
+      if (!id || typeof description !== "string") return
+
+      setNotifications((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, description } : item))
+      )
+      try {
+        const localNotifsStr = localStorage.getItem("nids_local_notifications")
+        if (localNotifsStr) {
+          const localNotifs = JSON.parse(localNotifsStr)
+          const updated = localNotifs.map((item: any) =>
+            item.id === id ? { ...item, description } : item
+          )
+          localStorage.setItem(
+            "nids_local_notifications",
+            JSON.stringify(updated)
+          )
+        }
+      } catch {
+        /* history update is best-effort */
+      }
+    }
+
+    window.addEventListener("nids-notification-update", handleNotificationUpdate)
+    return () => {
       window.removeEventListener("nids-notification", handleNotification)
+      window.removeEventListener(
+        "nids-notification-update",
+        handleNotificationUpdate
+      )
+    }
   }, [])
 
   const clearNotifications = () => {
@@ -853,15 +886,8 @@ export function MdiLayout() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isChangingPassword, setIsChangingPassword] = useState(false)
 
-  // Diagnostic Hook: log permissions for debugging
+  // Diagnostic Hook
   useEffect(() => {
-    console.log("MDI Layout: [DEBUG] User loaded:", user)
-    console.log("MDI Layout: [DEBUG] Profile loaded:", profile)
-    console.log(
-      "MDI Layout: [DEBUG] Resolved Permissions loaded:",
-      resolvedPermissions
-    )
-
     if (profile && resolvedPermissions) {
       if (lastToastedUserIdRef.current === profile.id) {
         return // Already logged for this profile load!
@@ -906,25 +932,28 @@ export function MdiLayout() {
         title: dict.MENU_REPORTS_INVENTORY || "Inventory Report",
         content: <InventoryReportPage />,
       },
-      shipments: { title: dict.MENU_SHIPMENTS, content: <ShipmentsPage /> },
+      shipments: {
+        title: dict.MENU_DELIVERY_ORDER,
+        content: <ShipmentsPage />,
+      },
       "report-deposit": {
-        title: dict.MENU_REPORTS_DEPOSIT,
+        title: dict.MENU_DEPOSIT,
         content: <DepositReportPage />,
       },
       "report-quotation": {
-        title: dict.MENU_REPORTS_QUOTATION,
+        title: dict.MENU_QUOTATION,
         content: <QuotationReportPage />,
       },
       "report-po": {
-        title: dict.MENU_REPORTS_SO || "Sales Order Report",
+        title: dict.MENU_SALES_ORDER,
         content: <SalesOrderReportPage />,
       },
       "report-invoice": {
-        title: dict.MENU_REPORTS_INVOICE,
+        title: dict.MENU_INVOICE,
         content: <InvoiceReportPage />,
       },
       "report-payments": {
-        title: dict.MENU_REPORTS_PAYMENTS,
+        title: dict.MENU_PAYMENTS,
         content: <PaymentsReportPage />,
       },
       "report-profit-loss": {
@@ -975,29 +1004,17 @@ export function MdiLayout() {
       <InventoryReportPage />
     )
   const handleOpenShipments = () =>
-    openTab("shipments", dict.MENU_SHIPMENTS, <ShipmentsPage />)
+    openTab("shipments", dict.MENU_DELIVERY_ORDER, <ShipmentsPage />)
   const handleOpenReportDeposit = () =>
-    openTab("report-deposit", dict.MENU_REPORTS_DEPOSIT, <DepositReportPage />)
+    openTab("report-deposit", dict.MENU_DEPOSIT, <DepositReportPage />)
   const handleOpenReportQuotation = () =>
-    openTab(
-      "report-quotation",
-      dict.MENU_REPORTS_QUOTATION,
-      <QuotationReportPage />
-    )
+    openTab("report-quotation", dict.MENU_QUOTATION, <QuotationReportPage />)
   const handleOpenReportSO = () =>
-    openTab(
-      "report-po",
-      dict.MENU_REPORTS_SO || "Sales Order Report",
-      <SalesOrderReportPage />
-    )
+    openTab("report-po", dict.MENU_SALES_ORDER, <SalesOrderReportPage />)
   const handleOpenReportInvoice = () =>
-    openTab("report-invoice", dict.MENU_REPORTS_INVOICE, <InvoiceReportPage />)
+    openTab("report-invoice", dict.MENU_INVOICE, <InvoiceReportPage />)
   const handleOpenReportPayments = () =>
-    openTab(
-      "report-payments",
-      dict.MENU_REPORTS_PAYMENTS,
-      <PaymentsReportPage />
-    )
+    openTab("report-payments", dict.MENU_PAYMENTS, <PaymentsReportPage />)
   const handleOpenReportProfitLoss = () =>
     openTab(
       "report-profit-loss",
@@ -1239,38 +1256,38 @@ export function MdiLayout() {
         {
           id: "shipments",
           icon: Truck,
-          label: dict.MENU_SHIPMENTS,
+          label: dict.MENU_DELIVERY_ORDER,
           action: handleOpenShipments,
         },
         {
           id: "report-deposit",
           icon: Banknote,
-          label: dict.MENU_REPORTS_DEPOSIT,
+          label: dict.MENU_DEPOSIT,
           action: handleOpenReportDeposit,
           separatorBefore: true,
         },
         {
           id: "report-quotation",
           icon: ClipboardList,
-          label: dict.MENU_REPORTS_QUOTATION,
+          label: dict.MENU_QUOTATION,
           action: handleOpenReportQuotation,
         },
         {
           id: "report-po",
           icon: ShoppingBag,
-          label: dict.MENU_REPORTS_SO,
+          label: dict.MENU_SALES_ORDER,
           action: handleOpenReportSO,
         },
         {
           id: "report-invoice",
           icon: Receipt,
-          label: dict.MENU_REPORTS_INVOICE,
+          label: dict.MENU_INVOICE,
           action: handleOpenReportInvoice,
         },
         {
           id: "report-payments",
           icon: Wallet,
-          label: dict.MENU_REPORTS_PAYMENTS,
+          label: dict.MENU_PAYMENTS,
           action: handleOpenReportPayments,
         },
         {
@@ -1323,13 +1340,14 @@ export function MdiLayout() {
       "delivery-order": ["delivery-order", "view"],
       invoice: ["invoice", "view"],
       payments: ["payments", "view"],
-      inventory: ["inventory", "view"],
-      shipments: ["shipments", "view"],
-      "report-deposit": ["deposit", "view"],
-      "report-quotation": ["quotation", "view"],
-      "report-po": ["sales-order", "view"],
-      "report-invoice": ["invoice", "view"],
-      "report-payments": ["payments", "view"],
+      inventory: ["inventory-report", "view"],
+      shipments: ["delivery-order-report", "view"],
+      "report-deposit": ["deposit-report", "view"],
+      "report-quotation": ["quotation-report", "view"],
+      "report-po": ["sales-order-report", "view"],
+      "report-invoice": ["invoice-report", "view"],
+      "report-payments": ["payments-report", "view"],
+      "report-profit-loss": ["invoice-report", "view"],
       users: ["users", "view"],
       settings: ["settings", "view"],
       "component-test": ["component-test", "view"],
