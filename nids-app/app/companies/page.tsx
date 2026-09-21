@@ -750,7 +750,7 @@ export default function CompaniesPage() {
                             }
                             disabled={viewOnly || !canEdit}
                           />
-                          <span className="text-[10px] font-bold uppercase text-muted-foreground">
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase">
                             {dict.LABEL_DIGITAL_SIGNATURE ||
                               "Digital Signature"}
                           </span>
@@ -1158,8 +1158,10 @@ export default function CompaniesPage() {
           <TableHeader>
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_NAME}</TableHead>
-              <TableHead>{dict.LABEL_TYPE}</TableHead>
-              <TableHead>{dict.LABEL_CONTACT_PERSON}</TableHead>
+              <TableHead className="max-md:hidden">{dict.LABEL_TYPE}</TableHead>
+              <TableHead className="max-md:hidden">
+                {dict.LABEL_CONTACT_PERSON}
+              </TableHead>
               <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
@@ -1200,41 +1202,63 @@ export default function CompaniesPage() {
                         }}
                       >
                         <TableCell className="py-3 font-medium">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-start gap-2">
                             <div
                               className={cn(
-                                "size-2 rounded-full",
+                                "mt-1.5 size-2 shrink-0 rounded-full",
                                 company.is_active
                                   ? "bg-green-500"
                                   : "bg-muted-foreground/30"
                               )}
                             />
-                            <div>
-                              <div>
-                                {company.name}{" "}
-                                {company.nickname && (
-                                  <span className="ml-1 text-muted-foreground">
-                                    ( {company.nickname} )
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="mt-1 flex items-center gap-2 text-xs font-normal text-muted-foreground">
-                                {details.email && (
-                                  <span className="flex items-center gap-1">
-                                    <Mail className="size-3" /> {details.email}
-                                  </span>
-                                )}
-                                {details.phone && (
-                                  <span className="flex items-center gap-1">
-                                    <Phone className="size-3" /> {details.phone}
-                                  </span>
-                                )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-nowrap items-center gap-2">
+                                <span className="block w-[85%] truncate">
+                                  {company.name}{" "}
+                                  {company.nickname && (
+                                    <span className="ml-1 text-muted-foreground">
+                                      ( {company.nickname} )
+                                    </span>
+                                  )}
+                                </span>
+                                <div className="ms-auto flex justify-end gap-1 md:hidden">
+                                  {(Array.isArray(company.type)
+                                    ? company.type
+                                    : [company.type]
+                                  ).map((t: string) => (
+                                    <span
+                                      key={t}
+                                      title={
+                                        t === "Customer"
+                                          ? dict.LABEL_TYPE_CUSTOMER
+                                          : t === "Supplier"
+                                            ? dict.LABEL_TYPE_SUPPLIER
+                                            : dict.LABEL_TYPE_TRANSPORTER
+                                      }
+                                      className={cn(
+                                        "rounded-md border p-1",
+                                        t === "Customer"
+                                          ? "border-blue-200 bg-blue-500/10 text-blue-600"
+                                          : t === "Supplier"
+                                            ? "border-amber-200 bg-amber-500/10 text-amber-600"
+                                            : "border-emerald-200 bg-emerald-500/10 text-emerald-600"
+                                      )}
+                                    >
+                                      {t === "Customer" ? (
+                                        <User className="size-3" />
+                                      ) : t === "Supplier" ? (
+                                        <Warehouse className="size-3" />
+                                      ) : (
+                                        <Truck className="size-3" />
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="max-md:hidden">
                           <div className="flex flex-wrap gap-2">
                             {(Array.isArray(company.type)
                               ? company.type
@@ -1269,7 +1293,7 @@ export default function CompaniesPage() {
                             ))}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="max-md:hidden">
                           <div className="text-sm">
                             {firstContact ? (
                               <div className="flex flex-col">

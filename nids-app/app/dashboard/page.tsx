@@ -19,6 +19,7 @@ import {
   Wallet,
 } from "lucide-react"
 import { formatNumber } from "@/lib/formatters"
+import { SectionLoader } from "@/components/section-loader"
 import { createClient } from "@/lib/supabase"
 import { format, startOfWeek, endOfWeek, addDays } from "date-fns"
 
@@ -217,25 +218,7 @@ export default function DashboardPage() {
   const visibleCards = cards.filter((c) => c.show)
 
   if (loading) {
-    return (
-      <div className="custom-scrollbar flex h-full flex-col gap-6 overflow-auto p-6">
-        <div className="flex items-center justify-between">
-          <h1 className="page-title">{dict.DASHBOARD_TITLE}</h1>
-        </div>
-        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader className="pb-2">
-                <div className="h-4 w-24 rounded bg-muted" />
-              </CardHeader>
-              <CardContent>
-                <div className="h-8 w-16 rounded bg-muted" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    )
+    return <SectionLoader className="min-h-[400px]" />
   }
 
   if (visibleCards.length === 0) {

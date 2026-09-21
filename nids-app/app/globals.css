@@ -285,19 +285,19 @@
 
 @layer components {
   .page-container {
-    @apply relative flex h-full max-h-[100%] flex-col gap-4 overflow-y-auto p-4;
+    @apply relative flex h-[94vh] flex-col gap-4 overflow-y-auto p-4;
   }
 
   .page-header {
-    @apply flex items-center justify-between;
+    @apply flex flex-wrap items-center justify-between gap-3;
   }
 
   .page-title {
-    @apply text-2xl font-bold tracking-tight;
+    @apply text-lg font-bold tracking-tight sm:text-2xl;
   }
 
   .action-bar {
-    @apply mb-2 flex items-center gap-4;
+    @apply mb-2 flex flex-wrap items-center gap-3 md:gap-4;
   }
 
   .login-background {
@@ -307,13 +307,13 @@
       transparent 0.5px
     );
     background-size: 24px 24px;
-    @apply relative flex min-h-screen w-full items-center justify-center p-4 md:p-8;
+    @apply relative flex min-h-dvh w-full items-center justify-center p-4 md:p-8;
   }
 
   .data-card {
     border: 1px solid var(--border);
     background: var(--card);
-    @apply min-h-[54vh] rounded-xl p-2 text-card-foreground shadow-sm select-none;
+    @apply h-full min-h-[41vh] rounded-xl p-2 text-card-foreground shadow-sm select-none;
   }
 
   .login-card {
@@ -384,6 +384,63 @@
 
   .animate-row-highlight {
     animation: row-highlight var(--row-highlight-duration) ease-out forwards;
+  }
+
+  /*
+   * Responsive tables inside .data-card.
+   * On small screens, each record becomes a wrapped block: the first cell
+   * (identity) takes a full line, remaining cells flow ~3 per line so users
+   * don't have to scroll far to the right. The header row is hidden since
+   * cells are grouped per record.
+   */
+  @media (max-width: 767px) {
+    .data-card [data-slot="table-container"] {
+      overflow-x: visible;
+    }
+
+    .data-card [data-slot="table"] {
+      display: block;
+      width: 100%;
+    }
+
+    .data-card [data-slot="table-header"] {
+      display: none;
+    }
+
+    .data-card [data-slot="table-body"] {
+      display: block;
+    }
+
+    .data-card [data-slot="table-body"] > [data-slot="table-row"] {
+      display: flex;
+      flex-wrap: wrap;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 0.5rem;
+      background-color: transparent;
+    }
+
+    .data-card [data-slot="table-cell"] {
+      display: block;
+      flex: 1 1 28%;
+      min-width: 0;
+      height: auto;
+      padding: 0.25rem 0.5rem;
+      border: 0;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      font-size: 0.75rem;
+    }
+
+    .data-card [data-slot="table-cell"]:first-child {
+      flex: 1 1 100%;
+      font-weight: 600;
+    }
+
+    .data-card [data-slot="table-cell"]:last-child {
+      flex: 1 1 100%;
+      text-align: right;
+    }
   }
 }
 

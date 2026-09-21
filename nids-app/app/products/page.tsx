@@ -348,7 +348,7 @@ export default function ProductsPage() {
                 {dict.TITLE_ADD_PRODUCT}
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-[350px]">
+            <DialogContent className="sm:w-[350px]">
               <DialogHeader>
                 <DialogTitle>
                   <Package className="mr-2 inline-block size-5" />

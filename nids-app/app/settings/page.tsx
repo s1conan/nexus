@@ -187,7 +187,6 @@ export default function SettingsPage() {
 
       if (!data || data.length === 0) {
         if (canEdit) {
-          console.log("Settings: Table empty, seeding default configs...")
           const defaultSeeds = [
             {
               category: "company",
@@ -850,7 +849,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 overflow-hidden bg-background p-6">
-      <div className="flex shrink-0 items-center justify-between border-b border-border/60 pb-4">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
             <Settings className="size-6" />
