@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -52,4 +53,31 @@ export function constructMultiWordSearch(query: string, columns: string[]) {
   })
 
   return columnFilters.join(",")
+}
+
+/**
+ * Builds a `column.in.(id1,id2,...)` filter for use inside an or() logic tree.
+ * PostgREST does not support related-table (dotted) fields such as
+ * `company.name` inside or()/and(), so related rows must be resolved to ids
+ * first and matched via a foreign-key `in()` filter instead.
+ */
+export function constructIdInFilter(ids: string[], column: string) {
+  return ids.length > 0 ? `${column}.in.(${ids.join(",")})` : ""
+}
+
+/**
+ * Resolves ids of rows in `table` where ANY of `columns` contains ALL words
+ * from `query`. Used together with constructIdInFilter to search across
+ * related tables, which or() logic trees do not support directly.
+ */
+export async function searchRelatedIds(
+  supabase: SupabaseClient,
+  table: string,
+  query: string,
+  columns: string[]
+): Promise<string[]> {
+  const searchStr = constructMultiWordSearch(query, columns)
+  if (!searchStr) return []
+  const { data } = await supabase.from(table).select("id").or(searchStr)
+  return ((data as { id: string }[] | null) || []).map((row) => row.id)
 }

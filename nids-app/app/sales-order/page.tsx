@@ -55,7 +55,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { cn, constructMultiWordSearch, formatBulletList } from "@/lib/utils"
+import {
+  cn,
+  constructMultiWordSearch,
+  constructIdInFilter,
+  searchRelatedIds,
+  formatBulletList,
+} from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 import { FundersDialog } from "@/components/funders-dialog"
@@ -354,12 +360,26 @@ export default function SalesOrdersPage() {
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
         if (debouncedSearchQuery) {
-          const searchStr = constructMultiWordSearch(debouncedSearchQuery, [
-            "so_number",
-            "company.name",
-            "product.sku",
+          // PostgREST or() does not support related fields (company.name,
+          // product.sku), so resolve them to ids and match via in() filters.
+          const [companyIds, productIds] = await Promise.all([
+            searchRelatedIds(supabase, "companies", debouncedSearchQuery, [
+              "name",
+            ]),
+            searchRelatedIds(supabase, "products", debouncedSearchQuery, [
+              "sku",
+            ]),
           ])
-          if (searchStr) query = query.or(searchStr)
+          const orConditions: string[] = []
+          const localSearch = constructMultiWordSearch(debouncedSearchQuery, [
+            "so_number",
+          ])
+          if (localSearch) orConditions.push(localSearch)
+          const companyFilter = constructIdInFilter(companyIds, "company_id")
+          if (companyFilter) orConditions.push(companyFilter)
+          const productFilter = constructIdInFilter(productIds, "product_id")
+          if (productFilter) orConditions.push(productFilter)
+          if (orConditions.length > 0) query = query.or(orConditions.join(","))
         }
 
         const { data, error } = await query

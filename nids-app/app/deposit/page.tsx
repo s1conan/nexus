@@ -57,7 +57,12 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { cn, constructMultiWordSearch } from "@/lib/utils"
+import {
+  cn,
+  constructMultiWordSearch,
+  constructIdInFilter,
+  searchRelatedIds,
+} from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { RichTextEditor } from "@/components/rich-text-editor"
@@ -174,11 +179,22 @@ export default function DepositsPage() {
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
         if (debouncedSearchQuery) {
-          const searchStr = constructMultiWordSearch(debouncedSearchQuery, [
+          // PostgREST or() does not support related fields (company.name),
+          // so resolve them to ids and match via in() filters.
+          const companyIds = await searchRelatedIds(
+            supabase,
+            "companies",
+            debouncedSearchQuery,
+            ["name"]
+          )
+          const orConditions: string[] = []
+          const localSearch = constructMultiWordSearch(debouncedSearchQuery, [
             "deposit_number",
-            "company.name",
           ])
-          if (searchStr) query = query.or(searchStr)
+          if (localSearch) orConditions.push(localSearch)
+          const companyFilter = constructIdInFilter(companyIds, "company_id")
+          if (companyFilter) orConditions.push(companyFilter)
+          if (orConditions.length > 0) query = query.or(orConditions.join(","))
         }
 
         const { data, error } = await query
@@ -445,7 +461,10 @@ export default function DepositsPage() {
       if (inUse) {
         notify.error(
           dict.MSG_DEPOSIT_DELETE_BLOCKED,
-          dict.MSG_DEPOSIT_INVENTORY_IN_USE.replace("%data%", `[${item.deposit_number}]`)
+          dict.MSG_DEPOSIT_INVENTORY_IN_USE.replace(
+            "%data%",
+            `[${item.deposit_number}]`
+          )
         )
         return
       }
@@ -1061,7 +1080,7 @@ export default function DepositsPage() {
                     {format(new Date(d.deposit_date), "dd MMM yyyy")}
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col text-right">
                       <span className="font-bold">
                         {new Intl.NumberFormat(
                           lang === "id" ? "id-ID" : "en-US"
@@ -1070,7 +1089,7 @@ export default function DepositsPage() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-semibold text-primary">
+                  <TableCell className="text-right font-semibold text-primary">
                     {new Intl.NumberFormat(lang === "id" ? "id-ID" : "en-US", {
                       style: "currency",
                       currency: "IDR",
@@ -1193,7 +1212,11 @@ export default function DepositsPage() {
           dict.MSG_DELETE_CONFIRM?.split("%data%")[0] ||
           "Are you sure you want to delete this deposit? This action cannot be undone."
         }
-        dataName={deleteConfirm ? `${deleteConfirm.deposit_number} - ${deleteConfirm.company_name}` : ""}
+        dataName={
+          deleteConfirm
+            ? `${deleteConfirm.deposit_number} - ${deleteConfirm.company_name}`
+            : ""
+        }
         confirmText={dict.BUTTON_DELETE || "Delete"}
         cancelText={dict.BUTTON_CANCEL || "Cancel"}
         variant="destructive"
