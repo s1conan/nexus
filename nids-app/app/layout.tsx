@@ -12,12 +12,28 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { LayoutWrapper } from "@/components/layout-wrapper"
 import { AuthProvider } from "@/components/auth-provider"
 import { Toaster } from "@/components/ui/sonner"
+import { PwaRegister } from "@/components/pwa-register"
 import { createServerSideClient } from "@/lib/supabase-server"
 import { Language, SITE_CONFIG } from "@/lib/site-content"
 
 export const metadata = {
   title: SITE_CONFIG.brandName,
   description: SITE_CONFIG.companyName,
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/icons/icon-192.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: SITE_CONFIG.brandName,
+    statusBarStyle: "default",
+  },
+}
+
+export const viewport = {
+  themeColor: "#3b82f6",
+  viewportFit: "cover",
 }
 
 export default async function RootLayout({
@@ -83,7 +99,7 @@ export default async function RootLayout({
         notoSans.variable
       )}
     >
-      <body className="min-h-screen bg-background font-sans antialiased">
+      <body className="min-h-dvh bg-background font-sans antialiased">
         <ThemeProvider>
           <DictionaryProvider initialLang={initialLang}>
             <AuthProvider
@@ -91,8 +107,9 @@ export default async function RootLayout({
               initialProfile={initialProfile}
             >
               <TooltipProvider>
-                <LayoutWrapper>{children}</LayoutWrapper>
-                <Toaster />
+              <LayoutWrapper>{children}</LayoutWrapper>
+              <PwaRegister />
+              <Toaster />
               </TooltipProvider>
             </AuthProvider>
           </DictionaryProvider>
