@@ -214,7 +214,16 @@ export default function SalesOrdersPage() {
     const baseTotal = formData.quantity * formData.unit_price
     const deliveryTotal = formData.quantity * formData.delivery_price_per_litre
     const discountAmount = baseTotal * ((formData.discount || 0) / 100)
-    const afterDiscount = baseTotal - discountAmount
+    // Shrinkage tolerance is computed from the after-discount price,
+    // matching the SO PDF ("Total Setelah Diskon & Susut")
+    const afterDiscountBase = baseTotal - discountAmount
+    const shrinkageAmount =
+      formData.shrinkage_in_price && formData.shrinkage_tolerance > 0
+        ? Math.round(
+            afterDiscountBase * ((formData.shrinkage_tolerance || 0) / 100)
+          )
+        : 0
+    const afterDiscount = afterDiscountBase + shrinkageAmount
     const subtotal = Math.max(0, afterDiscount + deliveryTotal)
     // Delivery fee is only ever taxed by PPN — other taxes (PBBKB, etc.)
     // are always computed on the product amount alone.
@@ -242,6 +251,7 @@ export default function SalesOrdersPage() {
       grandTotal,
       appliedTaxes,
       discountAmount,
+      shrinkageAmount,
     }
   }, [formData])
 

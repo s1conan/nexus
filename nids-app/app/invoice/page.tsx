@@ -135,9 +135,10 @@ function calculateBilledQuantity(doInfo: any): number {
 
 /**
  * Recomputes the invoice amounts from the row's joined DO/SO data using the
- * same quotation workflow as the PDF (base - discount + delivery; only PPN
- * includes the delivery fee in its base). Used so the list table always
- * matches the dialog/PDF even when the saved total_amount is stale.
+ * same quotation workflow as the PDF (base - discount + shrinkage tolerance
+ * + delivery; only PPN includes the delivery fee in its base). Used so the
+ * list table always matches the dialog/PDF even when the saved total_amount
+ * is stale.
  */
 function calculateInvoiceTotals(inv: any): {
   subtotal: number
@@ -150,7 +151,14 @@ function calculateInvoiceTotals(inv: any): {
   const deliveryPerLitre = soInfo?.delivery_price_per_litre || 0
   const discountPercent = soInfo?.discount || 0
   const basePrice = quantity * unitPrice
-  const afterDiscount = basePrice - basePrice * (discountPercent / 100)
+  const afterDiscountBase = basePrice - basePrice * (discountPercent / 100)
+  // Shrinkage tolerance builds on the after-discount price (SO PDF rule)
+  const shrinkageAmount =
+    soInfo?.shrinkage_in_price && Number(soInfo?.shrinkage_tolerance) > 0
+      ? afterDiscountBase *
+        ((Number(soInfo?.shrinkage_tolerance) || 0) / 100)
+      : 0
+  const afterDiscount = afterDiscountBase + shrinkageAmount
   const deliveryTotal = quantity * deliveryPerLitre
   const subtotal = Math.max(0, Math.round(afterDiscount + deliveryTotal))
   const deliveryTaxable =
@@ -410,7 +418,16 @@ export default function InvoicePage() {
     const deliveryTaxable = soInfo.delivery_taxable ?? false
     const basePrice = totalQty * unitPrice
     const discountAmount = basePrice * (discountPercent / 100)
-    const afterDiscount = basePrice - discountAmount
+    // Shrinkage tolerance builds on the after-discount price (SO PDF rule)
+    const afterDiscountBase = basePrice - discountAmount
+    const shrinkageAmount =
+      soInfo.shrinkage_in_price && Number(soInfo.shrinkage_tolerance) > 0
+        ? Math.round(
+            afterDiscountBase *
+              ((Number(soInfo.shrinkage_tolerance) || 0) / 100)
+          )
+        : 0
+    const afterDiscount = afterDiscountBase + shrinkageAmount
     const deliveryTotal = totalQty * deliveryRate
     const subtotal = Math.max(0, Math.round(afterDiscount + deliveryTotal))
 
@@ -440,6 +457,7 @@ export default function InvoicePage() {
       discountPercent,
       discountAmount,
       afterDiscount,
+      shrinkageAmount,
       deliveryRate,
       deliveryTotal,
       deliveryTaxable,
@@ -2237,6 +2255,31 @@ export default function InvoicePage() {
                                       - {SITE_CONFIG.currencySymbol}{" "}
                                       {Math.round(
                                         invoiceCalc.discountAmount
+                                      ).toLocaleString()}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Shrinkage Tolerance (in price) */}
+                                {invoiceCalc.shrinkageAmount !== 0 && (
+                                  <div className="flex items-center justify-between text-xs md:text-sm">
+                                    <div className="flex flex-col">
+                                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                                        {dict.LABEL_SHRINKAGE_TOLERANCE ||
+                                          "Shrinkage Tolerance"}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground md:text-xs">
+                                        {Number(
+                                          invoiceCalc.soInfo
+                                            ?.shrinkage_tolerance
+                                        ) || 0}
+                                        %
+                                      </span>
+                                    </div>
+                                    <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                                      + {SITE_CONFIG.currencySymbol}{" "}
+                                      {Math.round(
+                                        invoiceCalc.shrinkageAmount
                                       ).toLocaleString()}
                                     </span>
                                   </div>

@@ -1151,12 +1151,17 @@ const SalesOrderDocument = ({
   const subtotal = data.quantity * data.unit_price
   const shrinkageEnabled =
     !!data.shrinkage_in_price && Number(data.shrinkage_tolerance) > 0
-  const shrinkageAmount = shrinkageEnabled
-    ? Math.round(subtotal * (Number(data.shrinkage_tolerance) / 100))
-    : 0
-  const effectiveSubtotal = subtotal + shrinkageAmount
   const discountAmount = subtotal * (data.discount / 100)
-  const afterDiscount = effectiveSubtotal - discountAmount
+  // Shrinkage tolerance is computed from the after-discount price,
+  // matching the quotation PDF ("Toleransi Susut" builds on the
+  // discounted amount, not the pre-discount subtotal)
+  const afterDiscountBase = subtotal - discountAmount
+  const shrinkageAmount = shrinkageEnabled
+    ? Math.round(
+        afterDiscountBase * (Number(data.shrinkage_tolerance) / 100)
+      )
+    : 0
+  const afterDiscount = afterDiscountBase + shrinkageAmount
   const deliveryTotal = data.quantity * data.delivery_price_per_litre
   // Delivery fee is only ever taxed by PPN — other taxes (PBBKB, etc.)
   // are always computed on the product amount alone.
@@ -2073,7 +2078,15 @@ const InvoiceDocument = ({
   const basePrice = data.quantity * data.unit_price
   const discountPercent = data.discount_percent || 0
   const discountAmount = basePrice * (discountPercent / 100)
-  const afterDiscount = basePrice - discountAmount
+  // Shrinkage tolerance builds on the after-discount price (SO PDF rule)
+  const afterDiscountBase = basePrice - discountAmount
+  const shrinkageEnabled =
+    data.shrinkage_in_price && Number(data.shrinkage_tolerance) > 0
+  const shrinkageRaw = shrinkageEnabled
+    ? (afterDiscountBase * (Number(data.shrinkage_tolerance) || 0)) / 100
+    : 0
+  const shrinkageAmount = Math.round(shrinkageRaw)
+  const afterDiscount = afterDiscountBase + shrinkageAmount
   const deliveryTotal = data.quantity * data.delivery_price_per_litre
   const enabledTaxes = data.tax_details.filter((t) => t.enabled)
   const taxLines = enabledTaxes.map((t) => {
@@ -2128,14 +2141,21 @@ const InvoiceDocument = ({
       pricePerLitre: discountPerLitre,
       total: Math.round(discountAmount),
     })
-    // Only meaningful when a discount actually reduced the price — otherwise
-    // it would duplicate the product row above it
+    // "Harga Setelah Discount" is the discounted price BEFORE shrinkage is
+    // applied — shrinkage gets its own row below when enabled
     invoiceRows.push({
       desc: "Harga Setelah Discount",
       bold: true,
-      totalBold: true,
+      totalBold: !shrinkageEnabled,
       pricePerLitre: netPerLitre,
-      total: Math.round(afterDiscount),
+      total: Math.round(afterDiscountBase),
+    })
+  }
+  if (shrinkageEnabled && shrinkageAmount !== 0) {
+    invoiceRows.push({
+      desc: `Toleransi Susut (${formatNumber(data.shrinkage_tolerance ?? 0)}%)`,
+      qty: `${formatNumber(data.shrinkage_tolerance ?? 0)}%`,
+      total: shrinkageAmount,
     })
   }
   const oatRow: InvoiceRow = {
@@ -2662,10 +2682,18 @@ export async function generateStandardInvoicePDF(
   const deliveryPricePerLitre = soInfo?.delivery_price_per_litre || 0
   const discountPercent = soInfo?.discount || 0
   const basePrice = quantity * unitPrice
-  const discountAmount = basePrice * (discountPercent / 100)
+  const afterDiscountBase = basePrice - basePrice * (discountPercent / 100)
+  // Shrinkage tolerance builds on the after-discount price (SO PDF rule)
+  const shrinkageAmount =
+    soInfo?.shrinkage_in_price && Number(soInfo?.shrinkage_tolerance) > 0
+      ? afterDiscountBase *
+        ((Number(soInfo?.shrinkage_tolerance) || 0) / 100)
+      : 0
   const subtotal = Math.max(
     0,
-    Math.round(basePrice - discountAmount + quantity * deliveryPricePerLitre)
+    Math.round(
+      afterDiscountBase + shrinkageAmount + quantity * deliveryPricePerLitre
+    )
   )
   const doRefs = Array.isArray(inv.do_refs) ? inv.do_refs : []
 
