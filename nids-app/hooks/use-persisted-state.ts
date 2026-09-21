@@ -2,6 +2,12 @@
 
 import { useState, useEffect, useRef, startTransition } from "react"
 
+// All persisted state is namespaced with `nids_` so the logout / session
+// expiry cleanup in auth-provider clears filters along with the session.
+function toStorageKey(key: string) {
+  return `nids_persisted_${key}`
+}
+
 export function usePersistedState<T>(key: string, initialState: T) {
   // Use a ref to track if we've initialized from localStorage
   const isInitialized = useRef(false)
@@ -10,7 +16,10 @@ export function usePersistedState<T>(key: string, initialState: T) {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem(key)
+    const storageKey = toStorageKey(key)
+    // Migrate: drop any legacy unprefixed key from previous versions
+    localStorage.removeItem(key)
+    const saved = localStorage.getItem(storageKey)
     if (saved !== null) {
       try {
         startTransition(() => {
@@ -27,10 +36,11 @@ export function usePersistedState<T>(key: string, initialState: T) {
   useEffect(() => {
     if (!isInitialized.current) return
 
+    const storageKey = toStorageKey(key)
     if (state === undefined || state === null) {
-      localStorage.removeItem(key)
+      localStorage.removeItem(storageKey)
     } else {
-      localStorage.setItem(key, JSON.stringify(state))
+      localStorage.setItem(storageKey, JSON.stringify(state))
     }
   }, [key, state])
 

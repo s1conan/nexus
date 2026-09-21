@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase"
 import { useDictionary } from "./dictionary-provider"
 import { notify } from "@/lib/notifications"
 import { useSessionExpiry } from "@/hooks/use-session-expiry"
+import { FullPageLoader } from "@/components/full-page-loader"
 
 interface UserProfile {
   id: string
@@ -62,6 +63,7 @@ export function AuthProvider({
   const [user, setUser] = useState<any | null>(initialUser)
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile)
   const [loading, setLoading] = useState(!initialUser)
+  const [isSigningOut, setIsSigningOut] = useState(false)
   const [resolvedPermissions, setResolvedPermissions] = useState<any>(() => {
     if (initialProfile) {
       return (
@@ -92,6 +94,7 @@ export function AuthProvider({
   // clears the persisted session cookie/storage.
   const expireSession = useCallback(async () => {
     isManualSignOut.current = true
+    setIsSigningOut(true)
     try {
       Object.keys(localStorage).forEach((key) => {
         if (key.startsWith("nids_") && key !== "nids_pref_lang") {
@@ -113,8 +116,6 @@ export function AuthProvider({
   const getProfile = useCallback(
     async (userId: string) => {
       try {
-        console.log("Auth: [DEBUG] getProfile starting for:", userId)
-
         const fetchPromise = supabase
           .from("profiles")
           .select(`*, role_permissions ( permissions )`)
@@ -157,7 +158,6 @@ export function AuthProvider({
         }
 
         if (data) {
-          console.log("Auth: [DEBUG] Profile fetch success")
           const rawProfile = data as any
           const permissions =
             rawProfile.permissions ||
@@ -178,7 +178,6 @@ export function AuthProvider({
   const syncProfile = useCallback(
     async (userData: any, force = false) => {
       if (isSyncing.current && !force) {
-        console.log("Auth: [DEBUG] syncProfile already in progress, skipping")
         return
       }
 
@@ -189,15 +188,10 @@ export function AuthProvider({
         profile &&
         resolvedPermissions
       ) {
-        console.log("Auth: [DEBUG] User already synced, skipping")
         setLoading(false)
         return
       }
 
-      console.log(
-        "Auth: [DEBUG] syncProfile starting for:",
-        userData?.id || "null"
-      )
       isSyncing.current = true
 
       try {
@@ -211,15 +205,10 @@ export function AuthProvider({
             setProfile(p)
 
             if (p.preferred_language && !isUpdatingLang.current) {
-              console.log(
-                "Auth: [DEBUG] Syncing UI to DB preference:",
-                p.preferred_language
-              )
               setLanguage(p.preferred_language as any)
             }
           }
         } else {
-          console.log("Auth: [DEBUG] syncProfile clearing state")
           userRef.current = null
           lastSyncedUserId.current = null
           setUser(null)
@@ -243,7 +232,6 @@ export function AuthProvider({
       } finally {
         isSyncing.current = false
         setLoading(false)
-        console.log("Auth: [DEBUG] syncProfile finished")
       }
     },
     [getProfile, setLanguage, profile, resolvedPermissions]
@@ -257,7 +245,6 @@ export function AuthProvider({
         return
       }
 
-      console.log(`Auth: [DEBUG] changeLanguage to: "${newLang}"`)
       isUpdatingLang.current = true
       setLanguage(newLang)
 
@@ -286,14 +273,10 @@ export function AuthProvider({
     let mounted = true
 
     if (initialUser) {
-      console.log(
-        "Auth: [DEBUG] initialUser present, ensuring state consistency"
-      )
       // State is already initialized in useState, but we can verify refs
       userRef.current = initialUser
       lastSyncedUserId.current = initialUser.id
     } else {
-      console.log("Auth: [DEBUG] No initialUser, checking manual session...")
       supabase.auth
         .getUser()
         .then((res: any) => {
@@ -308,7 +291,6 @@ export function AuthProvider({
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
       if (!mounted) return
-      console.log(`Auth: [DEBUG] Event: ${event}`)
 
       if (
         event === "SIGNED_IN" ||
@@ -336,6 +318,7 @@ export function AuthProvider({
   const signOut = useCallback(async () => {
     try {
       isManualSignOut.current = true
+      setIsSigningOut(true)
       setUser(null)
       setProfile(null)
       setResolvedPermissions(null)
@@ -388,7 +371,14 @@ export function AuthProvider({
     ]
   )
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {isSigningOut && (
+        <FullPageLoader message={dict.MSG_LOGGING_OUT} />
+      )}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {

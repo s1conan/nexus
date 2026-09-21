@@ -374,20 +374,11 @@ export default function UsersPage() {
         phone: formattedPhone,
       }
 
-      console.log("Users: [DEBUG] Attempting update for ID:", editingUser.id)
-      console.log("Users: [DEBUG] Update payload:", updateData)
-
-      const { data, error, status, statusText } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .update(updateData)
         .eq("id", editingUser.id)
         .select()
-
-      console.log(
-        "Users: [DEBUG] Supabase response status:",
-        status,
-        statusText
-      )
 
       if (error) {
         console.error("Users: [DEBUG] Update error:", error)
@@ -399,7 +390,7 @@ export default function UsersPage() {
           "Users: [DEBUG] Update succeeded but no rows were affected. Check RLS policies."
         )
       } else {
-        console.log("Users: [DEBUG] Update successful, row affected:", data[0])
+        // Update succeeded
       }
 
       setIsDialogOpen(false)

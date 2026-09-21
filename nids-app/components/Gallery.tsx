@@ -195,7 +195,6 @@ export default function Gallery({
       if (!resizeObserverRef.current) {
         resizeObserverRef.current = new ResizeObserver(onResize)
         resizeObserverRef.current.observe(containerRef.current)
-        console.log("ResizeObserver attached in onPageLoadSuccess")
       }
     }
   }

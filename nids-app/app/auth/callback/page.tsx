@@ -44,7 +44,6 @@ function CallbackHandler() {
       }
 
       if (user) {
-        console.log("Auth Callback: User established, redirecting to:", next)
         router.push(next)
       } else {
         // If no session and no code, check if there's an error in the hash
@@ -54,7 +53,6 @@ function CallbackHandler() {
           router.push("/auth/auth-code-error")
         } else {
           // If we just landed here without any auth info
-          console.log("Auth Callback: No session found, redirecting home")
           router.push("/")
         }
       }

@@ -110,7 +110,6 @@ export default function LoginPage() {
     setIsSubmitting(true)
     setLoginError("")
     const input = username.toLowerCase().trim()
-    console.log("Login: Starting login process for:", input)
 
     const timeoutId = setTimeout(() => {
       setLoginError(dict.ERROR_TIMEOUT || "Request timed out.")
@@ -119,7 +118,6 @@ export default function LoginPage() {
 
     try {
       // 1. Find profile by username OR email
-      console.log("Login: Searching for profile record...")
       const lookup = () =>
         supabase
           .from("profiles")
@@ -163,7 +161,6 @@ export default function LoginPage() {
       }
 
       const emailToUse = profileRecord.email
-      console.log("Login: Profile found. Using email:", emailToUse)
 
       // 2. Sign In with resolved email
       const { data: authData, error: authError } =
@@ -180,8 +177,6 @@ export default function LoginPage() {
       }
 
       if (authData?.user) {
-        console.log("Login: Auth successful. User ID:", authData.user.id)
-
         // 3. Status Check (Using data from profile record)
         if (!profileRecord.is_active) {
           console.warn("Login: Account not active.")
@@ -212,7 +207,6 @@ export default function LoginPage() {
           .update(updateData)
           .eq("auth_id", authData.user.id)
 
-        console.log("Login: Redirecting...")
         router.push("/dashboard")
       }
     } catch (err) {

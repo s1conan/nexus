@@ -51,8 +51,6 @@ function SetupPasswordForm() {
         return
       }
 
-      console.log(`ResetPassword: Verifying application token...`)
-
       try {
         const response = await fetch("/api/auth/verify-token", {
           method: "POST",
@@ -71,10 +69,6 @@ function SetupPasswordForm() {
               : `Security link error: ${result.error}. Please ask your administrator to re-approve your account.`
           )
         } else {
-          console.log(
-            "ResetPassword: Application token verified for",
-            result.email
-          )
           // Determine if first login or reset based on URL or DB state if needed
           if (type === "recovery") setIsFirstLogin(false)
         }
