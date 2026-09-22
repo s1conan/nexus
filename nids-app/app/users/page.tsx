@@ -508,7 +508,7 @@ export default function UsersPage() {
                       <div className="flex items-center gap-3">
                         <div
                           className={cn(
-                            "size-2 rounded-full",
+                            "size-2 shrink-0 rounded-full",
                             u.is_active
                               ? "bg-green-500"
                               : "bg-muted-foreground/30"
@@ -517,10 +517,12 @@ export default function UsersPage() {
                         <span>{u.username}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="max-md:hidden text-xs text-muted-foreground">
                       {u.email}
                     </TableCell>
-                    <TableCell className="text-sm">{u.full_name}</TableCell>
+                    <TableCell className="max-md:hidden text-sm">
+                      {u.full_name}
+                    </TableCell>
                     <TableCell>
                       <span className="rounded-md bg-secondary/50 px-2 py-0.5 text-xs font-semibold capitalize">
                         {u.role}

@@ -16,9 +16,38 @@ function ThemeProvider({
       {...props}
     >
       <ThemeHotkey />
+      <ThemeColorSync />
       {children}
     </NextThemesProvider>
   )
+}
+
+const THEME_COLORS = {
+  light: "#f4f4f5",
+  dark: "#0f1720",
+}
+
+function ThemeColorSync() {
+  const { resolvedTheme } = useTheme()
+
+  React.useEffect(() => {
+    if (!resolvedTheme) return
+
+    const color =
+      resolvedTheme === "dark" ? THEME_COLORS.dark : THEME_COLORS.light
+
+    let metas = document.querySelectorAll('meta[name="theme-color"]')
+    if (metas.length === 0) {
+      const meta = document.createElement("meta")
+      meta.setAttribute("name", "theme-color")
+      document.head.appendChild(meta)
+      metas = document.querySelectorAll('meta[name="theme-color"]')
+    }
+
+    metas.forEach((meta) => meta.setAttribute("content", color))
+  }, [resolvedTheme])
+
+  return null
 }
 
 function isTypingTarget(target: EventTarget | null) {

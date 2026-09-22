@@ -155,8 +155,7 @@ function calculateInvoiceTotals(inv: any): {
   // Shrinkage tolerance builds on the after-discount price (SO PDF rule)
   const shrinkageAmount =
     soInfo?.shrinkage_in_price && Number(soInfo?.shrinkage_tolerance) > 0
-      ? afterDiscountBase *
-        ((Number(soInfo?.shrinkage_tolerance) || 0) / 100)
+      ? afterDiscountBase * ((Number(soInfo?.shrinkage_tolerance) || 0) / 100)
       : 0
   const afterDiscount = afterDiscountBase + shrinkageAmount
   const deliveryTotal = quantity * deliveryPerLitre
@@ -1314,9 +1313,7 @@ export default function InvoicePage() {
       // Attach Delivery Order PDF(s) when requested
       if (doc.includeDOPdfs) {
         const doRefs = Array.isArray(inv.do_refs) ? inv.do_refs : []
-        let doIds = doRefs
-          .map((r: any) => r.do_id)
-          .filter((id: any) => !!id)
+        let doIds = doRefs.map((r: any) => r.do_id).filter((id: any) => !!id)
 
         // For SO-direct invoices (no do_refs), resolve DOs via the Sales Order
         if (doIds.length === 0 && inv.so_id) {
@@ -1650,7 +1647,7 @@ export default function InvoicePage() {
 
   return (
     <div className="page-container">
-      <div className="page-header shrink-0">
+      <div className="page-header shrink-0 flex-row items-center justify-between">
         <h1 className="page-title flex items-center gap-2">
           <Receipt className="size-5 text-primary" />
           {dict.MENU_INVOICE || "Invoices"}
@@ -1674,12 +1671,17 @@ export default function InvoicePage() {
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
               <Button
-                size="sm"
+                size="icon"
                 onClick={() => handleOpenDialog()}
                 disabled={!canInsert}
+                title={dict.BUTTON_NEW_INVOICE || "New Invoice"}
+                aria-label={dict.BUTTON_NEW_INVOICE || "New Invoice"}
+                className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
               >
-                <Plus data-icon="inline-start" />
-                {dict.BUTTON_NEW_INVOICE || "New Invoice"}
+                <Plus className="size-4" />
+                <span className="hidden md:inline">
+                  {dict.BUTTON_NEW_INVOICE || "New Invoice"}
+                </span>
               </Button>
             </DialogTrigger>
             <DialogContent className="overflow-hidden sm:max-w-3xl">
@@ -2143,7 +2145,7 @@ export default function InvoicePage() {
                             {/* Delivery Progress — SO mode */}
                             {sourceMode === "so" && (
                               <div className="space-y-1.5 border-b pb-3">
-                                <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
+                                <div className="font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
                                   {dict.LABEL_DELIVERY_PROGRESS ||
                                     "Delivery Progress"}
                                 </div>
@@ -2156,11 +2158,9 @@ export default function InvoicePage() {
                                     {soDOs.map((d: any) => (
                                       <div
                                         key={d.id}
-                                        className="flex items-center justify-between text-xs md:text-sm"
+                                        className="flex items-center justify-between text-[11px] md:text-sm"
                                       >
-                                        <span className="font-mono">
-                                          {d.do_number}
-                                        </span>
+                                        <span className="">{d.do_number}</span>
                                         <span className="flex items-center gap-2">
                                           <span className="font-mono">
                                             {Number(
@@ -2168,7 +2168,7 @@ export default function InvoicePage() {
                                             ).toLocaleString()}{" "}
                                             L
                                           </span>
-                                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase">
+                                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 font-bold text-muted-foreground uppercase">
                                             {d.status}
                                           </span>
                                         </span>
@@ -2394,7 +2394,7 @@ export default function InvoicePage() {
                       <Label className="text-base font-semibold">
                         {dict.LABEL_BANK_ACCOUNTS || "Bank Accounts"}
                       </Label>
-                      <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-3 md:grid md:grid-cols-2">
                         {availableBanks.map((bank: any, idx) => {
                           const isSelected = formData.bank_accounts.some(
                             (b: any) => b.account_number === bank.account_number
@@ -2423,14 +2423,20 @@ export default function InvoicePage() {
                               />
                               <Label
                                 htmlFor={`bank-${idx}`}
-                                className="flex w-full cursor-pointer flex-col gap-1 text-sm leading-tight font-normal"
+                                className="md:flex-start flex w-full cursor-pointer flex-col gap-1 text-sm leading-tight font-normal"
                               >
-                                <span className="font-semibold">
-                                  {bank.name} - {bank.branch}
+                                <div className="flex gap-4">
+                                  <span className="font-semibold">
+                                    {bank.name}
+                                  </span>
+                                  <span className="">
+                                    {bank.account_number}
+                                  </span>
+                                </div>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {bank.branch}
                                 </span>
-                                <span className="text-muted-foreground">
-                                  {bank.account_number} a/n {bank.account_name}
-                                </span>
+                                <span> {bank.account_name}</span>
                               </Label>
                             </div>
                           )
@@ -2470,8 +2476,8 @@ export default function InvoicePage() {
       </div>
 
       {/* Action bar and Sort Settings - exact copy style of Quotation page */}
-      <div className="action-bar flex shrink-0 flex-col items-start gap-4 sm:flex-row sm:items-center">
-        <div className="relative w-full max-w-sm flex-1">
+      <div className="action-bar shrink-0">
+        <div className="relative w-full min-w-0 flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -2481,7 +2487,7 @@ export default function InvoicePage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-9 w-full sm:w-[180px]">
+          <SelectTrigger className="h-9 w-32 shrink-0">
             <SelectValue placeholder={dict.LABEL_STATUS} />
           </SelectTrigger>
           <SelectContent>
@@ -2496,9 +2502,15 @@ export default function InvoicePage() {
 
         <Dialog open={isSortOpen} onOpenChange={setIsSortOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9">
-              <ArrowUpDown className="mr-2 size-4" />
-              Sort
+            <Button
+              variant="outline"
+              size="icon"
+              title="Sort"
+              aria-label="Sort"
+              className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+            >
+              <ArrowUpDown className="size-4" />
+              <span className="hidden md:inline">Sort</span>
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
@@ -2635,22 +2647,56 @@ export default function InvoicePage() {
                     }}
                   >
                     <TableCell className="font-medium">
-                      <div className="font-mono text-sm font-bold">
-                        {i.invoice_number}
-                      </div>
-                      {Array.isArray(i.do_refs) && i.do_refs.length > 0 && (
-                        <div
-                          className="max-w-[220px] truncate font-mono text-[11px] text-muted-foreground"
-                          title={i.do_refs
-                            .map((r: any) => r.do_number)
-                            .join(", ")}
-                        >
-                          DO:{" "}
-                          {i.do_refs.map((r: any) => r.do_number).join(", ")}
+                      {/* Mobile: stacked layout */}
+                      <div className="flex flex-col gap-1.5 md:hidden">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-sm font-bold">
+                            {i.invoice_number}
+                          </span>
+                          <span
+                            className={cn(
+                              "inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                              statusStyles[displayStatus] || statusStyles.Draft
+                            )}
+                          >
+                            {displayStatus}
+                          </span>
                         </div>
-                      )}
+                        <span className="truncate text-xs">
+                          {i.company?.name || "-"}
+                        </span>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="shrink-0 text-muted-foreground">
+                            {format(new Date(i.issue_date), "dd MMM yyyy")}
+                          </span>
+                          <span className="shrink-0 font-medium text-destructive">
+                            {format(new Date(i.due_date), "dd MMM yyyy")}
+                          </span>
+                          <span className="shrink-0 font-mono font-bold">
+                            {SITE_CONFIG.currencySymbol}{" "}
+                            {amounts.grandTotal.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Desktop */}
+                      <div className="hidden md:block">
+                        <div className="font-mono text-sm font-bold">
+                          {i.invoice_number}
+                        </div>
+                        {Array.isArray(i.do_refs) && i.do_refs.length > 0 && (
+                          <div
+                            className="max-w-[220px] truncate font-mono text-[11px] text-muted-foreground"
+                            title={i.do_refs
+                              .map((r: any) => r.do_number)
+                              .join(", ")}
+                          >
+                            DO:{" "}
+                            {i.do_refs.map((r: any) => r.do_number).join(", ")}
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="max-md:hidden">
                       <div>{i.company?.name || "-"}</div>
                       {i.po?.product && (
                         <div
@@ -2663,7 +2709,7 @@ export default function InvoicePage() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center max-md:hidden">
                       <div className="text-xs">
                         {dict.LABEL_ISSUE_DATE?.split(" ")[0] || "Issue"}:{" "}
                         {format(new Date(i.issue_date), "dd MMM yyyy")}
@@ -2673,7 +2719,7 @@ export default function InvoicePage() {
                         {format(new Date(i.due_date), "dd MMM yyyy")}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right max-md:hidden">
                       <div className="font-mono font-bold">
                         {SITE_CONFIG.currencySymbol}{" "}
                         {amounts.grandTotal.toLocaleString()}
@@ -2687,7 +2733,7 @@ export default function InvoicePage() {
                         Qty: {Number(i.quantity || 0).toLocaleString()} L
                       </div>
                     </TableCell>
-                    <TableCell className="text-center align-middle">
+                    <TableCell className="text-center align-middle max-md:hidden">
                       <span
                         className={cn(
                           "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",

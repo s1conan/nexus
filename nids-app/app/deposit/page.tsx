@@ -589,7 +589,7 @@ export default function DepositsPage() {
   return (
     <div className="page-container">
       {/* Page Header */}
-      <div className="page-header shrink-0">
+      <div className="page-header shrink-0 flex-row items-center justify-between">
         <h1 className="page-title">
           <CirclePile className="mr-2 inline-block size-5 text-primary" />
           {dict.MENU_DEPOSIT}
@@ -613,12 +613,17 @@ export default function DepositsPage() {
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
               <Button
-                size="sm"
+                size="icon"
                 onClick={() => handleOpenDialog()}
                 disabled={!canInsert}
+                title={dict.BUTTON_NEW_DEPOSIT}
+                aria-label={dict.BUTTON_NEW_DEPOSIT}
+                className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
               >
-                <Plus data-icon="inline-start" />
-                {dict.BUTTON_NEW_DEPOSIT}
+                <Plus className="size-4" />
+                <span className="hidden md:inline">
+                  {dict.BUTTON_NEW_DEPOSIT}
+                </span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-2xl">
@@ -995,7 +1000,7 @@ export default function DepositsPage() {
       </div>
 
       <div className="action-bar shrink-0">
-        <div className="relative w-full max-w-sm flex-1">
+        <div className="relative w-full min-w-0 flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -1057,29 +1062,58 @@ export default function DepositsPage() {
                   }}
                 >
                   <TableCell className="font-medium">
-                    {d.deposit_number}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium">
-                        {d.company?.name || "-"}
-                      </span>
-                      {d.company?.contact_person && (
-                        <span className="text-[10px] text-muted-foreground">
-                          {d.company.contact_person}
+                    {/* Mobile: stacked layout */}
+                    <div className="flex flex-col gap-1.5 md:hidden">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{d.deposit_number}</span>
+                        <span
+                          className={cn(
+                            "inline-flex items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                            statusStyles[d.status] || statusStyles.Pending
+                          )}
+                        >
+                          {d.status}
                         </span>
-                      )}
+                      </div>
+                      <span>{d.company?.name || "-"}</span>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-mono font-bold">
+                          {new Intl.NumberFormat(
+                            lang === "id" ? "id-ID" : "en-US"
+                          ).format(d.qty_liter)}{" "}
+                          L
+                        </span>
+                        <span className="font-mono text-muted-foreground">
+                          {new Intl.NumberFormat(
+                            lang === "id" ? "id-ID" : "en-US",
+                            { style: "currency", currency: "IDR" }
+                          ).format(d.price_per_liter || 0)}
+                        </span>
+                        <span className="font-mono font-semibold text-primary">
+                          {new Intl.NumberFormat(
+                            lang === "id" ? "id-ID" : "en-US",
+                            { style: "currency", currency: "IDR" }
+                          ).format(d.total_amount)}
+                        </span>
+                      </div>
                     </div>
+                    {/* Desktop */}
+                    <span className="hidden md:inline">{d.deposit_number}</span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="max-md:hidden">
+                    <span className="font-medium">
+                      {d.company?.name || "-"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="max-md:hidden">
                     <span className="font-mono text-xs">
                       {d.product?.sku || "-"}
                     </span>
                   </TableCell>
-                  <TableCell className="text-center text-sm text-muted-foreground">
+                  <TableCell className="text-center text-sm text-muted-foreground max-md:hidden">
                     {format(new Date(d.deposit_date), "dd MMM yyyy")}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="max-md:hidden">
                     <div className="flex flex-col text-right">
                       <span className="font-bold">
                         {new Intl.NumberFormat(
@@ -1089,13 +1123,13 @@ export default function DepositsPage() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-semibold text-primary">
+                  <TableCell className="text-right font-semibold text-primary max-md:hidden">
                     {new Intl.NumberFormat(lang === "id" ? "id-ID" : "en-US", {
                       style: "currency",
                       currency: "IDR",
                     }).format(d.total_amount)}
                   </TableCell>
-                  <TableCell className="text-center align-middle">
+                  <TableCell className="text-center align-middle max-md:hidden">
                     <div
                       className={cn(
                         "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",

@@ -610,7 +610,7 @@ export default function CompaniesPage() {
 
   return (
     <div className="page-container">
-      <div className="page-header shrink-0">
+      <div className="page-header shrink-0 flex-row items-center justify-between">
         <h1 className="page-title">
           <Building2 className="mr-2 inline-block size-6 text-primary" />
           {dict.TITLE_COMPANIES}
@@ -633,9 +633,18 @@ export default function CompaniesPage() {
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => handleOpenDialog()} disabled={!canInsert}>
-                <Plus data-icon="inline-start" />
-                {dict.TITLE_ADD_COMPANY}
+              <Button
+                size="icon"
+                onClick={() => handleOpenDialog()}
+                disabled={!canInsert}
+                title={dict.TITLE_ADD_COMPANY}
+                aria-label={dict.TITLE_ADD_COMPANY}
+                className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+              >
+                <Plus className="size-4" />
+                <span className="hidden md:inline">
+                  {dict.TITLE_ADD_COMPANY}
+                </span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[700px]">
@@ -1021,12 +1030,30 @@ export default function CompaniesPage() {
                         {formData.addresses.map((addr, index) => (
                           <div
                             key={index}
-                            className="group/addr flex items-end gap-2"
+                            className="group/addr flex flex-col gap-2 border-t border-border/40 pt-3 first:border-t-0 first:pt-0 md:flex-row md:items-end md:gap-2 md:border-t-0 md:pt-0"
                           >
-                            <div className="flex w-[140px] shrink-0 flex-col gap-1.5">
-                              <Label className="text-xs font-bold text-muted-foreground">
-                                {dict.LABEL_ADDRESS_LABEL}
-                              </Label>
+                            <div className="flex w-full flex-col gap-1.5 md:w-[140px] md:shrink-0">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs font-bold text-muted-foreground">
+                                  {dict.LABEL_ADDRESS_LABEL}
+                                </Label>
+                                {/* Delete (mobile only) */}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className={cn(
+                                    "size-7 transition-colors md:hidden",
+                                    formData.addresses.length > 1
+                                      ? "text-destructive hover:bg-destructive/10"
+                                      : "text-muted-foreground/20"
+                                  )}
+                                  disabled={formData.addresses.length <= 1}
+                                  onClick={() => removeAddress(index)}
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
+                              </div>
                               <Input
                                 value={addr.label}
                                 onChange={(e) =>
@@ -1058,7 +1085,7 @@ export default function CompaniesPage() {
                               variant="ghost"
                               size="icon"
                               className={cn(
-                                "size-9 shrink-0 transition-colors",
+                                "hidden size-9 shrink-0 transition-colors md:inline-flex",
                                 formData.addresses.length > 1
                                   ? "text-destructive hover:bg-destructive/10"
                                   : "text-muted-foreground/20"
@@ -1124,8 +1151,8 @@ export default function CompaniesPage() {
         </div>
       </div>
 
-      <div className="action-bar flex shrink-0 flex-col items-start gap-4 sm:flex-row sm:items-center">
-        <div className="relative w-full max-w-sm flex-1 max-sm:w-full">
+      <div className="action-bar shrink-0">
+        <div className="relative min-w-0 w-full flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -1136,7 +1163,7 @@ export default function CompaniesPage() {
         </div>
 
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-full sm:w-[180px]">
+          <SelectTrigger className="h-9 w-36 shrink-0">
             <SelectValue placeholder={dict.LABEL_TYPE} />
           </SelectTrigger>
           <SelectContent>

@@ -494,8 +494,7 @@ export default function QuotationsPage() {
         closing_remarks: item.closing_remarks || "",
         is_closing_enabled: item.is_closing_enabled ?? true,
         discounts: (item.discounts || []).map((d: any) => {
-          const isDirect =
-            Number(d.direct_price) > 0 || Number(d.value) > 100
+          const isDirect = Number(d.direct_price) > 0 || Number(d.value) > 100
           return {
             label: d.label || "",
             value: isDirect ? 0 : d.value || 0,
@@ -1185,7 +1184,12 @@ export default function QuotationsPage() {
     const taxTotal = appliedTaxes.reduce((sum, t) => sum + t.amount, 0)
     const grandTotal = subtotal + taxTotal + deliveryTotal
     return { subtotal, taxTotal, grandTotal, appliedTaxes }
-  }, [formData.base_price, formData.delivery_taxable, formData.tax_details, formData.discounts])
+  }, [
+    formData.base_price,
+    formData.delivery_taxable,
+    formData.tax_details,
+    formData.discounts,
+  ])
 
   if (!canView && !loading && !authLoading) {
     return (
@@ -1206,7 +1210,7 @@ export default function QuotationsPage() {
 
   return (
     <div className="page-container">
-      <div className="page-header shrink-0">
+      <div className="page-header shrink-0 flex-row items-center justify-between">
         <h1 className="page-title flex items-center gap-2">
           <ClipboardList className="size-5 text-primary" />
           {dict.MENU_QUOTATION}
@@ -1229,12 +1233,17 @@ export default function QuotationsPage() {
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
               <Button
-                size="sm"
+                size="icon"
                 onClick={() => handleOpenDialog()}
                 disabled={!canInsert}
+                title={dict.BUTTON_NEW_QUOTATION}
+                aria-label={dict.BUTTON_NEW_QUOTATION}
+                className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
               >
-                <Plus data-icon="inline-start" />
-                {dict.BUTTON_NEW_QUOTATION}
+                <Plus className="size-4" />
+                <span className="hidden md:inline">
+                  {dict.BUTTON_NEW_QUOTATION}
+                </span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-3xl">
@@ -1522,33 +1531,31 @@ export default function QuotationsPage() {
                         </div> */}
                         <div className="grid gap-2">
                           <Label htmlFor="shrinkage">
-{dict.LABEL_SHRINKAGE_TOLERANCE}
-                              <Switch
-                                id="shrinkage-in-price"
-                                size="sm"
-                                checked={formData.shrinkage_in_price}
-                                onCheckedChange={(val) =>
-                                  setFormData({
-                                    ...formData,
-                                    shrinkage_in_price: val,
-                                  })
-                                }
-                              />
-
+                            {dict.LABEL_SHRINKAGE_TOLERANCE}
+                            <Switch
+                              id="shrinkage-in-price"
+                              size="sm"
+                              checked={formData.shrinkage_in_price}
+                              onCheckedChange={(val) =>
+                                setFormData({
+                                  ...formData,
+                                  shrinkage_in_price: val,
+                                })
+                              }
+                            />
                           </Label>
 
-                              <NumberInput
-                                id="shrinkage"
-                                value={formData.shrinkage_tolerance}
-                                onChange={(val) =>
-                                  setFormData({
-                                    ...formData,
-                                    shrinkage_tolerance: val,
-                                  })
-                                }
-                                rightBadge="%"
-                              />
-
+                          <NumberInput
+                            id="shrinkage"
+                            value={formData.shrinkage_tolerance}
+                            onChange={(val) =>
+                              setFormData({
+                                ...formData,
+                                shrinkage_tolerance: val,
+                              })
+                            }
+                            rightBadge="%"
+                          />
                         </div>
                         <div className="grid gap-2">
                           <Label>
@@ -1597,101 +1604,107 @@ export default function QuotationsPage() {
                               key={i}
                               className="space-y-2 border-b pb-3 last:border-0"
                             >
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  className="h-9 w-5/20"
-                                  placeholder={dict.LABEL_DISCOUNT_TERM1}
-                                  value={d.label}
-                                  onChange={(e) => {
-                                    const newD = [...formData.discounts]
-                                    newD[i].label = e.target.value
-                                    setFormData({
-                                      ...formData,
-                                      discounts: newD,
-                                    })
-                                  }}
-                                />
-                                <Input
-                                  className="h-9 w-5/20"
-                                  placeholder={dict.LABEL_DISCOUNT_TERM2}
-                                  value={d.delivery_address}
-                                  onChange={(e) => {
-                                    const newD = [...formData.discounts]
-                                    newD[i].delivery_address = e.target.value
-                                    setFormData({
-                                      ...formData,
-                                      discounts: newD,
-                                    })
-                                  }}
-                                />
-                                <div className="w-5/20 shrink-0">
-                                  <NumberInput
-                                    value={
-                                      Number(d.direct_price) > 0
-                                        ? Number(d.direct_price)
-                                        : Number(d.value)
-                                    }
-                                    onChange={(val) => {
+                              <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
+                                {/* term - syarat */}
+                                <div className="flex items-center gap-2 md:contents">
+                                  <Input
+                                    className="h-9 w-5/20 min-w-24 shrink-0 md:flex-none md:shrink-0"
+                                    placeholder={dict.LABEL_DISCOUNT_TERM1}
+                                    value={d.label}
+                                    onChange={(e) => {
                                       const newD = [...formData.discounts]
-                                      // Small values are treated as a discount %,
-                                      // large values as a direct price (Rp/L).
-                                      if (val > 100) {
-                                        newD[i].direct_price = val
-                                        newD[i].value = 0
-                                      } else {
-                                        newD[i].value = val
-                                        newD[i].direct_price = 0
+                                      newD[i].label = e.target.value
+                                      setFormData({
+                                        ...formData,
+                                        discounts: newD,
+                                      })
+                                    }}
+                                  />
+                                  <Input
+                                    className="h-9 w-5/20 min-w-0 flex-1 md:flex-none md:shrink-0"
+                                    placeholder={dict.LABEL_DISCOUNT_TERM2}
+                                    value={d.delivery_address}
+                                    onChange={(e) => {
+                                      const newD = [...formData.discounts]
+                                      newD[i].delivery_address = e.target.value
+                                      setFormData({
+                                        ...formData,
+                                        discounts: newD,
+                                      })
+                                    }}
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="shrink-0 text-destructive md:order-last"
+                                    onClick={() =>
+                                      setFormData({
+                                        ...formData,
+                                        discounts: formData.discounts.filter(
+                                          (_, idx) => idx !== i
+                                        ),
+                                      })
+                                    }
+                                  >
+                                    <MinusCircle className="size-4" />
+                                  </Button>
+                                </div>
+                                {/* percentage - price/L */}
+                                <div className="flex items-center gap-2 md:contents">
+                                  <div className="w-5/20 min-w-24 shrink-0 md:w-3/20 md:flex-none md:shrink-0">
+                                    <NumberInput
+                                      value={
+                                        Number(d.direct_price) > 0
+                                          ? Number(d.direct_price)
+                                          : Number(d.value)
                                       }
-                                      setFormData({
-                                        ...formData,
-                                        discounts: newD,
-                                      })
-                                    }}
-                                    leftBadge={
-                                      Number(d.direct_price) > 0
-                                        ? SITE_CONFIG.currencySymbol
-                                        : undefined
-                                    }
-                                    rightBadge={
-                                      Number(d.direct_price) <= 0 &&
-                                      Number(d.value) > 0
-                                        ? "%"
-                                        : undefined
-                                    }
-                                    className="h-9"
-                                  />
+                                      onChange={(val) => {
+                                        const newD = [...formData.discounts]
+                                        // Small values are treated as a discount %,
+                                        // large values as a direct price (Rp/L).
+                                        if (val > 100) {
+                                          newD[i].direct_price = val
+                                          newD[i].value = 0
+                                        } else {
+                                          newD[i].value = val
+                                          newD[i].direct_price = 0
+                                        }
+                                        setFormData({
+                                          ...formData,
+                                          discounts: newD,
+                                        })
+                                      }}
+                                      leftBadge={
+                                        Number(d.direct_price) > 0
+                                          ? SITE_CONFIG.currencySymbol
+                                          : undefined
+                                      }
+                                      rightBadge={
+                                        Number(d.direct_price) <= 0 &&
+                                        Number(d.value) > 0
+                                          ? "%"
+                                          : undefined
+                                      }
+                                      className="h-9"
+                                    />
+                                  </div>
+                                  <div className="min-w-0 flex-1 md:w-5/20 md:flex-none md:shrink-0">
+                                    <NumberInput
+                                      value={d.delivery_cost}
+                                      onChange={(val) => {
+                                        const newD = [...formData.discounts]
+                                        newD[i].delivery_cost = val
+                                        setFormData({
+                                          ...formData,
+                                          discounts: newD,
+                                        })
+                                      }}
+                                      leftBadge={SITE_CONFIG.currencySymbol}
+                                      rightBadge="/ L"
+                                      className="h-9"
+                                    />
+                                  </div>
                                 </div>
-                                <div className="w-5/20 shrink-0">
-                                  <NumberInput
-                                    value={d.delivery_cost}
-                                    onChange={(val) => {
-                                      const newD = [...formData.discounts]
-                                      newD[i].delivery_cost = val
-                                      setFormData({
-                                        ...formData,
-                                        discounts: newD,
-                                      })
-                                    }}
-                                    leftBadge={SITE_CONFIG.currencySymbol}
-                                    rightBadge="/ L"
-                                    className="h-9"
-                                  />
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="shrink-0 text-destructive"
-                                  onClick={() =>
-                                    setFormData({
-                                      ...formData,
-                                      discounts: formData.discounts.filter(
-                                        (_, idx) => idx !== i
-                                      ),
-                                    })
-                                  }
-                                >
-                                  <MinusCircle className="size-4" />
-                                </Button>
                               </div>
                             </div>
                           ))}
@@ -1703,18 +1716,22 @@ export default function QuotationsPage() {
                           {dict.LABEL_TAXES || "Taxes"}
                         </Label>
                         {/* Delivery Taxable Toggle */}
-                        <div className="flex items-center justify-between rounded border bg-background p-3">
+                        <div className="flex items-center justify-between gap-3 rounded border bg-background p-3">
                           <Label
                             htmlFor="delivery-taxable"
                             className="cursor-pointer text-xs font-medium"
                           >
-                            {dict.LABEL_DELIVERY_TAXABLE || "Include Delivery Fee in Tax (PPN)"}
+                            {dict.LABEL_DELIVERY_TAXABLE ||
+                              "Include Delivery Fee in Tax (PPN)"}
                           </Label>
                           <Switch
                             id="delivery-taxable"
                             checked={formData.delivery_taxable}
                             onCheckedChange={(val) =>
-                              setFormData({ ...formData, delivery_taxable: val })
+                              setFormData({
+                                ...formData,
+                                delivery_taxable: val,
+                              })
                             }
                           />
                         </div>
@@ -1727,84 +1744,95 @@ export default function QuotationsPage() {
                             return (
                               <div
                                 key={idx}
-                                className="grid min-h-12 grid-cols-12 items-center gap-2 rounded border bg-background p-2"
+                                className="flex flex-col gap-2 rounded border bg-background p-2 md:grid md:min-h-12 md:grid-cols-12 md:items-center md:gap-2"
                               >
-                                <div className="col-span-3 truncate font-medium">
-                                  <Label
-                                    htmlFor={`tax-${idx}`}
-                                    className="block cursor-pointer truncate text-xs"
-                                  >
-                                    {tax.name}
-                                  </Label>
-                                </div>
+                                {/* name - switch */}
+                                <div className="flex items-center justify-between md:contents">
+                                  <div className="col-span-3 truncate font-medium">
+                                    <Label
+                                      htmlFor={`tax-${idx}`}
+                                      className="block cursor-pointer truncate text-xs"
+                                    >
+                                      {tax.name}
+                                    </Label>
+                                  </div>
 
-                                <div className="col-span-2 flex items-center justify-center">
-                                  <Switch
-                                    id={`tax-${idx}`}
-                                    checked={tax.enabled}
-                                    onCheckedChange={async (val) => {
-                                      const newTaxes = [...formData.tax_details]
-                                      if (val) {
-                                        const { data: taxSettings } =
-                                          await supabase
-                                            .from("app_settings")
-                                            .select("*")
-                                            .eq("category", "tax")
-                                            .eq("name", tax.name)
-                                            .single()
-                                        if (taxSettings) {
-                                          newTaxes[idx].rate = taxSettings.value
-                                          setGlobalTaxes((prev) =>
-                                            prev.map((gt) =>
-                                              gt.name === tax.name
-                                                ? {
-                                                    ...gt,
-                                                    value: taxSettings.value,
-                                                  }
-                                                : gt
+                                  <div className="col-span-2 flex items-center justify-center">
+                                    <Switch
+                                      id={`tax-${idx}`}
+                                      checked={tax.enabled}
+                                      onCheckedChange={async (val) => {
+                                        const newTaxes = [
+                                          ...formData.tax_details,
+                                        ]
+                                        if (val) {
+                                          const { data: taxSettings } =
+                                            await supabase
+                                              .from("app_settings")
+                                              .select("*")
+                                              .eq("category", "tax")
+                                              .eq("name", tax.name)
+                                              .single()
+                                          if (taxSettings) {
+                                            newTaxes[idx].rate =
+                                              taxSettings.value
+                                            setGlobalTaxes((prev) =>
+                                              prev.map((gt) =>
+                                                gt.name === tax.name
+                                                  ? {
+                                                      ...gt,
+                                                      value: taxSettings.value,
+                                                    }
+                                                  : gt
+                                              )
                                             )
-                                          )
+                                          }
                                         }
-                                      }
-                                      newTaxes[idx].enabled = val
-                                      setFormData({
-                                        ...formData,
-                                        tax_details: newTaxes,
-                                      })
-                                    }}
-                                  />
-                                </div>
-
-                                <div className="col-span-4">
-                                  <div
-                                    style={{ opacity: tax.enabled ? 1 : 0.3 }}
-                                    className="w-full transition-opacity"
-                                  >
-                                    <NumberInput
-                                      className="text-right font-mono text-xs"
-                                      containerClassName="h-8 bg-muted/50"
-                                      disabled
-                                      value={tax.rate}
-                                      onChange={() => {}}
-                                      rightBadge="%"
+                                        newTaxes[idx].enabled = val
+                                        setFormData({
+                                          ...formData,
+                                          tax_details: newTaxes,
+                                        })
+                                      }}
                                     />
                                   </div>
                                 </div>
+                                {/* percentage - calculation */}
+                                {/* Changed from flex to grid layout */}
+                                <div className="grid w-full grid-cols-12 items-center gap-4 md:col-span-7 md:gap-2">
+                                  {/* Left Side (Number Input): Takes up 5 grid columns */}
+                                  <div className="col-span-6 min-w-0">
+                                    <div
+                                      style={{ opacity: tax.enabled ? 1 : 0.3 }}
+                                      className="w-full transition-opacity"
+                                    >
+                                      <NumberInput
+                                        className="text-right font-mono text-xs"
+                                        containerClassName="h-8 bg-muted/50 w-full"
+                                        disabled
+                                        value={tax.rate}
+                                        onChange={() => {}}
+                                        rightBadge="%"
+                                      />
+                                    </div>
+                                  </div>
 
-                                <div className="col-span-3 flex justify-end">
-                                  <span
-                                    className={cn(
-                                      "truncate text-right font-mono text-xs font-medium transition-opacity",
-                                      tax.enabled
-                                        ? "text-foreground opacity-100"
-                                        : "text-muted-foreground opacity-30"
-                                    )}
-                                  >
-                                    {SITE_CONFIG.currencySymbol}{" "}
-                                    {Math.round(
-                                      calculatedAmount
-                                    ).toLocaleString()}
-                                  </span>
+                                  {/* Right Side (Currency Display): Takes up 7 grid columns and stays right-aligned */}
+                                  <div className="col-span-6 flex min-w-0 justify-end text-right">
+                                    <span
+                                      className={cn(
+                                        "block w-full truncate text-right font-mono text-xs font-medium transition-opacity",
+                                        tax.enabled
+                                          ? "text-foreground opacity-100"
+                                          : "text-muted-foreground opacity-30"
+                                      )}
+                                    >
+                                      {SITE_CONFIG.currencySymbol}{" "}
+                                      {Math.round(
+                                        calculatedAmount
+                                      ).toLocaleString()}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             )
@@ -1883,7 +1911,7 @@ export default function QuotationsPage() {
                       <Label className="text-base font-semibold">
                         {dict.LABEL_BANK_ACCOUNTS}
                       </Label>
-                      <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-3 md:grid md:grid-cols-2">
                         {availableBanks.map((bank: any, idx) => {
                           const isSelected = formData.bank_accounts.some(
                             (b: any) => b.account_number === bank.account_number
@@ -1911,14 +1939,20 @@ export default function QuotationsPage() {
                               />
                               <Label
                                 htmlFor={`bank-${idx}`}
-                                className="flex w-full cursor-pointer flex-col gap-1 text-sm leading-tight font-normal"
+                                className="md:flex-start flex w-full cursor-pointer flex-col gap-1 text-sm leading-tight font-normal"
                               >
-                                <span className="font-semibold">
-                                  {bank.name} - {bank.branch}
+                                <div className="flex gap-4">
+                                  <span className="font-semibold">
+                                    {bank.name}
+                                  </span>
+                                  <span className="">
+                                    {bank.account_number}
+                                  </span>
+                                </div>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {bank.branch}
                                 </span>
-                                <span className="text-muted-foreground">
-                                  {bank.account_number} a/n {bank.account_name}
-                                </span>
+                                <span> {bank.account_name}</span>
                               </Label>
                             </div>
                           )
@@ -1957,8 +1991,8 @@ export default function QuotationsPage() {
         </div>
       </div>
 
-      <div className="action-bar flex shrink-0 flex-col items-start gap-4 sm:flex-row sm:items-center">
-        <div className="relative w-full max-w-sm flex-1">
+      <div className="action-bar shrink-0">
+        <div className="relative w-full min-w-0 flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -1969,9 +2003,15 @@ export default function QuotationsPage() {
         </div>
         <Dialog open={isSortOpen} onOpenChange={setIsSortOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9">
-              <ArrowUpDown className="mr-2 size-4" />
-              Sort
+            <Button
+              variant="outline"
+              size="icon"
+              title="Sort"
+              aria-label="Sort"
+              className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+            >
+              <ArrowUpDown className="size-4" />
+              <span className="hidden md:inline">Sort</span>
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
@@ -2104,27 +2144,58 @@ export default function QuotationsPage() {
                   }}
                 >
                   <TableCell className="font-medium">
-                    {q.quotation_number}
+                    {/* Mobile: stacked layout */}
+                    <div className="flex flex-col gap-1.5 md:hidden">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{q.quotation_number}</span>
+                        <span
+                          className={cn(
+                            "inline-flex items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                            statusStyles[q.status]
+                          )}
+                        >
+                          {q.status}
+                        </span>
+                      </div>
+                      <span>{q.company?.name || "-"}</span>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-muted-foreground">
+                          {format(new Date(q.quotation_date), "dd MMM yyyy")}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {format(new Date(q.expiry_date), "dd MMM yyyy")}
+                        </span>
+                        <span className="text-[10px] font-bold text-muted-foreground">
+                          {q.expiry_days} days left
+                        </span>
+                      </div>
+                    </div>
+                    {/* Desktop */}
+                    <span className="hidden md:inline">
+                      {q.quotation_number}
+                    </span>
                   </TableCell>
-                  <TableCell>{q.company?.name || "-"}</TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="max-md:hidden">
+                    {q.company?.name || "-"}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs max-md:hidden">
                     {q.product?.sku || "-"}
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className="text-center max-md:hidden">
                     {format(new Date(q.quotation_date), "dd MMM yyyy")}
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className="text-center max-md:hidden">
                     <div>{format(new Date(q.expiry_date), "dd MMM yyyy")}</div>
                     <div className="text-[10px] text-muted-foreground">
                       {q.expiry_days} days left
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="text-right font-mono max-md:hidden">
                     {new Intl.NumberFormat(
                       lang === "id" ? "id-ID" : "en-US"
                     ).format(q.minimum_order)}
                   </TableCell>
-                  <TableCell className="text-center align-middle">
+                  <TableCell className="text-center align-middle max-md:hidden">
                     <div
                       className={cn(
                         "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",

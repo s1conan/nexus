@@ -170,7 +170,7 @@ export default function InvoiceReportPage() {
       </div>
 
       <div className="action-bar items-end gap-4">
-        <div className="grid max-w-sm flex-1 gap-1.5 max-sm:w-full">
+        <div className="grid min-w-0 flex-1 gap-1.5">
           <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
             {dict.PLACEHOLDER_SEARCH || "Search"}
           </label>
@@ -185,39 +185,48 @@ export default function InvoiceReportPage() {
           </div>
         </div>
 
-        <div className="grid w-40 gap-1.5 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1">
+        <div className="grid min-w-0 flex-1 gap-1.5 sm:w-40 sm:flex-none">
           <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
             {dict.LABEL_FROM_DATE || "From"}
           </label>
           <div className="relative">
-            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground" />
+            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground max-sm:hidden" />
             <Input
               type="date"
-              className="pl-8"
+              className="pl-8 max-sm:pl-2"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
           </div>
         </div>
 
-        <div className="grid w-40 gap-1.5 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1">
+        <div className="grid min-w-0 flex-1 gap-1.5 sm:w-40 sm:flex-none">
           <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
             {dict.LABEL_TO_DATE || "To"}
           </label>
           <div className="relative">
-            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground" />
+            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground max-sm:hidden" />
             <Input
               type="date"
-              className="pl-8"
+              className="pl-8 max-sm:pl-2"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
         </div>
 
-        <Button variant="outline" onClick={fetchInvoices} className="h-10">
-          <Filter className="mr-2 size-4" />
-          {dict.BUTTON_REFRESH || "Refresh"}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={fetchInvoices}
+          title={dict.BUTTON_REFRESH || "Refresh"}
+          aria-label={dict.BUTTON_REFRESH || "Refresh"}
+          className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+        >
+          <Filter className="size-4" />
+          <span className="hidden md:inline">
+            {dict.BUTTON_REFRESH || "Refresh"}
+          </span>
         </Button>
       </div>
 
@@ -258,7 +267,7 @@ export default function InvoiceReportPage() {
                       {i.invoice_number}
                     </span>
                   </TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell className="max-md:hidden text-sm">
                     {format(parseISO(i.invoice_date), "dd MMM yyyy")}
                   </TableCell>
                   <TableCell>

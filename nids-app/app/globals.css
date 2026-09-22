@@ -289,7 +289,7 @@
   }
 
   .page-header {
-    @apply flex flex-wrap items-center justify-between gap-3;
+    @apply flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between;
   }
 
   .page-title {
@@ -297,7 +297,7 @@
   }
 
   .action-bar {
-    @apply mb-2 flex flex-wrap items-center gap-3 md:gap-4;
+    @apply mb-2 flex flex-nowrap items-center gap-3 md:gap-4;
   }
 
   .login-background {
@@ -420,15 +420,18 @@
       background-color: transparent;
     }
 
-    .data-card [data-slot="table-cell"] {
+    /* :not() so Tailwind's `max-md:hidden` on individual cells still wins */
+    .data-card [data-slot="table-cell"]:not(.max-md\:hidden) {
       display: block;
       flex: 1 1 28%;
       min-width: 0;
       height: auto;
       padding: 0.25rem 0.5rem;
       border: 0;
-      white-space: normal;
-      overflow-wrap: anywhere;
+      /* !important needed: Tailwind's whitespace-nowrap lives in the
+         utilities layer, which wins over the components layer */
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
       font-size: 0.75rem;
     }
 

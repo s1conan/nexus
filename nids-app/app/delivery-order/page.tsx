@@ -453,13 +453,10 @@ export default function DeliveryOrdersPage() {
         ...prev,
         vehicle_id: vId,
         vehicle_number: vehicle.license_number,
-        compartment_details: Array.from(
-          { length: sealCount },
-          (_, i) => ({
-            compartment_number: i + 1,
-            seal_number: sealNumberCache.current[i + 1] || "",
-          })
-        ),
+        compartment_details: Array.from({ length: sealCount }, (_, i) => ({
+          compartment_number: i + 1,
+          seal_number: sealNumberCache.current[i + 1] || "",
+        })),
       }))
     } else {
       setSelectedVehicleInfo(null)
@@ -602,9 +599,10 @@ export default function DeliveryOrdersPage() {
         phone: prev.driver_info?.phone || "",
       },
       do_date: data.sj_date || prev.do_date,
-      note: noteParts.length > 0
-        ? [prev.note, ...noteParts].filter(Boolean).join("<br/>")
-        : prev.note,
+      note:
+        noteParts.length > 0
+          ? [prev.note, ...noteParts].filter(Boolean).join("<br/>")
+          : prev.note,
     }))
 
     // Warnings + timing info follow the data into BOTH paths (dialog apply
@@ -631,11 +629,10 @@ export default function DeliveryOrdersPage() {
         ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
       notify.info(
         dict.IMPORT_DOC_TIMINGS,
-        dict
-          .IMPORT_DOC_TIMINGS_DETAIL.replace(
-            "%upload%",
-            fmtDur(meta.timings.upload_parse_ms)
-          )
+        dict.IMPORT_DOC_TIMINGS_DETAIL.replace(
+          "%upload%",
+          fmtDur(meta.timings.upload_parse_ms)
+        )
           .replace(
             "%ai%",
             fmtDur(
@@ -868,7 +865,10 @@ export default function DeliveryOrdersPage() {
       if (!editingItem && !dbPayload.do_number) {
         const { data, error: rpcError } = await supabase.rpc(
           "generate_document_number",
-          { p_doc_type: "delivery-order", p_company_id: dbPayload.company_id || null }
+          {
+            p_doc_type: "delivery-order",
+            p_company_id: dbPayload.company_id || null,
+          }
         )
         if (rpcError) throw rpcError
         dbPayload.do_number = data
@@ -1411,7 +1411,7 @@ export default function DeliveryOrdersPage() {
   return (
     <div className="page-container">
       {/* Page Header */}
-      <div className="page-header shrink-0">
+      <div className="page-header shrink-0 flex-row items-center justify-between">
         <h1 className="page-title">
           <Truck className="mr-2 inline-block size-5 text-primary" />
           {dict.MENU_DELIVERY_ORDER}
@@ -1434,12 +1434,12 @@ export default function DeliveryOrdersPage() {
           </Button>
           <Button
             variant={isDraggingFile ? "secondary" : "outline"}
-            size="sm"
+            size="icon"
             onClick={() => setDoImportOpen(true)}
             disabled={!canInsert || isProcessingImport}
             title={dict.BUTTON_IMPORT_DOC}
             className={cn(
-              "transition-all duration-150",
+              "transition-all duration-150 md:h-9 md:w-auto md:gap-1.5 md:px-2.5",
               isDraggingFile &&
                 "scale-105 ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
             )}
@@ -1471,19 +1471,24 @@ export default function DeliveryOrdersPage() {
             ) : (
               <FileUp data-icon="inline-start" />
             )}
-            {isProcessingImport
-              ? dict.IMPORT_DOC_ANALYZING
-              : dict.BUTTON_IMPORT_DOC}
+            <span className="hidden md:inline">
+              {isProcessingImport
+                ? dict.IMPORT_DOC_ANALYZING
+                : dict.BUTTON_IMPORT_DOC}
+            </span>
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
               <Button
-                size="sm"
+                size="icon"
                 onClick={() => handleOpenDialog()}
                 disabled={!canInsert}
+                title={dict.BUTTON_NEW_DO}
+                aria-label={dict.BUTTON_NEW_DO}
+                className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
               >
-                <Plus data-icon="inline-start" />
-                {dict.BUTTON_NEW_DO}
+                <Plus className="size-4" />
+                <span className="hidden md:inline">{dict.BUTTON_NEW_DO}</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-5xl">
@@ -1556,9 +1561,7 @@ export default function DeliveryOrdersPage() {
                             <div className="flex-1">
                               <LiveSearch
                                 key="so-search"
-                                className={flagClass(
-                                  fieldFlags.po_number
-                                )}
+                                className={flagClass(fieldFlags.po_number)}
                                 data={
                                   selectedPOInfo
                                     ? [
@@ -1938,13 +1941,15 @@ export default function DeliveryOrdersPage() {
                                 disabled={isFromSO}
                               >
                                 <SelectTrigger
-                                className={cn(
-                                  "h-12 w-full",
-                                  flagClass(fieldFlags.delivery_address)
-                                )}
-                              >
+                                  className={cn(
+                                    "h-12 w-full",
+                                    flagClass(fieldFlags.delivery_address)
+                                  )}
+                                >
                                   <SelectValue
-                                    placeholder={dict.PLACEHOLDER_SELECT_ADDRESS}
+                                    placeholder={
+                                      dict.PLACEHOLDER_SELECT_ADDRESS
+                                    }
                                   />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1984,9 +1989,7 @@ export default function DeliveryOrdersPage() {
                           <div className="grid gap-2">
                             <Label>{dict.LABEL_TRANSPORTER}</Label>
                             <LiveSearch
-                              className={flagClass(
-                                fieldFlags.transporter_name
-                              )}
+                              className={flagClass(fieldFlags.transporter_name)}
                               data={
                                 selectedTransporterInfo
                                   ? [selectedTransporterInfo]
@@ -2237,8 +2240,7 @@ export default function DeliveryOrdersPage() {
                                       .eq("product_id", formData.product_id),
                                     q,
                                   ])
-                                if (companiesRes.error)
-                                  throw companiesRes.error
+                                if (companiesRes.error) throw companiesRes.error
                                 const stockMap = new Map<string, number>(
                                   (stockRes.data || []).map(
                                     (s: {
@@ -2333,7 +2335,7 @@ export default function DeliveryOrdersPage() {
                             />
                           </div>
 
-                          <div className="grid h-[130px] grid-cols-1 gap-3 overflow-y-auto md:grid-cols-2">
+                          <div className="grid min-h-[150px] grid-cols-1 gap-3 overflow-y-auto md:grid-cols-2">
                             {formData.compartment_details.length === 0 ? (
                               <div className="rounded-lg border-2 border-dashed p-2 text-center text-muted-foreground">
                                 {dict.MSG_SELECT_VEHICLE}
@@ -2342,7 +2344,7 @@ export default function DeliveryOrdersPage() {
                               formData.compartment_details.map((comp, idx) => (
                                 <Card
                                   key={idx}
-                                  className="p-0 shadow-none ring-0"
+                                  className="h-[65px] p-1 shadow-none ring-0"
                                 >
                                   <div className="mb-2 flex items-center gap-3">
                                     <span className="mt-4 text-base font-bold text-primary">
@@ -2409,8 +2411,8 @@ export default function DeliveryOrdersPage() {
       </div>
 
       {/* Action Bar / Filters */}
-      <div className="action-bar flex shrink-0 flex-col items-start gap-4 sm:flex-row sm:items-center">
-        <div className="relative w-full max-w-sm flex-1">
+      <div className="action-bar shrink-0">
+        <div className="relative w-full min-w-0 flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -2421,9 +2423,15 @@ export default function DeliveryOrdersPage() {
         </div>
         <Dialog open={isSortOpen} onOpenChange={setIsSortOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9">
-              <ArrowUpDown className="mr-2 size-4" />
-              {dict.LABEL_SORT}
+            <Button
+              variant="outline"
+              size="icon"
+              title={dict.LABEL_SORT}
+              aria-label={dict.LABEL_SORT}
+              className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+            >
+              <ArrowUpDown className="size-4" />
+              <span className="hidden md:inline">{dict.LABEL_SORT}</span>
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
@@ -2540,7 +2548,7 @@ export default function DeliveryOrdersPage() {
           className={cn(
             "h-9",
             pendingPOFilter &&
-              "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+              "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400"
           )}
           onClick={() => setPendingPOFilter(!pendingPOFilter)}
         >
@@ -2601,25 +2609,98 @@ export default function DeliveryOrdersPage() {
                     if (updatedRowId === o.id) setUpdatedRowId(null)
                   }}
                 >
-                  <TableCell className="py-3">
+                  <TableCell className="py-3 max-md:hidden">
                     <div
                       className={cn(
-                        "size-2 rounded-full",
+                        "size-2 shrink-0 rounded-full",
                         o.so_id ? "bg-green-500" : "bg-red-500"
                       )}
                       title={
-                        o.so_id
-                          ? o.po?.so_number || ""
-                          : dict.LABEL_SO_PENDING
+                        o.so_id ? o.po?.so_number || "" : dict.LABEL_SO_PENDING
                       }
                     />
                   </TableCell>
-                  <TableCell className="font-medium">{o.do_number}</TableCell>
-                  <TableCell>{o.company?.name || "-"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
+                  <TableCell className="font-medium">
+                    {/* Mobile: stacked layout */}
+                    <div className="flex flex-col gap-1.5 md:hidden">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <div
+                            className={cn(
+                              "size-2 shrink-0 rounded-full",
+                              o.so_id ? "bg-green-500" : "bg-red-500"
+                            )}
+                            title={
+                              o.so_id
+                                ? o.po?.so_number || ""
+                                : dict.LABEL_SO_PENDING
+                            }
+                          />
+                          <span className="truncate">{o.do_number}</span>
+                        </div>
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                            statusStyles[o.status] || statusStyles.Draft
+                          )}
+                        >
+                          {o.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="min-w-0 truncate">
+                          {o.company?.name || "-"}
+                        </span>
+                        <span className="max-w-[55%] shrink-0 truncate text-muted-foreground">
+                          {(() => {
+                            const addrs = (o.company?.details?.addresses ||
+                              []) as { label: string; address: string }[]
+                            return (
+                              addrs.find(
+                                (a) => a.address === o.delivery_address
+                              )?.label || "-"
+                            )
+                          })()}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <span className="text-xs font-medium">
+                            {o.vehicle?.license_number ||
+                              o.vehicle_number ||
+                              "-"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {o.driver_info?.name || o.driver_name || "-"}
+                          </span>
+                        </div>
+                        <span className="shrink-0 font-mono text-sm">
+                          {o.quantity.toLocaleString()}
+                        </span>
+                        <span
+                          className={cn(
+                            "shrink-0 font-mono text-sm",
+                            o.received_quantity != null
+                              ? "font-semibold text-emerald-600 dark:text-emerald-400"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {o.received_quantity != null
+                            ? o.received_quantity.toLocaleString()
+                            : "—"}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Desktop */}
+                    <span className="hidden md:inline">{o.do_number}</span>
+                  </TableCell>
+                  <TableCell className="max-md:hidden">
+                    {o.company?.name || "-"}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground max-md:hidden">
                     {format(new Date(o.do_date), "dd MMM yyyy")}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="max-md:hidden">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-xs font-medium">
                         {o.vehicle?.license_number || o.vehicle_number || "-"}
@@ -2629,10 +2710,10 @@ export default function DeliveryOrdersPage() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
+                  <TableCell className="text-right font-mono text-sm max-md:hidden">
                     {o.quantity.toLocaleString()}
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
+                  <TableCell className="text-right font-mono text-sm max-md:hidden">
                     {o.received_quantity != null &&
                     o.received_quantity !== o.quantity ? (
                       <div className="flex flex-col items-end">
@@ -2659,7 +2740,7 @@ export default function DeliveryOrdersPage() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-center align-middle">
+                  <TableCell className="text-center align-middle max-md:hidden">
                     <div
                       className={cn(
                         "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",

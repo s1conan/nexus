@@ -22,17 +22,23 @@ export const metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.ico",
-    apple: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
   },
   appleWebApp: {
     capable: true,
     title: SITE_CONFIG.brandName,
     statusBarStyle: "default",
   },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 }
 
 export const viewport = {
-  themeColor: "#3b82f6",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f4f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1720" },
+  ],
   viewportFit: "cover",
 }
 

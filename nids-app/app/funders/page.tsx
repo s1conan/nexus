@@ -402,7 +402,7 @@ export default function FundersPage() {
 
   return (
     <div className="page-container">
-      <div className="page-header shrink-0">
+      <div className="page-header shrink-0 flex-row items-center justify-between">
         <h1 className="page-title">
           <User className="mr-2 inline-block size-5 text-primary" />
           {dict.TITLE_FUNDERS}
@@ -425,9 +425,18 @@ export default function FundersPage() {
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => handleOpenDialog()} disabled={!canInsert}>
-                <Plus data-icon="inline-start" />
-                {dict.TITLE_ADD_FUNDER}
+              <Button
+                size="icon"
+                onClick={() => handleOpenDialog()}
+                disabled={!canInsert}
+                title={dict.TITLE_ADD_FUNDER}
+                aria-label={dict.TITLE_ADD_FUNDER}
+                className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+              >
+                <Plus className="size-4" />
+                <span className="hidden md:inline">
+                  {dict.TITLE_ADD_FUNDER}
+                </span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px]">
@@ -651,7 +660,7 @@ export default function FundersPage() {
       </div>
 
       <div className="action-bar shrink-0">
-        <div className="relative w-full max-w-sm flex-1">
+        <div className="relative min-w-0 w-full flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -671,7 +680,6 @@ export default function FundersPage() {
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_NAME}</TableHead>
               <TableHead>{dict.LABEL_ID_NUMBER}</TableHead>
-              <TableHead>{dict.LABEL_PHONE}</TableHead>
               <TableHead>{dict.LABEL_BANK_ACCOUNTS}</TableHead>
               <TableHead className="text-right"> </TableHead>
             </TableRow>
@@ -679,7 +687,7 @@ export default function FundersPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="p-0">
+                <TableCell colSpan={4} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
@@ -687,7 +695,7 @@ export default function FundersPage() {
               <>
                 {funders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center">
+                    <TableCell colSpan={4} className="py-8 text-center">
                       {dict.NO_DATA}
                     </TableCell>
                   </TableRow>
@@ -711,27 +719,29 @@ export default function FundersPage() {
                         }}
                       >
                         <TableCell className="font-medium">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={cn(
-                                "size-2 rounded-full",
-                                funder.is_active
-                                  ? "bg-green-500"
-                                  : "bg-muted-foreground/30"
-                              )}
-                            />
-                            <div>{funder.name}</div>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div
+                                className={cn(
+                                  "size-2 shrink-0 rounded-full",
+                                  funder.is_active
+                                    ? "bg-green-500"
+                                    : "bg-muted-foreground/30"
+                                )}
+                              />
+                              <div className="truncate">{funder.name}</div>
+                            </div>
+                            <span className="shrink-0 font-mono text-sm text-muted-foreground">
+                              {funder.phone || "-"}
+                            </span>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="max-md:hidden">
                           <span className="font-mono text-sm">
                             {funder.id_number || "-"}
                           </span>
                         </TableCell>
-                        <TableCell>
-                          <span className="text-sm">{funder.phone || "-"}</span>
-                        </TableCell>
-                        <TableCell>
+                        <TableCell className="max-md:hidden">
                           {primaryBank ? (
                             <div className="flex flex-col text-xs">
                               <span className="font-medium text-primary">
@@ -783,7 +793,7 @@ export default function FundersPage() {
 
             {/* Sentinel - ALWAYS mounted so observer doesn't lose it */}
             <TableRow ref={observerTarget} className="border-0">
-              <TableCell colSpan={5} className="overflow-hidden border-0 p-0">
+              <TableCell colSpan={4} className="overflow-hidden border-0 p-0">
                 {loadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />

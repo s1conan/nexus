@@ -320,7 +320,7 @@ export default function ProductsPage() {
 
   return (
     <div className="page-container">
-      <div className="page-header shrink-0">
+      <div className="page-header shrink-0 flex-row items-center justify-between">
         <h1 className="page-title">
           <Package className="mr-2 inline-block size-5 text-primary" />
           {dict.TITLE_PRODUCTS}
@@ -343,9 +343,18 @@ export default function ProductsPage() {
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => handleOpenDialog()} disabled={!canInsert}>
-                <Plus data-icon="inline-start" />
-                {dict.TITLE_ADD_PRODUCT}
+              <Button
+                size="icon"
+                onClick={() => handleOpenDialog()}
+                disabled={!canInsert}
+                title={dict.TITLE_ADD_PRODUCT}
+                aria-label={dict.TITLE_ADD_PRODUCT}
+                className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+              >
+                <Plus className="size-4" />
+                <span className="hidden md:inline">
+                  {dict.TITLE_ADD_PRODUCT}
+                </span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:w-[350px]">
@@ -462,7 +471,7 @@ export default function ProductsPage() {
       </div>
 
       <div className="action-bar shrink-0">
-        <div className="relative max-w-sm flex-1">
+        <div className="relative min-w-0 flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -481,17 +490,13 @@ export default function ProductsPage() {
           <TableHeader>
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_NAME}</TableHead>
-              <TableHead>{dict.LABEL_SKU}</TableHead>
-              <TableHead className="text-right">
-                {dict.LABEL_BASE_PRICE}
-              </TableHead>
               <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={4} className="p-0">
+                <TableCell colSpan={2} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
@@ -499,7 +504,7 @@ export default function ProductsPage() {
               <>
                 {products.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center">
+                    <TableCell colSpan={2} className="py-8 text-center">
                       {dict.NO_DATA}
                     </TableCell>
                   </TableRow>
@@ -517,24 +522,25 @@ export default function ProductsPage() {
                       }}
                     >
                       <TableCell className="font-medium">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "size-2 rounded-full",
-                              product.is_active
-                                ? "bg-green-500"
-                                : "bg-muted-foreground/30"
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div
+                              className={cn(
+                                "size-2 shrink-0 rounded-full",
+                                product.is_active
+                                  ? "bg-green-500"
+                                  : "bg-muted-foreground/30"
+                              )}
+                            />
+                            <span className="truncate">{product.name}</span>
+                          </div>
+                          <span className="shrink-0 font-mono text-muted-foreground">
+                            {formatCurrency(
+                              product.base_price,
+                              lang === "id" ? "id-ID" : "en-US"
                             )}
-                          />
-                          <span>{product.name}</span>
+                          </span>
                         </div>
-                      </TableCell>
-                      <TableCell>{product.sku}</TableCell>
-                      <TableCell className="text-right font-mono">
-                        {formatCurrency(
-                          product.base_price,
-                          lang === "id" ? "id-ID" : "en-US"
-                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -566,7 +572,7 @@ export default function ProductsPage() {
 
             {/* Infinite Scroll Sentinel & Loader */}
             <TableRow ref={observerTarget} className="border-0">
-              <TableCell colSpan={4} className="overflow-hidden border-0 p-0">
+              <TableCell colSpan={2} className="overflow-hidden border-0 p-0">
                 {loadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />

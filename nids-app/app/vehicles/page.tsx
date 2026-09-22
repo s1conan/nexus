@@ -443,7 +443,7 @@ export default function VehiclesPage() {
   return (
     <div className="page-container">
       {/* Page Header */}
-      <div className="page-header shrink-0">
+      <div className="page-header shrink-0 flex-row items-center justify-between">
         <h1 className="page-title">
           <Truck className="mr-2 inline-block size-5 text-primary" />
           {dict.MENU_VEHICLES}
@@ -466,9 +466,16 @@ export default function VehiclesPage() {
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => handleOpenDialog()} disabled={!canInsert}>
-                <Plus data-icon="inline-start" />
-                {dict.BUTTON_ADD}
+              <Button
+                size="icon"
+                onClick={() => handleOpenDialog()}
+                disabled={!canInsert}
+                title={dict.BUTTON_ADD}
+                aria-label={dict.BUTTON_ADD}
+                className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+              >
+                <Plus className="size-4" />
+                <span className="hidden md:inline">{dict.BUTTON_ADD}</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-2xl">
@@ -682,7 +689,7 @@ export default function VehiclesPage() {
 
       {/* Action Bar / Filters */}
       <div className="action-bar shrink-0">
-        <div className="relative w-full max-w-sm flex-1 max-sm:w-full">
+        <div className="relative min-w-0 w-full flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -704,11 +711,14 @@ export default function VehiclesPage() {
               <TableHead className="px-7">
                 {dict.LABEL_LICENSE_NUMBER}
               </TableHead>
-              <TableHead>{dict.LABEL_VEHICLE_TYPE}</TableHead>
-              <TableHead>{dict.LABEL_COMPARTMENTS}</TableHead>
-              <TableHead>{dict.LABEL_SEALS}</TableHead>
-              <TableHead className="text-right">
-                {dict.LABEL_TOTAL_CAPACITY}
+              <TableHead className="max-md:hidden">
+                {dict.LABEL_VEHICLE_TYPE}
+              </TableHead>
+              <TableHead className="max-md:hidden">
+                {dict.LABEL_COMPARTMENTS}
+              </TableHead>
+              <TableHead className="max-md:hidden">
+                {dict.LABEL_SEALS}
               </TableHead>
               <TableHead className="text-right"> </TableHead>
             </TableRow>
@@ -742,28 +752,39 @@ export default function VehiclesPage() {
                       }}
                     >
                       <TableCell className="font-medium">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "size-2 rounded-full",
-                              v.is_active
-                                ? "bg-green-500"
-                                : "bg-muted-foreground/30"
-                            )}
-                          />
-                          <span>{v.license_number}</span>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div
+                              className={cn(
+                                "size-2 shrink-0 rounded-full",
+                                v.is_active
+                                  ? "bg-green-500"
+                                  : "bg-muted-foreground/30"
+                              )}
+                            />
+                            <span className="truncate">{v.license_number}</span>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className="text-xs text-muted-foreground md:hidden">
+                              {v.vehicle_type}
+                            </span>
+                            <span className="font-mono text-sm text-muted-foreground">
+                              {v.capacity?.toLocaleString()}
+                            </span>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell>{v.vehicle_type}</TableCell>
-                      <TableCell>{v.compartments?.length || 0} Comp.</TableCell>
-                      <TableCell>
+                      <TableCell className="max-md:hidden">
+                        {v.vehicle_type}
+                      </TableCell>
+                      <TableCell className="max-md:hidden">
+                        {v.compartments?.length || 0} Comp.
+                      </TableCell>
+                      <TableCell className="max-md:hidden">
                         {v.number_of_seals ||
                           (v.compartments || []).length ||
                           1}{" "}
                         Seals
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {v.capacity?.toLocaleString()}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">

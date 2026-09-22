@@ -80,7 +80,10 @@ import {
 import { ButtonLoader } from "@/components/button-loader"
 import { NumberInput } from "@/components/number-input"
 import { generateStandardSalesOrderPDF } from "@/lib/pdf-generator"
-import { SOAIImportDialog, type SOImportMeta } from "@/components/so-ai-import-dialog"
+import {
+  SOAIImportDialog,
+  type SOImportMeta,
+} from "@/components/so-ai-import-dialog"
 import {
   autoMatchSO,
   // computeTaxRateWarnings, // superseded by the AI arithmetic verifier
@@ -306,7 +309,7 @@ export default function SalesOrdersPage() {
         tax_details: isEmptyTaxes ? mergedTaxes : prev.tax_details,
         delivery_address: prev.delivery_address || quote.delivery_address || "",
         shrinkage_tolerance: isEmptyValue(prev.shrinkage_tolerance)
-          ? quote.shrinkage_tolerance ?? 0
+          ? (quote.shrinkage_tolerance ?? 0)
           : prev.shrinkage_tolerance,
         shrinkage_in_price:
           prev.shrinkage_in_price || quote.shrinkage_in_price || false,
@@ -669,11 +672,10 @@ export default function SalesOrdersPage() {
         ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
       notify.info(
         dict.IMPORT_DOC_TIMINGS,
-        dict
-          .IMPORT_DOC_TIMINGS_DETAIL.replace(
-            "%upload%",
-            fmtDur(meta.timings.upload_parse_ms)
-          )
+        dict.IMPORT_DOC_TIMINGS_DETAIL.replace(
+          "%upload%",
+          fmtDur(meta.timings.upload_parse_ms)
+        )
           .replace(
             "%ai%",
             fmtDur(
@@ -861,9 +863,7 @@ export default function SalesOrdersPage() {
           ...(Array.isArray(json.verification_warnings)
             ? json.verification_warnings
             : []),
-          ...(json.verification_error
-            ? [dict.IMPORT_DOC_VERIFY_FAILED]
-            : []),
+          ...(json.verification_error ? [dict.IMPORT_DOC_VERIFY_FAILED] : []),
         ],
         timings: json.timings ?? null,
       })
@@ -1134,7 +1134,7 @@ export default function SalesOrdersPage() {
   return (
     <div className="page-container">
       {/* Page Header */}
-      <div className="page-header shrink-0">
+      <div className="page-header shrink-0 flex-row items-center justify-between">
         <h1 className="page-title">
           <ShoppingBag className="mr-2 inline-block size-5 text-primary" />
           {dict.MENU_SALES_ORDER}
@@ -1157,12 +1157,12 @@ export default function SalesOrdersPage() {
           </Button>
           <Button
             variant={isDraggingFile ? "secondary" : "outline"}
-            size="sm"
+            size="icon"
             onClick={() => setAiImportOpen(true)}
             disabled={!canInsert || isProcessingImport}
             title={dict.BUTTON_IMPORT_DOC}
             className={cn(
-              "transition-all duration-150",
+              "transition-all duration-150 md:h-9 md:w-auto md:gap-1.5 md:px-2.5",
               isDraggingFile &&
                 "scale-105 ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
             )}
@@ -1194,19 +1194,24 @@ export default function SalesOrdersPage() {
             ) : (
               <FileUp data-icon="inline-start" />
             )}
-            {isProcessingImport
-              ? dict.IMPORT_DOC_ANALYZING
-              : dict.BUTTON_IMPORT_DOC}
+            <span className="hidden md:inline">
+              {isProcessingImport
+                ? dict.IMPORT_DOC_ANALYZING
+                : dict.BUTTON_IMPORT_DOC}
+            </span>
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
               <Button
-                size="sm"
+                size="icon"
                 onClick={() => handleOpenDialog()}
                 disabled={!canInsert}
+                title={dict.BUTTON_NEW_SO}
+                aria-label={dict.BUTTON_NEW_SO}
+                className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
               >
-                <Plus data-icon="inline-start" />
-                {dict.BUTTON_NEW_SO}
+                <Plus className="size-4" />
+                <span className="hidden md:inline">{dict.BUTTON_NEW_SO}</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-5xl">
@@ -1966,7 +1971,7 @@ export default function SalesOrdersPage() {
 
       {/* Action Bar / Filters */}
       <div className="action-bar shrink-0">
-        <div className="max-sm relative w-full flex-1">
+        <div className="relative w-full min-w-0 flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -1987,8 +1992,15 @@ export default function SalesOrdersPage() {
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_SO_NUMBER}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
-              <TableHead>{dict.LABEL_SO_DATE}</TableHead>
-              <TableHead>{dict.LABEL_QUANTITY}</TableHead>
+              <TableHead className="text-center">
+                {dict.LABEL_SO_DATE}
+              </TableHead>
+              <TableHead className="text-center">
+                {dict.LABEL_DELIVERY_DATE}
+              </TableHead>
+              <TableHead className="text-right">
+                {dict.LABEL_QUANTITY}
+              </TableHead>
               <TableHead className="text-center">{dict.LABEL_STATUS}</TableHead>
               <TableHead className="text-right"> </TableHead>
             </TableRow>
@@ -1996,14 +2008,14 @@ export default function SalesOrdersPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="p-0">
+                <TableCell colSpan={7} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
             ) : orders.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="py-10 text-center text-muted-foreground"
                 >
                   {dict.NO_DATA}
@@ -2022,13 +2034,56 @@ export default function SalesOrdersPage() {
                     if (updatedRowId === o.id) setUpdatedRowId(null)
                   }}
                 >
-                  <TableCell className="font-medium">{o.so_number}</TableCell>
-                  <TableCell>{o.company?.name || "-"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
+                  <TableCell className="font-medium">
+                    {/* Mobile: stacked layout */}
+                    <div className="flex flex-col gap-1.5 md:hidden">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{o.so_number}</span>
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                            statusStyles[o.status] || statusStyles.Default
+                          )}
+                        >
+                          {o.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 text-xs">
+                        <span className="min-w-0 flex-1 truncate">
+                          {o.company?.name || "-"}
+                        </span>
+                        <span className="shrink-0 font-mono font-medium">
+                          {new Intl.NumberFormat(
+                            lang === "id" ? "id-ID" : "en-US"
+                          ).format(o.quantity)}
+                        </span>
+                        <span className="shrink-0 text-muted-foreground">
+                          {o.delivery_date
+                            ? format(new Date(o.delivery_date), "dd MMM yyyy")
+                            : "-"}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Desktop */}
+                    <span className="hidden md:inline">{o.so_number}</span>
+                  </TableCell>
+                  <TableCell className="max-md:hidden">
+                    {o.company?.name || "-"}
+                  </TableCell>
+                  <TableCell className="text-center text-sm text-muted-foreground max-md:hidden">
                     {format(new Date(o.so_date), "dd MMM yyyy")}
                   </TableCell>
-                  <TableCell className="text-sm">{o.quantity}</TableCell>
-                  <TableCell className="text-center align-middle">
+                  <TableCell className="text-center text-sm text-muted-foreground max-md:hidden">
+                    {o.delivery_date
+                      ? format(new Date(o.delivery_date), "dd MMM yyyy")
+                      : "-"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm max-md:hidden">
+                    {new Intl.NumberFormat(
+                      lang === "id" ? "id-ID" : "en-US"
+                    ).format(o.quantity)}
+                  </TableCell>
+                  <TableCell className="text-center align-middle max-md:hidden">
                     <div
                       className={cn(
                         "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
@@ -2129,7 +2184,7 @@ export default function SalesOrdersPage() {
 
             {/* Infinite Scroll Sentinel & Loader */}
             <TableRow ref={observerTarget} className="border-0">
-              <TableCell colSpan={6} className="overflow-hidden border-0 p-0">
+              <TableCell colSpan={7} className="overflow-hidden border-0 p-0">
                 {loadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />

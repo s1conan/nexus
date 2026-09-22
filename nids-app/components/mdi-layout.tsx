@@ -1,6 +1,12 @@
 "use client"
 
-import React, { useRef, useEffect, useState, useCallback } from "react"
+import React, {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useCallback,
+} from "react"
 import { useMdi } from "./mdi-provider"
 import { useDictionary } from "./dictionary-provider"
 import { usePathname } from "next/navigation"
@@ -108,9 +114,41 @@ export function MdiLayout() {
   const tabStripRef = useRef<HTMLDivElement>(null)
   const lastToastedUserIdRef = useRef<string | null>(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    {}
+  )
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
   const [isOverflowing, setIsOverflowing] = useState(false)
+
+  // When a mobile menu group expands and the menu becomes scrollable, scroll
+  // that group's first submenu item to the top so the newly revealed items fit.
+  useEffect(() => {
+    if (!isMobileMenuOpen) return
+    const openGroupId = Object.keys(expandedGroups).find(
+      (id) => expandedGroups[id]
+    )
+    if (!openGroupId) return
+
+    const itemsEl = document.querySelector<HTMLElement>(
+      `[data-mobile-items="${openGroupId}"]`
+    )
+    const container = itemsEl?.closest<HTMLElement>(
+      '[data-slot="dropdown-menu-content"]'
+    )
+    if (!itemsEl || !container) return
+
+    requestAnimationFrame(() => {
+      // Only reposition when content actually overflows the menu canvas.
+      if (container.scrollHeight <= container.clientHeight) return
+      const containerTop = container.getBoundingClientRect().top
+      const itemsTop = itemsEl.getBoundingClientRect().top
+      container.scrollTo({
+        top: container.scrollTop + (itemsTop - containerTop),
+        behavior: "smooth",
+      })
+    })
+  }, [expandedGroups, isMobileMenuOpen])
 
   // Notification states and sync logic
   const MAX_HISTORY = 20
@@ -340,7 +378,10 @@ export function MdiLayout() {
       }
     }
 
-    window.addEventListener("nids-notification-update", handleNotificationUpdate)
+    window.addEventListener(
+      "nids-notification-update",
+      handleNotificationUpdate
+    )
     return () => {
       window.removeEventListener("nids-notification", handleNotification)
       window.removeEventListener(
@@ -879,6 +920,54 @@ export function MdiLayout() {
     return "text-xs md:text-sm"
   }
 
+  // Equal-width tabs: all tabs share the width of the longest open title so
+  // close buttons stay in the same spot when closing tabs.
+  const MIN_TAB_WIDTH = 100
+  const MAX_TAB_WIDTH = 200
+  // Smaller caps on phones, where the tab text uses a smaller font.
+  const MIN_TAB_WIDTH_MOBILE = 84
+  const MAX_TAB_WIDTH_MOBILE = 140
+  // Horizontal chrome around a title (left/right padding + gap + close button)
+  const TAB_WIDTH_CHROME = 46
+  const [tabWidth, setTabWidth] = useState(MIN_TAB_WIDTH)
+  const measureRef = useRef<HTMLDivElement>(null)
+  // Sticky max title width: only grows when a newly opened tab has a longer
+  // title. Closing tabs never shrinks the width, so close buttons don't move.
+  const maxTitleWidthRef = useRef(0)
+
+  const measureTabWidth = useCallback(() => {
+    const el = measureRef.current
+    if (!el) return
+
+    let widest = 0
+    el.querySelectorAll<HTMLElement>("[data-tab-measure]").forEach((node) => {
+      widest = Math.max(widest, node.offsetWidth)
+    })
+
+    if (widest > maxTitleWidthRef.current) {
+      maxTitleWidthRef.current = widest
+    }
+
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768
+    const minWidth = isMobile ? MIN_TAB_WIDTH_MOBILE : MIN_TAB_WIDTH
+    const maxWidth = isMobile ? MAX_TAB_WIDTH_MOBILE : MAX_TAB_WIDTH
+
+    const next = Math.min(
+      maxWidth,
+      Math.max(minWidth, Math.ceil(maxTitleWidthRef.current) + TAB_WIDTH_CHROME)
+    )
+    setTabWidth((prev) => (prev === next ? prev : next))
+  }, [])
+
+  useLayoutEffect(() => {
+    measureTabWidth()
+    window.addEventListener("resize", measureTabWidth)
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      document.fonts.ready.then(measureTabWidth).catch(() => {})
+    }
+    return () => window.removeEventListener("resize", measureTabWidth)
+  }, [measureTabWidth, tabs, isOverflowing, dict])
+
   // Change Password State
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
@@ -1130,21 +1219,64 @@ export function MdiLayout() {
   const userDisplayName =
     profile?.full_name || user?.email?.split("@")[0] || "User"
 
-  // Scroll active tab into view
+  // Scroll active tab into view: keep it fully visible, centered when the
+  // strip overflows. Re-runs when tabs/widths change so newly opened tabs
+  // are scrolled into view after their width settles.
   useEffect(() => {
-    if (activeTabId && tabStripRef.current) {
-      const activeTabElement = tabStripRef.current.querySelector(
-        `[data-tab-id="${activeTabId}"]`
-      )
-      if (activeTabElement) {
-        activeTabElement.scrollIntoView({
-          behavior: "smooth",
-          block: "nearest",
-          inline: "center",
-        })
-      }
+    const container = tabStripRef.current
+    if (!activeTabId || !container) return
+    const el = container.querySelector<HTMLElement>(
+      `[data-tab-id="${activeTabId}"]`
+    )
+    if (!el) return
+
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const centerTab = () => {
+      const containerRect = container.getBoundingClientRect()
+      const elRect = el.getBoundingClientRect()
+      const target =
+        container.scrollLeft +
+        (elRect.left - containerRect.left) -
+        (containerRect.width - elRect.width) / 2
+      container.scrollTo({
+        left: Math.max(0, target),
+        behavior: "smooth",
+      })
     }
-  }, [activeTabId])
+
+    const isFullyVisible = () => {
+      const containerRect = container.getBoundingClientRect()
+      const elRect = el.getBoundingClientRect()
+      return (
+        elRect.left >= containerRect.left - 1 &&
+        elRect.right <= containerRect.right + 1
+      )
+    }
+
+    const raf = requestAnimationFrame(() => {
+      if (cancelled) return
+      centerTab()
+      // The scroll chevrons mount/unmount as overflow changes, which resizes
+      // the strip mid-animation (also after tab restore on refresh); keep
+      // re-centering until the active tab stays fully visible.
+      let attempts = 0
+      const settle = () => {
+        if (cancelled) return
+        if (isFullyVisible() || attempts >= 6) return
+        attempts++
+        centerTab()
+        timer = setTimeout(settle, 250)
+      }
+      timer = setTimeout(settle, 300)
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf)
+      if (timer) clearTimeout(timer)
+    }
+  }, [activeTabId, tabs, tabWidth])
 
   // ============================================================
   // UNIFIED MENU CONFIGURATION
@@ -1442,7 +1574,7 @@ export function MdiLayout() {
   )
 
   // ============================================================
-  // MOBILE MENU (vertical with expanded groups)
+  // MOBILE MENU (vertical with collapsible groups)
   // ============================================================
   const renderMobileMenu = () => (
     <div className="flex flex-col gap-1">
@@ -1475,38 +1607,65 @@ export function MdiLayout() {
 
         return (
           <div key={group.id}>
-            {/* Group Header */}
-            <div className="mt-2 flex items-center gap-2 border-b border-border/40 px-4 pb-2">
-              <group.icon className="size-4 text-muted-foreground/60" />
-              <span className="text-[11px] font-semibold tracking-wider text-muted-foreground/60 uppercase">
+            {/* Group Header (collapsible toggle) */}
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-expanded={!!expandedGroups[group.id]}
+              onClick={() =>
+                // Accordion: expanding a group collapses any other open group
+                setExpandedGroups((prev) => ({
+                  [group.id]: !prev[group.id],
+                }))
+              }
+              className={cn(
+                "mt-1 flex w-full items-center justify-start gap-2 rounded border-0 px-4 py-2 text-sm font-medium shadow-none transition-all duration-150 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
+                visibleItems.some((item) => activeTabId === item.id)
+                  ? "text-primary"
+                  : "text-muted-foreground hover:bg-white/10 hover:text-foreground active:bg-white/15"
+              )}
+            >
+              <group.icon className="size-4" />
+              <span className="flex-1 text-left text-[11px] font-semibold tracking-wider uppercase">
                 {group.label}
               </span>
-            </div>
+              <ChevronDown
+                className={cn(
+                  "size-4 shrink-0 transition-transform duration-200",
+                  expandedGroups[group.id] && "rotate-180"
+                )}
+              />
+            </Button>
 
-            {/* Group Items */}
-            <div className="flex flex-col gap-1 pl-4">
-              {visibleItems.map((item) => (
-                <Button
-                  key={item.id}
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    item.action()
-                    setIsMobileMenuOpen(false)
-                  }}
-                  className={cn(
-                    "flex w-full items-center justify-start gap-2 rounded border-0 px-4 py-2 text-sm shadow-none transition-all duration-150 focus:ring-0 focus:outline-none",
-                    activeTabId === item.id
-                      ? "bg-primary/10 font-semibold text-primary"
-                      : "text-muted-foreground hover:bg-white/10 hover:text-foreground",
-                    item.itemClassName
-                  )}
-                >
-                  <item.icon className="size-5" />
-                  <span>{item.label}</span>
-                </Button>
-              ))}
-            </div>
+            {/* Group Items (visible only when expanded) */}
+            {expandedGroups[group.id] && (
+              <div
+                data-mobile-items={group.id}
+                className="flex flex-col gap-1 pb-1 pl-4"
+              >
+                {visibleItems.map((item) => (
+                  <Button
+                    key={item.id}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      item.action()
+                      setIsMobileMenuOpen(false)
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-start gap-2 rounded border-0 px-4 py-2 text-sm shadow-none transition-all duration-150 focus:ring-0 focus:outline-none",
+                      activeTabId === item.id
+                        ? "bg-primary/10 font-semibold text-primary"
+                        : "text-muted-foreground hover:bg-white/10 hover:text-foreground",
+                      item.itemClassName
+                    )}
+                  >
+                    <item.icon className="size-5" />
+                    <span>{item.label}</span>
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
         )
       })}
@@ -1532,7 +1691,7 @@ export function MdiLayout() {
               <DropdownMenuContent
                 align="start"
                 sideOffset={8}
-                className="max-h-[70vh] w-72 overflow-y-auto border border-border/60 bg-background p-2 shadow-lg"
+                className="h-[60vh] w-50 overflow-y-auto border border-border/60 bg-background p-2 shadow-lg"
               >
                 <div className="mb-2 flex items-center gap-2 border-b border-border/60 pb-2">
                   <div className="text-base font-bold tracking-tight">
@@ -1749,6 +1908,31 @@ export function MdiLayout() {
 
       {/* Tab Strip */}
       <div className="group/tabstrip relative flex h-10 shrink-0 items-center gap-1 overflow-hidden border-b border-border/60 bg-muted/5 px-2">
+        {/* Hidden measurer: renders every open tab title at its natural width
+            so we can size all tabs equally to the longest one. */}
+        <div
+          ref={measureRef}
+          aria-hidden
+          className="pointer-events-none absolute top-0 left-0 -z-10 flex h-0 w-0 items-center gap-1 overflow-hidden opacity-0"
+        >
+          {tabs.map((tab) => {
+            const registryItem = TAB_REGISTRY[tab.id]
+            const title = registryItem ? registryItem.title : tab.title
+            return (
+              <span
+                key={tab.id}
+                data-tab-measure
+                className={cn(
+                  "inline-block shrink-0 font-semibold whitespace-nowrap",
+                  getTabFontSize()
+                )}
+              >
+                {title}
+              </span>
+            )
+          })}
+        </div>
+
         {/* Scroll Left Button */}
         {canScrollLeft && (
           <Button
@@ -1776,8 +1960,9 @@ export function MdiLayout() {
                 key={tab.id}
                 data-tab-id={tab.id}
                 onClick={() => setActiveTabId(tab.id)}
+                style={{ width: tabWidth }}
                 className={cn(
-                  "relative z-10 -mb-[1px] flex h-9 max-w-[180px] min-w-[100px] cursor-pointer items-center justify-between gap-1.5 rounded-t-md border-x border-t pr-1.5 pl-3 font-medium whitespace-nowrap transition-all duration-150 ease-in-out",
+                  "relative z-10 -mb-[1px] flex h-9 shrink-0 cursor-pointer items-center justify-between gap-1.5 rounded-t-md border-x border-t pr-1.5 pl-3 font-medium whitespace-nowrap transition-all duration-150 ease-in-out",
                   getTabFontSize(),
                   isActive
                     ? "border-x-primary border-t-primary border-b-transparent bg-primary/15 font-semibold text-primary"

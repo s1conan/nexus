@@ -754,7 +754,7 @@ export default function PaymentsPage() {
 
   return (
     <div className="page-container">
-      <div className="page-header shrink-0">
+      <div className="page-header shrink-0 flex-row items-center justify-between">
         <h1 className="page-title">
           <Wallet className="mr-2 inline-block size-5 text-primary" />
           {dict.MENU_PAYMENTS || "Payments"}
@@ -778,12 +778,17 @@ export default function PaymentsPage() {
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
               <Button
-                size="sm"
+                size="icon"
                 onClick={() => handleOpenDialog()}
                 disabled={!canInsert}
+                title={dict.BUTTON_RECORD_PAYMENT || "Record Payment"}
+                aria-label={dict.BUTTON_RECORD_PAYMENT || "Record Payment"}
+                className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
               >
-                <Plus data-icon="inline-start" />
-                {dict.BUTTON_RECORD_PAYMENT || "Record Payment"}
+                <Plus className="size-4" />
+                <span className="hidden md:inline">
+                  {dict.BUTTON_RECORD_PAYMENT || "Record Payment"}
+                </span>
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-3xl">
@@ -1033,7 +1038,7 @@ export default function PaymentsPage() {
       </div>
 
       <div className="action-bar shrink-0">
-        <div className="relative w-full max-w-sm flex-1">
+        <div className="relative min-w-0 w-full flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -1090,8 +1095,44 @@ export default function PaymentsPage() {
                     if (updatedRowId === p.id) setUpdatedRowId(null)
                   }}
                 >
-                  <TableCell className="text-sm">{p.payment_number}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-sm">
+                    {/* Mobile: stacked layout */}
+                    <div className="flex flex-col gap-1.5 md:hidden">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{p.payment_number}</span>
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                            statusStyles[p.status]
+                          )}
+                        >
+                          {p.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="min-w-0 truncate">
+                          {p.invoice?.company?.name || "-"}
+                        </span>
+                        <span className="shrink-0 text-muted-foreground">
+                          {format(new Date(p.payment_date), "dd MMM yyyy")}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="min-w-0 truncate font-medium">
+                          {p.invoice?.invoice_number || "-"}
+                        </span>
+                        <span className="shrink-0 font-bold text-green-700">
+                          {SITE_CONFIG.currencySymbol}{" "}
+                          {Number(p.amount).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Desktop */}
+                    <span className="hidden md:inline">
+                      {p.payment_number}
+                    </span>
+                  </TableCell>
+                  <TableCell className="max-md:hidden">
                     <div className="text-sm font-medium">
                       {p.invoice?.invoice_number}
                     </div>
@@ -1099,14 +1140,14 @@ export default function PaymentsPage() {
                       {p.invoice?.company?.name}
                     </div>
                   </TableCell>
-                  <TableCell className="text-center text-sm">
+                  <TableCell className="max-md:hidden text-center text-sm">
                     {format(new Date(p.payment_date), "dd MMM yyyy")}
                   </TableCell>
-                  <TableCell className="text-right font-bold text-green-700">
+                  <TableCell className="max-md:hidden text-right font-bold text-green-700">
                     {SITE_CONFIG.currencySymbol}{" "}
                     {Number(p.amount).toLocaleString()}
                   </TableCell>
-                  <TableCell className="text-center align-middle">
+                  <TableCell className="max-md:hidden text-center align-middle">
                     <div
                       className={cn(
                         "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",

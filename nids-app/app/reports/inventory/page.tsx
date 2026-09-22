@@ -146,7 +146,7 @@ export default function InventoryReportPage() {
       </div>
 
       <div className="action-bar gap-4">
-        <div className="relative w-full max-w-sm flex-1">
+        <div className="relative min-w-0 w-full flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH || "Search..."}
@@ -155,14 +155,19 @@ export default function InventoryReportPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <Button
-          variant="outline"
-          onClick={fetchInventory}
-          className="h-10 shrink-0"
-        >
-          <TrendingUp className="mr-2 size-4" />
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={fetchInventory}
+        title={dict.BUTTON_REFRESH || "Refresh"}
+        aria-label={dict.BUTTON_REFRESH || "Refresh"}
+        className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+      >
+        <TrendingUp className="size-4" />
+        <span className="hidden md:inline">
           {dict.BUTTON_REFRESH || "Refresh"}
-        </Button>
+        </span>
+      </Button>
       </div>
 
       <Card className="data-card overflow-hidden">
@@ -240,7 +245,7 @@ export default function InventoryReportPage() {
                   </TableCell>
                   {canViewValue && (
                     <>
-                      <TableCell className="text-right text-sm font-medium text-muted-foreground">
+                      <TableCell className="max-md:hidden text-right text-sm font-medium text-muted-foreground">
                         {SITE_CONFIG.currencySymbol}{" "}
                         {item.weighted_average_cost.toLocaleString()}
                       </TableCell>

@@ -127,39 +127,48 @@ export default function ProfitLossReportPage() {
       </div>
 
       <div className="action-bar mb-6 shrink-0 items-end gap-4">
-        <div className="grid w-48 gap-1.5">
+        <div className="grid min-w-0 flex-1 gap-1.5 sm:w-48 sm:flex-none">
           <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
             {dict.LABEL_FROM_DATE || "From"}
           </label>
           <div className="relative">
-            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground" />
+            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground max-sm:hidden" />
             <Input
               type="date"
-              className="pl-8"
+              className="pl-8 max-sm:pl-2"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
           </div>
         </div>
 
-        <div className="grid w-48 gap-1.5">
+        <div className="grid min-w-0 flex-1 gap-1.5 sm:w-48 sm:flex-none">
           <label className="ml-1 text-[10px] font-bold text-muted-foreground uppercase">
             {dict.LABEL_TO_DATE || "To"}
           </label>
           <div className="relative">
-            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground" />
+            <Calendar className="absolute top-2.5 left-2.5 z-10 size-4 text-muted-foreground max-sm:hidden" />
             <Input
               type="date"
-              className="pl-8"
+              className="pl-8 max-sm:pl-2"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
         </div>
 
-        <Button variant="outline" onClick={fetchReport} className="h-10">
-          <Filter className="mr-2 size-4" />
-          {dict.BUTTON_REFRESH || "Refresh"}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={fetchReport}
+          title={dict.BUTTON_REFRESH || "Refresh"}
+          aria-label={dict.BUTTON_REFRESH || "Refresh"}
+          className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
+        >
+          <Filter className="size-4" />
+          <span className="hidden md:inline">
+            {dict.BUTTON_REFRESH || "Refresh"}
+          </span>
         </Button>
       </div>
 
