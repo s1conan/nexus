@@ -134,6 +134,9 @@ export interface InvoiceData {
   po_date?: string
   term_of_payment?: number
   quantity: number
+  // Original Sales Order ordered quantity — used to flag a partially
+  // fulfilled SO when the billed/sent quantity is lower than the SO.
+  so_quantity?: number
   unit_price: number
   discount_percent?: number
   delivery_price_per_litre: number
@@ -2501,6 +2504,20 @@ const InvoiceDocument = ({
             <Text>{data.note}</Text>
           </View>
         )}
+        {Number(data.so_quantity) > 0 && data.quantity < Number(data.so_quantity) && (
+          <Text
+            style={{
+              marginTop: 6,
+              fontSize: 9,
+              fontStyle: "italic",
+              color: "#b45309",
+            }}
+          >
+            *SO tidak terpenuhi — ditagih berdasarkan jumlah pengiriman (
+            {formatNumber(data.quantity)} L dari SO{" "}
+            {formatNumber(Number(data.so_quantity))} L).
+          </Text>
+        )}
         {data.bank_accounts && data.bank_accounts.length > 0 && (
           <View style={a4Styles.section}>
             <Text style={{ fontWeight: "bold" }}>Metode Pembayaran :</Text>
@@ -2654,10 +2671,42 @@ function calculateBilledQuantity(doInfo: any): number {
   const actualShrinkage = qtySent - qtyReceived
 
   if (actualShrinkage > allowedShrinkage) {
-    return qtyReceived
+    // Bill the received qty PLUS the tolerated shrinkage so the seller only
+    // absorbs the loss beyond the tolerance (not the full shortage).
+    return qtyReceived + allowedShrinkage
   }
 
   return qtySent
+}
+
+/**
+ * Sums the billable quantity across several Delivery Orders using the same
+ * shrinkage rule as `calculateBilledQuantity`: a shortage within the SO
+ * tolerance bills the full sent qty; a shortage beyond the tolerance bills the
+ * received qty PLUS the tolerance allowance (the seller only absorbs the loss
+ * beyond tolerance, not the whole shortage); an overage is capped at the sent qty.
+ */
+function sumBilledQuantity(
+  dos: { quantity?: number | null; received_quantity?: number | null }[],
+  shrinkageTolerancePercent: number
+): number {
+  return (Array.isArray(dos) ? dos : []).reduce((sum, d) => {
+    const qtySent = Number(d?.quantity) || 0
+    const hasReceived =
+      d?.received_quantity !== null && d?.received_quantity !== undefined
+    if (!hasReceived) return sum + qtySent
+    const qtyReceived = Number(d.received_quantity)
+    if (qtyReceived > qtySent) return sum + qtySent
+    const allowedShrinkage =
+      qtySent * ((Number(shrinkageTolerancePercent) || 0) / 100)
+    const actualShrinkage = qtySent - qtyReceived
+    return (
+      sum +
+      (actualShrinkage > allowedShrinkage
+        ? qtyReceived + allowedShrinkage
+        : qtySent)
+    )
+  }, 0)
 }
 
 export async function generateStandardInvoicePDF(
@@ -2677,7 +2726,45 @@ export async function generateStandardInvoicePDF(
       : inv.po || {}
   const poInfo = Array.isArray(inv.po) ? inv.po[0] || {} : inv.po || {}
 
-  const quantity = calculateBilledQuantity(doInfo) || inv.quantity || 0
+  const doRefs = Array.isArray(inv.do_refs) ? inv.do_refs : []
+  const soTolerance = Number(soInfo?.shrinkage_tolerance) || 0
+
+  // Billed qty must reflect what was actually SENT, not the SO ordered qty.
+  // Prefer the joined DO, then the invoice's DO snapshot, then a live lookup
+  // of the linked DOs (by do_ids, or all DOs of the SO for SO-direct invoices).
+  let billedQuantity = calculateBilledQuantity(doInfo)
+  if (!billedQuantity && doRefs.length > 0) {
+    billedQuantity = sumBilledQuantity(doRefs, soTolerance)
+  }
+  if (!billedQuantity) {
+    try {
+      const supabase = createClient()
+      const doIds = Array.isArray(inv.do_ids)
+        ? inv.do_ids.filter(Boolean)
+        : []
+      const { data: linkedDos } =
+        doIds.length > 0
+          ? await supabase
+              .from("delivery_orders")
+              .select("quantity, received_quantity")
+              .in("id", doIds)
+          : inv.so_id
+            ? await supabase
+                .from("delivery_orders")
+                .select("quantity, received_quantity")
+                .eq("so_id", inv.so_id)
+            : { data: null }
+      if (linkedDos && linkedDos.length > 0) {
+        billedQuantity = sumBilledQuantity(linkedDos, soTolerance)
+      }
+    } catch (err) {
+      console.error("Failed to derive billed quantity from DOs:", err)
+    }
+  }
+  const quantity = billedQuantity || inv.quantity || 0
+  // Original SO ordered qty — prefer the value snapshotted on the invoice so
+  // reports/PDF stay stable even if the SO is later edited.
+  const soQuantity = Number(inv.so_quantity) || Number(soInfo?.quantity) || 0
   const unitPrice = soInfo?.unit_price || 0
   const deliveryPricePerLitre = soInfo?.delivery_price_per_litre || 0
   const discountPercent = soInfo?.discount || 0
@@ -2695,7 +2782,6 @@ export async function generateStandardInvoicePDF(
       afterDiscountBase + shrinkageAmount + quantity * deliveryPricePerLitre
     )
   )
-  const doRefs = Array.isArray(inv.do_refs) ? inv.do_refs : []
 
   // Customer details for the invoice header block
   const companyRow = Array.isArray(inv.company)
@@ -2759,6 +2845,7 @@ export async function generateStandardInvoicePDF(
       po_date: soInfo?.so_date || poInfo?.so_date,
       term_of_payment: termOfPayment,
       quantity,
+      so_quantity: soQuantity,
       unit_price: unitPrice,
       discount_percent: discountPercent,
       delivery_price_per_litre: deliveryPricePerLitre,

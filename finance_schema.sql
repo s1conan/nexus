@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.invoices (
   so_id UUID REFERENCES public.sales_orders(id) ON DELETE SET NULL, -- Optional link to PO
   do_ids UUID[] DEFAULT '{}', -- Linked Delivery Orders (empty for SO-direct invoices)
   quantity NUMERIC(12,2) NOT NULL DEFAULT 0, -- Billed total quantity
+  so_quantity NUMERIC(12,2) NOT NULL DEFAULT 0, -- Original SO ordered qty (flags partial-delivery invoices)
   do_refs JSONB NOT NULL DEFAULT '[]'::jsonb, -- Snapshot of linked DO numbers/quantities
   issue_date DATE NOT NULL DEFAULT CURRENT_DATE,
   due_date DATE NOT NULL,
@@ -31,6 +32,10 @@ CREATE TABLE IF NOT EXISTS public.invoices (
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable all for authenticated users" ON public.invoices FOR ALL TO authenticated USING (true);
 CREATE TRIGGER audit_invoices_trigger AFTER INSERT OR UPDATE OR DELETE ON public.invoices FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
+
+-- Migration for existing databases (safe to re-run): snapshot of the SO
+-- ordered quantity so partial-delivery invoices stay correct in reports.
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS so_quantity NUMERIC(12,2) NOT NULL DEFAULT 0;
 
 -- 2. Create Payments Table
 CREATE TABLE IF NOT EXISTS public.payments (

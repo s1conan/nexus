@@ -127,7 +127,9 @@ function calculateBilledQuantity(doInfo: any): number {
   const actualShrinkage = qtySent - qtyReceived
 
   if (actualShrinkage > allowedShrinkage) {
-    return qtyReceived
+    // Bill the received qty PLUS the tolerated shrinkage so the seller only
+    // absorbs the loss beyond the tolerance (not the full shortage).
+    return qtyReceived + allowedShrinkage
   }
 
   return qtySent
@@ -399,7 +401,18 @@ export default function InvoicePage() {
 
     if (sourceMode === "so") {
       soInfo = selectedSOInfo
-      totalQty = Number(selectedSOInfo?.quantity) || 0
+      // Bill what was actually SENT, not the full SO order. Each DO follows
+      // the shrinkage rule (within tolerance -> full sent qty, beyond ->
+      // received qty). Fall back to the SO qty when no DO exists yet.
+      const billedFromDos = soDOs.reduce(
+        (sum: number, d: any) =>
+          sum + calculateBilledQuantity({ ...d, so: selectedSOInfo }),
+        0
+      )
+      totalQty =
+        billedFromDos > 0
+          ? billedFromDos
+          : Number(selectedSOInfo?.quantity) || 0
     } else {
       if (selectedDOs.length === 0) return null
       soInfo = selectedDOs[0].so
@@ -465,7 +478,7 @@ export default function InvoicePage() {
       taxTotal,
       grandTotal,
     }
-  }, [sourceMode, selectedDOs, selectedSOInfo, formData.tax_details])
+  }, [sourceMode, selectedDOs, selectedSOInfo, soDOs, formData.tax_details])
 
   // Fetch Stats
   const fetchStats = useCallback(async () => {
@@ -548,7 +561,7 @@ export default function InvoicePage() {
         let query = supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))"
+            "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, quantity, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))"
           )
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -852,7 +865,7 @@ export default function InvoicePage() {
         supabase
           .from("delivery_orders")
           .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
+            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, quantity, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
           )
           .in("id", itemDoIds)
           .order("do_number", { ascending: true })
@@ -943,6 +956,12 @@ export default function InvoicePage() {
         sourceMode === "so"
           ? selectedSOInfo?.id
           : selectedDOs[0]?.so?.id || selectedDOs[0]?.so_id || ""
+      // Snapshot the original SO ordered qty so partial-delivery invoices can
+      // be flagged later without depending on the linked SO row.
+      const soQuantity =
+        sourceMode === "so"
+          ? Number(selectedSOInfo?.quantity) || 0
+          : Number(selectedDOs[0]?.so?.quantity) || 0
 
       const payload = {
         ...cleanFormData,
@@ -950,6 +969,7 @@ export default function InvoicePage() {
         do_refs: doRefs,
         so_id: soId,
         quantity: invoiceCalc ? invoiceCalc.totalQty : formData.quantity,
+        so_quantity: soQuantity,
         subtotal: invoiceCalc ? invoiceCalc.subtotal : formData.subtotal,
         tax_amount: invoiceCalc ? invoiceCalc.taxTotal : totals.taxTotal,
         total_amount: invoiceCalc ? invoiceCalc.grandTotal : totals.grandTotal,
@@ -1005,7 +1025,7 @@ export default function InvoicePage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("invoices")
           .select(
-            "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))"
+            "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, quantity, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))"
           )
           .eq("id", editingItem.id)
           .single()
@@ -1750,7 +1770,7 @@ export default function InvoicePage() {
                                 let q = supabase
                                   .from("delivery_orders")
                                   .select(
-                                    "*, company:companies!delivery_orders_company_id_fkey!inner(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
+                                    "*, company:companies!delivery_orders_company_id_fkey!inner(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, quantity, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
                                   )
                                   .in("status", ["Shipped", "Delivered"])
                                   .limit(8)

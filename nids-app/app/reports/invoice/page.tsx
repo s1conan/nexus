@@ -68,7 +68,7 @@ export default function InvoiceReportPage() {
       const { data, error } = await supabase
         .from("invoices")
         .select("*, company:companies(id, name)")
-        .order("invoice_date", { ascending: false })
+        .order("issue_date", { ascending: false })
 
       if (error) throw error
       setInvoices(data || [])
@@ -85,7 +85,7 @@ export default function InvoiceReportPage() {
 
   const filteredInvoices = useMemo(() => {
     return invoices.filter((i) => {
-      const dateMatch = isWithinInterval(parseISO(i.invoice_date), {
+      const dateMatch = isWithinInterval(parseISO(i.issue_date), {
         start: parseISO(startDate),
         end: parseISO(endDate),
       })
@@ -102,7 +102,7 @@ export default function InvoiceReportPage() {
 
   const stats = useMemo(() => {
     const totalAmount = filteredInvoices.reduce(
-      (sum, i) => sum + (i.grand_total || 0),
+      (sum, i) => sum + (i.total_amount || 0),
       0
     )
     return { totalAmount, count: filteredInvoices.length }
@@ -238,6 +238,9 @@ export default function InvoiceReportPage() {
               <TableHead>{dict.VERIFY_LABEL_DATE || "Date"}</TableHead>
               <TableHead>{dict.LABEL_COMPANY_NAME}</TableHead>
               <TableHead className="text-right">
+                {dict.LABEL_QUANTITY || "Quantity"}
+              </TableHead>
+              <TableHead className="text-right">
                 {dict.LABEL_GRAND_TOTAL}
               </TableHead>
               <TableHead>{dict.LABEL_STATUS}</TableHead>
@@ -246,14 +249,14 @@ export default function InvoiceReportPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="p-0">
+                <TableCell colSpan={6} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
             ) : filteredInvoices.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="py-10 text-center text-muted-foreground"
                 >
                   {dict.NO_DATA}
@@ -268,7 +271,7 @@ export default function InvoiceReportPage() {
                     </span>
                   </TableCell>
                   <TableCell className="max-md:hidden text-sm">
-                    {format(parseISO(i.invoice_date), "dd MMM yyyy")}
+                    {format(parseISO(i.issue_date), "dd MMM yyyy")}
                   </TableCell>
                   <TableCell>
                     <span className="text-sm font-medium">
@@ -276,9 +279,25 @@ export default function InvoiceReportPage() {
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
+                    <div className="flex flex-col items-end">
+                      <span className="text-sm font-bold">
+                        {Number(i.quantity || 0).toLocaleString()} L
+                      </span>
+                      {Number(i.so_quantity || 0) > 0 &&
+                        Number(i.quantity || 0) < Number(i.so_quantity) && (
+                          <span
+                            className="text-[10px] font-bold text-amber-600"
+                            title="SO tidak terpenuhi — ditagih berdasarkan jumlah pengiriman"
+                          >
+                            SO {Number(i.so_quantity).toLocaleString()} L
+                          </span>
+                        )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
                     <span className="text-sm font-black">
                       {SITE_CONFIG.currencySymbol}{" "}
-                      {i.grand_total?.toLocaleString()}
+                      {i.total_amount?.toLocaleString()}
                     </span>
                   </TableCell>
                   <TableCell>

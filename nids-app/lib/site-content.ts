@@ -241,7 +241,7 @@ export const SITE_CONTENT = {
     BILLING_NOTE_EXCEEDS_SENT:
       "Received quantity exceeds sent quantity. Billed quantity is capped at sent quantity.",
     BILLING_NOTE_EXCEEDS_TOLERANCE:
-      "Loss exceeds shrinkage tolerance. Billing actual received quantity.",
+      "Loss exceeds shrinkage tolerance. Billing received quantity plus the tolerance allowance.",
     BILLING_NOTE_WITHIN_TOLERANCE:
       "Loss is within shrinkage tolerance. Billing original sent quantity.",
     LABEL_PRODUCT: "Product",
@@ -278,6 +278,7 @@ export const SITE_CONTENT = {
     MSG_DO_STATUS_UPDATED: "Delivery Order status %data% updated.",
     LABEL_QTY_SHIPPED: "Qty Shipped",
     LABEL_QTY_RECEIVED: "Qty Received",
+    LABEL_RECEIVED_DATE: "Date Received",
     MSG_CONFIRM_DELIVERY: "Confirm Delivery",
     MSG_SO_REQUIRED: "Sales Order must be selected.",
     LABEL_SO_INFORMATION: "SO Information",
@@ -866,7 +867,7 @@ export const SITE_CONTENT = {
     BILLING_NOTE_EXCEEDS_SENT:
       "Jumlah diterima melebihi jumlah dikirim. Jumlah ditagih dibatasi pada jumlah dikirim.",
     BILLING_NOTE_EXCEEDS_TOLERANCE:
-      "Susut melebihi toleransi. Menagih jumlah aktual yang diterima.",
+      "Susut melebihi toleransi. Menagih jumlah diterima ditambah toleransi.",
     BILLING_NOTE_WITHIN_TOLERANCE:
       "Susut dalam batas toleransi. Menagih jumlah awal yang dikirim.",
     LABEL_PRODUCT: "Produk",
@@ -903,6 +904,7 @@ export const SITE_CONTENT = {
     MSG_DO_STATUS_UPDATED: "Status Surat Jalan %data% diperbarui.",
     LABEL_QTY_SHIPPED: "Qty Dikirim",
     LABEL_QTY_RECEIVED: "Qty Diterima",
+    LABEL_RECEIVED_DATE: "Tanggal Diterima",
     MSG_CONFIRM_DELIVERY: "Konfirmasi Pengiriman",
     MSG_SO_REQUIRED: "Pesanan Penjualan harus dipilih.",
     LABEL_SO_INFORMATION: "Informasi SO",

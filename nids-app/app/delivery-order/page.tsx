@@ -268,7 +268,7 @@ export default function DeliveryOrdersPage() {
         let query = supabase
           .from("delivery_orders")
           .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, po_number, quantity, so_date, delivery_address), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
+            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, po_number, quantity, so_date, delivery_address, shrinkage_tolerance), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
           )
           .range(currentOffset, currentOffset + PAGE_SIZE - 1)
 
@@ -897,7 +897,7 @@ export default function DeliveryOrdersPage() {
         const { data: updatedRow, error: fetchError } = await supabase
           .from("delivery_orders")
           .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, quantity, so_date, delivery_address), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
+            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, quantity, so_date, delivery_address, shrinkage_tolerance), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
           )
           .eq("id", editingItem.id)
           .single()
@@ -2720,7 +2720,10 @@ export default function DeliveryOrdersPage() {
                         <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                           {o.received_quantity.toLocaleString()}
                         </span>
-                        {o.received_quantity < o.quantity && (
+                        {o.received_quantity < o.quantity &&
+                          o.quantity - o.received_quantity >
+                            o.quantity *
+                              ((o.po?.shrinkage_tolerance || 0) / 100) && (
                           <span className="text-[11px] text-rose-700">
                             -{" "}
                             {(
