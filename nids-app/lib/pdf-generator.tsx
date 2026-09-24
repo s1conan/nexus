@@ -2505,18 +2505,26 @@ const InvoiceDocument = ({
           </View>
         )}
         {Number(data.so_quantity) > 0 && data.quantity < Number(data.so_quantity) && (
-          <Text
+          <View
             style={{
-              marginTop: 6,
-              fontSize: 9,
-              fontStyle: "italic",
-              color: "#b45309",
+              borderRadius: 8,
+              border: "1px solid #f5b429",
+              gap: 4,
+              padding: 8,
+              backgroundColor: "#ffe8b5",
+              marginTop: 10
             }}
           >
-            *SO tidak terpenuhi — ditagih berdasarkan jumlah pengiriman (
+          <Text
+            style={{
+              fontSize: 10,
+            }}
+          >
+            * SO tidak terpenuhi — ditagih berdasarkan jumlah pengiriman (
             {formatNumber(data.quantity)} L dari SO{" "}
             {formatNumber(Number(data.so_quantity))} L).
           </Text>
+          </View>
         )}
         {data.bank_accounts && data.bank_accounts.length > 0 && (
           <View style={a4Styles.section}>

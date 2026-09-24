@@ -330,6 +330,21 @@ export default function InvoicePage() {
       },
     })
 
+  // Full-text DO status colors — mirrors app/delivery-order/page.tsx so the
+  // invoice summary badges use the same theme as the Delivery Order page.
+  const doStatusStyles: Record<string, string> = {
+    Draft:
+      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
+    Shipped:
+      "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
+    Delivered:
+      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+    Invoiced:
+      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
+    Cancelled:
+      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+  }
+
   // Form State
   const [formData, setFormData] = usePersistedState("invoice_form_data_v3", {
     invoice_number: "",
@@ -479,6 +494,34 @@ export default function InvoicePage() {
       grandTotal,
     }
   }, [sourceMode, selectedDOs, selectedSOInfo, soDOs, formData.tax_details])
+
+  // Per-DO delivery/billing snapshot for the summary lists. `so` may be joined
+  // on the DO (DO mode) or come from the selected SO (SO mode).
+  const getDoBilling = (d: any) => {
+    const sent = Number(d?.quantity) || 0
+    const hasReceived =
+      d?.received_quantity !== null && d?.received_quantity !== undefined
+    const received = hasReceived ? Number(d.received_quantity) : null
+    const tolerancePct =
+      Number(
+        d?.so?.shrinkage_tolerance ??
+          invoiceCalc?.soInfo?.shrinkage_tolerance
+      ) || 0
+    const allowed = sent * (tolerancePct / 100)
+    const shortfall = received !== null ? sent - received : 0
+    const withinTolerance =
+      received !== null && shortfall > 0 && shortfall <= allowed
+    const beyondTolerance = received !== null && shortfall > allowed
+    return {
+      sent,
+      received,
+      hasReceived,
+      allowed,
+      shortfall,
+      withinTolerance,
+      beyondTolerance,
+    }
+  }
 
   // Fetch Stats
   const fetchStats = useCallback(async () => {
@@ -2139,35 +2182,92 @@ export default function InvoicePage() {
                           <div className="space-y-4 p-4 text-sm">
                             {/* DO List — DO mode */}
                             {sourceMode === "do" && selectedDOs.length > 0 && (
-                              <div className="space-y-1.5 border-b pb-3">
-                                <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
-                                  {dict.LABEL_DO_LIST || "DO List"}
-                                </div>
-                                {selectedDOs.map((d: any) => (
-                                  <div
-                                    key={d.id}
-                                    className="flex items-center justify-between text-xs md:text-sm"
-                                  >
-                                    <span className="font-mono">
-                                      {d.do_number}
-                                    </span>
-                                    <span className="font-mono">
-                                      {Number(
-                                        calculateBilledQuantity(d)
-                                      ).toLocaleString()}{" "}
-                                      L
-                                    </span>
+                              <div className="space-y-1.5 border-b border-border/40 pb-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-xs font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
+                                    {dict.LABEL_DO_LIST || "DO List"}
                                   </div>
-                                ))}
+                                  <span className="shrink-0 text-[9px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                                    Terkirim / Diterima
+                                  </span>
+                                </div>
+                                <div className="divide-y divide-border/40">
+                                {selectedDOs.map((d: any) => {
+                                  const b = getDoBilling(d)
+                                  return (
+                                    <div
+                                      key={d.id}
+                                      className={cn(
+                                        "flex flex-col gap-0.5 px-1 py-1 text-[10px] md:flex-row md:items-center md:justify-between md:gap-2 md:py-1 md:text-xs",
+                                        b.withinTolerance && "bg-amber-500/5",
+                                        b.beyondTolerance && "bg-rose-500/5"
+                                      )}
+                                    >
+                                      <span className="min-w-0 truncate font-mono">
+                                        {d.do_number}
+                                      </span>
+                                      <span className="flex items-center gap-1.5 md:shrink-0">
+                                        <span
+                                          className="font-mono"
+                                          title="Terkirim / Diterima (L)"
+                                        >
+                                          {b.sent.toLocaleString()}
+                                          <span className="text-muted-foreground">
+                                            {" / "}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "font-semibold",
+                                              b.beyondTolerance &&
+                                                "text-rose-600 dark:text-rose-400",
+                                              b.withinTolerance &&
+                                                "text-amber-600 dark:text-amber-400",
+                                              b.hasReceived &&
+                                                !b.withinTolerance &&
+                                                !b.beyondTolerance &&
+                                                "text-emerald-600 dark:text-emerald-400",
+                                              !b.hasReceived &&
+                                                "text-muted-foreground"
+                                            )}
+                                          >
+                                            {b.hasReceived
+                                              ? Number(
+                                                  b.received
+                                                ).toLocaleString()
+                                              : "—"}
+                                          </span>
+                                          <span className="text-muted-foreground">
+                                            {" L"}
+                                          </span>
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:px-2",
+                                            doStatusStyles[d.status] ||
+                                              doStatusStyles.Draft
+                                          )}
+                                        >
+                                          {d.status}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                                </div>
                               </div>
                             )}
 
                             {/* Delivery Progress — SO mode */}
                             {sourceMode === "so" && (
-                              <div className="space-y-1.5 border-b pb-3">
-                                <div className="font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
-                                  {dict.LABEL_DELIVERY_PROGRESS ||
-                                    "Delivery Progress"}
+                              <div className="space-y-1.5 border-b border-border/40 pb-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="font-bold tracking-wider text-muted-foreground uppercase md:text-sm">
+                                    {dict.LABEL_DELIVERY_PROGRESS ||
+                                      "Delivery Progress"}
+                                  </div>
+                                  <span className="shrink-0 text-[9px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                                    Terkirim / Diterima
+                                  </span>
                                 </div>
                                 {soDOs.length === 0 ? (
                                   <div className="text-xs text-muted-foreground">
@@ -2175,25 +2275,70 @@ export default function InvoicePage() {
                                   </div>
                                 ) : (
                                   <>
-                                    {soDOs.map((d: any) => (
-                                      <div
-                                        key={d.id}
-                                        className="flex items-center justify-between text-[11px] md:text-sm"
-                                      >
-                                        <span className="">{d.do_number}</span>
-                                        <span className="flex items-center gap-2">
-                                          <span className="font-mono">
-                                            {Number(
-                                              d.quantity || 0
-                                            ).toLocaleString()}{" "}
-                                            L
+                                    <div className="divide-y divide-border/40">
+                                    {soDOs.map((d: any) => {
+                                      const b = getDoBilling(d)
+                                      return (
+                                        <div
+                                          key={d.id}
+                                          className={cn(
+                                            "flex flex-col gap-0.5 px-1 py-1 text-[10px] md:flex-row md:items-center md:justify-between md:gap-2 md:py-1 md:text-xs",
+                                            b.withinTolerance &&
+                                              "bg-amber-500/5",
+                                            b.beyondTolerance && "bg-rose-500/5"
+                                          )}
+                                        >
+                                          <span className="min-w-0 truncate font-mono">
+                                            {d.do_number}
                                           </span>
-                                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 font-bold text-muted-foreground uppercase">
-                                            {d.status}
+                                          <span className="flex items-center gap-1.5 md:shrink-0">
+                                            <span
+                                              className="font-mono"
+                                              title="Terkirim / Diterima (L)"
+                                            >
+                                              {b.sent.toLocaleString()}
+                                              <span className="text-muted-foreground">
+                                                {" / "}
+                                              </span>
+                                              <span
+                                                className={cn(
+                                                  "font-semibold",
+                                                  b.beyondTolerance &&
+                                                    "text-rose-600 dark:text-rose-400",
+                                                  b.withinTolerance &&
+                                                    "text-amber-600 dark:text-amber-400",
+                                                  b.hasReceived &&
+                                                    !b.withinTolerance &&
+                                                    !b.beyondTolerance &&
+                                                    "text-emerald-600 dark:text-emerald-400",
+                                                  !b.hasReceived &&
+                                                    "text-muted-foreground"
+                                                )}
+                                              >
+                                                {b.hasReceived
+                                                  ? Number(
+                                                      b.received
+                                                    ).toLocaleString()
+                                                  : "—"}
+                                              </span>
+                                              <span className="text-muted-foreground">
+                                                {" L"}
+                                              </span>
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:px-2",
+                                                doStatusStyles[d.status] ||
+                                                  doStatusStyles.Draft
+                                              )}
+                                            >
+                                              {d.status}
+                                            </span>
                                           </span>
-                                        </span>
-                                      </div>
-                                    ))}
+                                        </div>
+                                      )
+                                    })}
+                                    </div>
                                     {(() => {
                                       const receivedTotal = soDOs.reduce(
                                         (sum: number, d: any) =>
@@ -2206,7 +2351,19 @@ export default function InvoicePage() {
                                       const soQty =
                                         Number(invoiceCalc.soInfo?.quantity) ||
                                         0
-                                      if (soQty <= 0 || receivedTotal >= soQty)
+                                      // Tolerated shrinkage is acceptable and
+                                      // still billed in full — only warn when
+                                      // the loss actually exceeds tolerance.
+                                      const allowedTotal =
+                                        soQty *
+                                        ((Number(
+                                          invoiceCalc.soInfo?.shrinkage_tolerance
+                                        ) || 0) /
+                                          100)
+                                      if (
+                                        soQty <= 0 ||
+                                        soQty - receivedTotal <= allowedTotal
+                                      )
                                         return null
                                       return (
                                         <div className="flex items-start gap-2 rounded border border-amber-500/20 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
