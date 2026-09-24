@@ -184,12 +184,12 @@ export function LiveSearch<T extends Record<string, any>>({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "w-full justify-between bg-background font-normal transition-colors hover:bg-background/80",
+            "w-full min-w-0 justify-between bg-background font-normal transition-colors hover:bg-background/80",
             className
           )}
           disabled={disabled}
         >
-          <span className="truncate">{triggerText}</span>
+          <span className="min-w-0 truncate">{triggerText}</span>
           <span className="flex shrink-0 items-center gap-0.5">
             {value && !disabled ? (
               <span
