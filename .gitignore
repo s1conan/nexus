@@ -2,3 +2,7 @@ node_modules
 .next
 .env*
 tsconfig.tsbuildinfo
+
+# Database dumps / SQL files (never upload)
+*.sql
+backups/
