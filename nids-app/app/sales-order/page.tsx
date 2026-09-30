@@ -464,6 +464,9 @@ export default function SalesOrdersPage() {
   const canDelete = hasPermission("sales-order", "delete")
   const canPrint = hasPermission("sales-order", "print")
 
+  // Handle Print with Gallery preview.
+  // Opens the preview immediately (with an internal loader) so the click
+  // always registers, then hydrates the generated PDF once it is ready.
   const handlePrint = async (o: any) => {
     if (!companyInfo) {
       notify.error(
@@ -472,32 +475,42 @@ export default function SalesOrdersPage() {
       )
       return
     }
+
+    const contacts = o.company?.details?.contact_persons?.length
+      ? o.company.details.contact_persons
+      : [
+          {
+            name: o.company?.details?.contact_person || "-",
+            email: o.company?.details?.email || o.company?.email || "",
+          },
+        ]
+
+    setPreviewDoc({
+      id: o.id,
+      title: o.so_number,
+      description: ` ${o.company?.name || "-"}`,
+      images: [],
+      pdf: "",
+      generating: true,
+      customerEmail: contacts[0]?.email || "",
+      contacts: contacts,
+      ccEmails: o.company?.details?.cc_emails || "",
+      bccEmails: o.company?.details?.bcc_emails || "",
+      raw: o,
+    })
+
     try {
       const dataUri = await generateStandardSalesOrderPDF(companyInfo, o, {
         save: false,
         output: "datauri",
       })
-      const contacts = o.company?.details?.contact_persons?.length
-        ? o.company.details.contact_persons
-        : [
-            {
-              name: o.company?.details?.contact_person || "-",
-              email: o.company?.details?.email || o.company?.email || "",
-            },
-          ]
-      setPreviewDoc({
-        id: o.id,
-        title: o.so_number,
-        description: ` ${o.company?.name || "-"}`,
-        images: [],
-        pdf: dataUri,
-        customerEmail: contacts[0]?.email || "",
-        contacts: contacts,
-        ccEmails: o.company?.details?.cc_emails || "",
-        bccEmails: o.company?.details?.bcc_emails || "",
-        raw: o,
-      })
+      setPreviewDoc((prev: any) =>
+        prev && prev.id === o.id
+          ? { ...prev, pdf: dataUri, generating: false }
+          : prev
+      )
     } catch (err: any) {
+      setPreviewDoc((prev: any) => (prev && prev.id === o.id ? null : prev))
       notify.error("Failed to generate PDF", err.message)
     }
   }

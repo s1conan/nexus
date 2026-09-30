@@ -130,6 +130,7 @@ interface PreviewDoc {
   description: string
   images: string[]
   pdf: string
+  generating?: boolean
   customerEmail?: string
   contacts: { name: string; email?: string }[]
   ccEmails?: string
@@ -559,12 +560,35 @@ export default function PaymentsPage() {
     }
   }
 
-  // Handle Print with Gallery preview
+  // Handle Print with Gallery preview.
+  // Opens the preview immediately (with an internal loader) so the click
+  // always registers, then hydrates the generated PDF once it is ready.
   const handlePrint = async (p: PaymentWithRelations) => {
     if (!companyInfo) {
       notify.error("Error", "Company info not loaded")
       return
     }
+
+    const contacts = (
+      p.invoice?.company?.details?.contact_persons?.length
+        ? p.invoice.company.details.contact_persons
+        : []
+    ).filter((c): c is { name: string; email?: string } => !!c.name)
+
+    setPreviewDoc({
+      id: p.id,
+      title: p.payment_number,
+      description: p.invoice?.company?.name || "-",
+      images: [],
+      pdf: "",
+      generating: true,
+      customerEmail: contacts[0]?.email || "",
+      contacts: contacts,
+      ccEmails: p.invoice?.company?.details?.cc_emails || "",
+      bccEmails: p.invoice?.company?.details?.bcc_emails || "",
+      raw: p,
+    })
+
     try {
       const dataUri = await generateStandardPaymentPDF(companyInfo, p, {
         save: false,
@@ -573,24 +597,13 @@ export default function PaymentsPage() {
       if (!dataUri || typeof dataUri !== "string") {
         throw new Error("Failed to generate PDF data URI")
       }
-      const contacts = (
-        p.invoice?.company?.details?.contact_persons?.length
-          ? p.invoice.company.details.contact_persons
-          : []
-      ).filter((c): c is { name: string; email?: string } => !!c.name)
-      setPreviewDoc({
-        id: p.id,
-        title: p.payment_number,
-        description: p.invoice?.company?.name || "-",
-        images: [],
-        pdf: dataUri,
-        customerEmail: contacts[0]?.email || "",
-        contacts: contacts,
-        ccEmails: p.invoice?.company?.details?.cc_emails || "",
-        bccEmails: p.invoice?.company?.details?.bcc_emails || "",
-        raw: p,
-      })
+      setPreviewDoc((prev) =>
+        prev && prev.id === p.id
+          ? { ...prev, pdf: dataUri, generating: false }
+          : prev
+      )
     } catch (err: unknown) {
+      setPreviewDoc((prev) => (prev && prev.id === p.id ? null : prev))
       notify.error(
         "Failed to generate PDF",
         err instanceof Error ? err.message : String(err)

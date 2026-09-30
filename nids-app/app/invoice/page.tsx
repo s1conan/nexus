@@ -1267,37 +1267,50 @@ export default function InvoicePage() {
     handleSave()
   }
 
+  // Handle Print with Gallery preview.
+  // Opens the preview immediately (with an internal loader) so the click
+  // always registers, then hydrates the generated PDF once it is ready.
   const handlePrint = async (q: any) => {
     if (!companyInfo) {
       notify.error(dict.MSG_SAVE_FAILED, "Company information not loaded yet.")
       return
     }
+
+    const contacts = q.company?.details?.contact_persons?.length
+      ? q.company.details.contact_persons
+      : [
+          {
+            name: q.company?.details?.contact_person || "-",
+            email: q.company?.details?.email || q.company?.email || "",
+          },
+        ]
+
+    setPreviewDoc({
+      id: q.id,
+      title: q.invoice_number,
+      description: ` ${q.company?.name || "-"}`,
+      images: [],
+      pdf: "",
+      generating: true,
+      customerEmail: contacts[0]?.email || "",
+      contacts: contacts,
+      ccEmails: q.company?.details?.cc_emails || "",
+      bccEmails: q.company?.details?.bcc_emails || "",
+      raw: q,
+    })
+
     try {
       const dataUri = await generateStandardInvoicePDF(companyInfo, q, {
         save: false,
         output: "datauri",
       })
-      const contacts = q.company?.details?.contact_persons?.length
-        ? q.company.details.contact_persons
-        : [
-            {
-              name: q.company?.details?.contact_person || "-",
-              email: q.company?.details?.email || q.company?.email || "",
-            },
-          ]
-      setPreviewDoc({
-        id: q.id,
-        title: q.invoice_number,
-        description: ` ${q.company?.name || "-"}`,
-        images: [],
-        pdf: dataUri,
-        customerEmail: contacts[0]?.email || "",
-        contacts: contacts,
-        ccEmails: q.company?.details?.cc_emails || "",
-        bccEmails: q.company?.details?.bcc_emails || "",
-        raw: q,
-      })
+      setPreviewDoc((prev: any) =>
+        prev && prev.id === q.id
+          ? { ...prev, pdf: dataUri, generating: false }
+          : prev
+      )
     } catch (err: any) {
+      setPreviewDoc((prev: any) => (prev && prev.id === q.id ? null : prev))
       notify.error("Failed to generate PDF", err.message)
     }
   }

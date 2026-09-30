@@ -1133,16 +1133,15 @@ export default function DeliveryOrdersPage() {
     }
   }
 
+  // Handle Print with Gallery preview.
+  // Opens the preview immediately (with an internal loader) so the click
+  // always registers, then hydrates the generated PDF once it is ready.
   const handlePrint = async (o: any) => {
     if (!companyInfo) {
       notify.error(dict.MSG_SAVE_FAILED, "Company information not loaded yet.")
       return
     }
 
-    const dataUri = await generateStandardDeliveryOrderPDF(companyInfo, o, {
-      save: false,
-      output: "datauri",
-    })
     const contacts = o.company?.details?.contact_persons?.length
       ? o.company.details.contact_persons
       : [
@@ -1151,18 +1150,35 @@ export default function DeliveryOrdersPage() {
             email: o.company?.details?.email || o.company?.email || "",
           },
         ]
+
     setPreviewDoc({
       id: o.id,
       title: o.do_number,
       description: `${dict.LABEL_COMPANY_NAME}: ${o.company?.name || "-"}`,
       images: [],
-      pdf: dataUri,
+      pdf: "",
+      generating: true,
       customerEmail: contacts[0]?.email || "",
       contacts: contacts,
       ccEmails: o.company?.details?.cc_emails || "",
       bccEmails: o.company?.details?.bcc_emails || "",
       raw: o,
     })
+
+    try {
+      const dataUri = await generateStandardDeliveryOrderPDF(companyInfo, o, {
+        save: false,
+        output: "datauri",
+      })
+      setPreviewDoc((prev: any) =>
+        prev && prev.id === o.id
+          ? { ...prev, pdf: dataUri, generating: false }
+          : prev
+      )
+    } catch (err: any) {
+      setPreviewDoc((prev: any) => (prev && prev.id === o.id ? null : prev))
+      notify.error("Failed to generate PDF", err.message)
+    }
   }
 
   const handleSendEmail = async (doc: any) => {
@@ -2724,16 +2740,16 @@ export default function DeliveryOrdersPage() {
                           o.quantity - o.received_quantity >
                             o.quantity *
                               ((o.po?.shrinkage_tolerance || 0) / 100) && (
-                          <span className="text-[11px] text-rose-700">
-                            -{" "}
-                            {(
-                              ((o.quantity - o.received_quantity) /
-                                o.quantity) *
-                              100
-                            ).toFixed(1)}
-                            %
-                          </span>
-                        )}
+                            <span className="text-[11px] text-rose-700">
+                              -{" "}
+                              {(
+                                ((o.quantity - o.received_quantity) /
+                                  o.quantity) *
+                                100
+                              ).toFixed(1)}
+                              %
+                            </span>
+                          )}
                       </div>
                     ) : o.received_quantity != null ? (
                       <span className="font-semibold text-emerald-600 dark:text-emerald-400">
@@ -2911,8 +2927,8 @@ export default function DeliveryOrdersPage() {
           {deliveryConfirm && (
             <div className="relative flex w-full flex-col gap-6 p-5">
               <div className="rounded-md border bg-muted/50 px-4 py-2">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
+                <div className="grid grid-cols-4 gap-4 text-sm">
+                  <div className="col-span-3 flex flex-col gap-2">
                     <span className="text-muted-foreground">
                       {dict.LABEL_DO_NUMBER}
                     </span>
@@ -2920,7 +2936,7 @@ export default function DeliveryOrdersPage() {
                       {deliveryConfirm.do_number}
                     </p>
                   </div>
-                  <div>
+                  <div className="flex flex-col gap-2">
                     <span className="text-muted-foreground">
                       {dict.LABEL_QTY_SHIPPED}
                     </span>
@@ -2932,6 +2948,22 @@ export default function DeliveryOrdersPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="delivered_date">
+                    {dict.LABEL_RECEIVED_DATE} *
+                  </Label>
+                  <Input
+                    id="delivered_date"
+                    type="date"
+                    value={deliveryFormData.delivered_date}
+                    onChange={(e) =>
+                      setDeliveryFormData((prev) => ({
+                        ...prev,
+                        delivered_date: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="received_qty">
                     {dict.LABEL_QTY_RECEIVED} *
@@ -2946,22 +2978,6 @@ export default function DeliveryOrdersPage() {
                       }))
                     }
                     rightBadge="L"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="delivered_date">
-                    {dict.LABEL_DELIVERY_DATE} *
-                  </Label>
-                  <Input
-                    id="delivered_date"
-                    type="date"
-                    value={deliveryFormData.delivered_date}
-                    onChange={(e) =>
-                      setDeliveryFormData((prev) => ({
-                        ...prev,
-                        delivered_date: e.target.value,
-                      }))
-                    }
                   />
                 </div>
               </div>

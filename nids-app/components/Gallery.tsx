@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "./ui/button"
 import { Switch } from "./ui/switch"
+import { SectionLoader } from "./section-loader"
 import { cn } from "@/lib/utils"
 import { notify } from "@/lib/notifications"
 import { pdfjs, Document, Page } from "react-pdf"
@@ -54,6 +55,7 @@ type Doc = {
   description: string
   images: string[]
   pdf?: string
+  generating?: boolean
   id?: string
   customerEmail?: string
   contacts?: { name: string; email?: string }[]
@@ -82,6 +84,7 @@ type GalleryProps = {
     download: string
     sendEmail: string
     confirmEmail: string
+    generatingDocument?: string
   }
   attachmentOptions?: AttachmentOptions
   onDownload?: (doc: Doc) => void
@@ -133,6 +136,7 @@ export default function Gallery({
 
   const containerRef = useRef<HTMLDivElement>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const hasAutofitRef = useRef(false)
 
   // Precise dimension measurement using ResizeObserver
   const onResize = useCallback((entries: ResizeObserverEntry[]) => {
@@ -166,6 +170,19 @@ export default function Gallery({
 
   const activeDoc = activeDocIndex !== null ? docs[activeDocIndex] : null
   const hasMultipleImages = activeDoc && activeDoc.images.length > 1
+
+  // Fit PDF to container width once per opened document.
+  // Waits until the container has been measured and a PDF is displayed,
+  // then never autofits again (manual zoom / window resize won't re-trigger).
+  useEffect(() => {
+    if (activeDocIndex === null) {
+      hasAutofitRef.current = false
+      return
+    }
+    if (hasAutofitRef.current || !containerWidth || !activeDoc?.pdf) return
+    setScale(Math.max(0.4, containerWidth / REFERENCE_WIDTH))
+    hasAutofitRef.current = true
+  }, [activeDocIndex, activeDoc, containerWidth, REFERENCE_WIDTH])
 
   function handleClose(open: boolean) {
     if (!open) {
@@ -329,12 +346,20 @@ export default function Gallery({
   function renderContent() {
     if (!activeDoc) return null
 
+    if (activeDoc.generating) {
+      return (
+        <div className="relative flex h-full w-full items-center justify-center bg-muted/30">
+          <SectionLoader message={labels.generatingDocument} />
+        </div>
+      )
+    }
+
     if (activeDoc.pdf) {
       return (
         <div className="relative flex h-full w-full flex-col overflow-hidden bg-muted/30">
           {/* PDF Toolbar */}
-          <div className="sticky top-0 z-30 flex w-full shrink-0 items-center justify-between border-b bg-muted px-2 py-2 text-xs font-medium md:px-4">
-            <div className="flex items-center gap-2 text-[10px]">
+          <div className="sticky top-0 z-30 flex w-full shrink-0 flex-wrap items-center justify-between gap-x-1.5 gap-y-1.5 border-b bg-muted px-2 py-2 text-xs font-medium md:flex-nowrap md:gap-x-2 md:px-4">
+            <div className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[10px]">
               <span className="tracking-wider text-muted-foreground uppercase">
                 Page
               </span>
@@ -343,60 +368,60 @@ export default function Gallery({
               </span>
             </div>
 
-            <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-0.5">
+            <div className="flex shrink-0 items-center gap-0.5 rounded-lg border bg-muted/40 p-0.5 md:gap-1">
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 rounded-md hover:bg-secondary/20"
+                className="size-6 rounded-md hover:bg-secondary/20 md:size-7"
                 onClick={handleZoomOut}
               >
-                <ZoomOut className="size-3.5" />
+                <ZoomOut className="size-3 md:size-3.5" />
               </Button>
-              <span className="w-12 text-center text-[10px] font-bold tabular-nums">
+              <span className="w-9 text-center text-[9px] font-bold tabular-nums md:w-12 md:text-[10px]">
                 {Math.round(scale * 100)}%
               </span>
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 rounded-md hover:bg-secondary/20"
+                className="size-6 rounded-md hover:bg-secondary/20 md:size-7"
                 onClick={handleZoomIn}
               >
-                <ZoomIn className="size-3.5" />
+                <ZoomIn className="size-3 md:size-3.5" />
               </Button>
               <div className="mx-0.5 h-3 w-px bg-border" />
               <Button
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "size-7 rounded-md hover:bg-secondary/20",
+                  "size-6 rounded-md hover:bg-secondary/20 md:size-7",
                   scale === 1.0 && "bg-background text-primary shadow-sm"
                 )}
                 onClick={fitToWidth}
                 title="Fit to Width"
               >
-                <ArrowLeftRight className="size-3.5" />
+                <ArrowLeftRight className="size-3 md:size-3.5" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 rounded-md hover:bg-secondary/20"
+                className="size-6 rounded-md hover:bg-secondary/20 md:size-7"
                 onClick={fitToPage}
                 title="Fit to Page"
               >
-                <ArrowUpDown className="size-3.5" />
+                <ArrowUpDown className="size-3 md:size-3.5" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 rounded-md hover:bg-secondary/20"
+                className="size-6 rounded-md hover:bg-secondary/20 md:size-7"
                 onClick={() => setScale(1.0)}
                 title="Default Zoom (100%)"
               >
-                <Maximize className="size-3.5" />
+                <Maximize className="size-3 md:size-3.5" />
               </Button>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               <Button
                 variant="outline"
                 size="icon"
@@ -491,9 +516,9 @@ export default function Gallery({
               {labels.previewDocument}
             </DialogTitle>
             {activeDoc && (
-              <DialogDescription className="flex items-center gap-1.5">
-                {activeDoc.title} <span className="">•</span>{" "}
-                {activeDoc.description}
+              <DialogDescription className="flex flex-col items-start gap-0.5 text-left leading-snug">
+                <span>{activeDoc.title}</span>
+                <span>{activeDoc.description}</span>
               </DialogDescription>
             )}
           </DialogHeader>
@@ -524,25 +549,26 @@ export default function Gallery({
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-row gap-2 px-3 py-3 sm:gap-3 sm:px-5 sm:py-4">
             <Button
               variant="outline"
               onClick={() => onDownload?.(activeDoc!)}
-              className="gap-2"
+              disabled={activeDoc?.generating}
+              className="gap-1.5 px-3 text-xs sm:gap-2 sm:px-2.5 sm:text-sm"
             >
-              <Download className="size-4" />
+              <Download className="size-3.5 sm:size-4" />
               {labels.download}
             </Button>
             <Button
               variant="default"
               onClick={handleSendEmailClick}
-              disabled={isSending || !onSendEmail}
-              className="gap-2 px-6"
+              disabled={isSending || !onSendEmail || activeDoc?.generating}
+              className="gap-1.5 px-3 text-xs sm:gap-2 sm:px-6 sm:text-sm"
             >
               {isSending ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin sm:size-4" />
               ) : (
-                <Mail className="size-4" />
+                <Mail className="size-3.5 sm:size-4" />
               )}
               {labels.sendEmail}
             </Button>
