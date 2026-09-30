@@ -1597,6 +1597,11 @@ export default function DeliveryOrdersPage() {
                                     )
                                     .in("status", ["Approved", "Partial"])
                                     .limit(8)
+                                  if (selectedCompanyInfo?.id)
+                                    q = q.eq(
+                                      "company_id",
+                                      selectedCompanyInfo.id
+                                    ) as typeof q
                                   if (query) {
                                     const soSearch = constructMultiWordSearch(
                                       query,
