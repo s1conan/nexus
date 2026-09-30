@@ -1179,8 +1179,7 @@ const SalesOrderDocument = ({
     }
   })
   const grandTotal =
-    afterDiscount +
-    deliveryTotal +
+    Math.round(afterDiscount + deliveryTotal) +
     taxLines.reduce((sum, t) => sum + t.amount, 0)
   return (
     <Document>
