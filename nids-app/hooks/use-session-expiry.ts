@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react"
 import { SITE_CONFIG } from "@/lib/site-content"
 
-const LAST_ACTIVE_KEY = "nids_last_active"
+export const LAST_ACTIVE_KEY = "nids_last_active"
 
 const ACTIVITY_EVENTS = [
   "pointerdown",

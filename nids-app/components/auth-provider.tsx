@@ -13,7 +13,7 @@ import {
 import { createClient } from "@/lib/supabase"
 import { useDictionary } from "./dictionary-provider"
 import { notify } from "@/lib/notifications"
-import { useSessionExpiry } from "@/hooks/use-session-expiry"
+import { useSessionExpiry, LAST_ACTIVE_KEY } from "@/hooks/use-session-expiry"
 import { FullPageLoader } from "@/components/full-page-loader"
 
 interface UserProfile {
@@ -297,8 +297,18 @@ export function AuthProvider({
         event === "USER_UPDATED" ||
         event === "TOKEN_REFRESHED"
       ) {
+        // A fresh sign-in restarts the idle clock. A stale nids_last_active
+        // left over from a previous session would otherwise expire this new
+        // session the moment useSessionExpiry enables (login → instant
+        // logout bug). Must run before syncProfile sets the user state.
+        if (event === "SIGNED_IN") {
+          localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()))
+        }
         await syncProfile(session?.user || null, event === "USER_UPDATED")
       } else if (event === "SIGNED_OUT") {
+        // The idle stamp belongs to the session that just died — drop it so
+        // it can never leak into the next session.
+        localStorage.removeItem(LAST_ACTIVE_KEY)
         if (!isManualSignOut.current && userRef.current) {
           notify.warning(
             dictRef.current.MSG_SESSION_EXPIRED,
