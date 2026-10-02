@@ -2014,6 +2014,9 @@ export default function SalesOrdersPage() {
               <TableHead className="text-right">
                 {dict.LABEL_QUANTITY}
               </TableHead>
+              <TableHead className="text-right max-md:hidden">
+                {dict.LABEL_SHRINKAGE_TOLERANCE}
+              </TableHead>
               <TableHead className="text-center">{dict.LABEL_STATUS}</TableHead>
               <TableHead className="text-right"> </TableHead>
             </TableRow>
@@ -2021,14 +2024,14 @@ export default function SalesOrdersPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="p-0">
+                <TableCell colSpan={8} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
             ) : orders.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   className="py-10 text-center text-muted-foreground"
                 >
                   {dict.NO_DATA}
@@ -2076,6 +2079,17 @@ export default function SalesOrdersPage() {
                             : "-"}
                         </span>
                       </div>
+                      {Number(o.shrinkage_tolerance) > 0 ? (
+                        <span className="w-fit text-[10px] font-medium text-muted-foreground">
+                          {dict.LABEL_SHRINKAGE_TOLERANCE}:{" "}
+                          {Number(o.shrinkage_tolerance)}%
+                        </span>
+                      ) : (
+                        <span className="inline-flex w-fit items-center rounded-full border border-amber-400 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-400">
+                          {dict.LABEL_SHRINKAGE_TOLERANCE}:{" "}
+                          {dict.LABEL_TOLERANCE_NOT_SET}
+                        </span>
+                      )}
                     </div>
                     {/* Desktop */}
                     <span className="hidden md:inline">{o.so_number}</span>
@@ -2095,6 +2109,20 @@ export default function SalesOrdersPage() {
                     {new Intl.NumberFormat(
                       lang === "id" ? "id-ID" : "en-US"
                     ).format(o.quantity)}
+                  </TableCell>
+                  <TableCell className="text-right text-sm max-md:hidden">
+                    {Number(o.shrinkage_tolerance) > 0 ? (
+                      <span className="font-mono">
+                        {Number(o.shrinkage_tolerance)}%
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center rounded-full border border-amber-400 bg-amber-100 px-2 py-0.5 text-[10px] font-bold whitespace-nowrap text-amber-700 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-400"
+                        title={dict.LABEL_TOLERANCE_NOT_SET}
+                      >
+                        {dict.LABEL_TOLERANCE_NOT_SET}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-center align-middle max-md:hidden">
                     <div
@@ -2197,7 +2225,7 @@ export default function SalesOrdersPage() {
 
             {/* Infinite Scroll Sentinel & Loader */}
             <TableRow ref={observerTarget} className="border-0">
-              <TableCell colSpan={7} className="overflow-hidden border-0 p-0">
+              <TableCell colSpan={8} className="overflow-hidden border-0 p-0">
                 {loadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
