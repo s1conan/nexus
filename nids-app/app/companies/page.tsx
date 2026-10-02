@@ -1,12 +1,6 @@
 "use client"
 
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  startTransition,
-} from "react"
+import { useState } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
@@ -38,6 +32,7 @@ import {
   AlertCircle,
   Users,
   CheckCircle,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { SummaryCard } from "@/components/summary-card"
@@ -60,44 +55,27 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { cn, constructMultiWordSearch } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 
 import { SectionLoader } from "@/components/section-loader"
 import { Checkbox } from "@/components/ui/checkbox"
 import { notify } from "@/lib/notifications"
 import { usePersistedState } from "@/hooks/use-persisted-state"
 import { ButtonLoader } from "@/components/button-loader"
-import { useDebounce } from "@/hooks/use-debounce"
-
-const PAGE_SIZE = 50
+import { useTableData } from "@/hooks/use-table-data"
+import { SortDialog } from "@/components/sort-dialog"
 
 export default function CompaniesPage() {
   const { dict } = useDictionary()
   const supabase = createClient()
   const { hasPermission, loading: authLoading } = useAuth()
 
-  const [companies, setCompanies] = useState<any[]>([])
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
-
-  const [stats, setStats] = useState({
-    totalCustomers: 0,
-    totalSuppliers: 0,
-    totalTransporters: 0,
-    activeCompanies: 0,
-  })
 
   const [isOpen, setIsOpen] = usePersistedState("companies_dialog_open", false)
   const [editingCompany, setEditingCompany] = usePersistedState<any>(
     "companies_editing_data",
     null
-  )
-  const [searchQuery, setSearchQuery] = usePersistedState(
-    "companies_search",
-    ""
   )
   const [typeFilter, setTypeFilter] = usePersistedState(
     "companies_type_filter",
@@ -109,10 +87,6 @@ export default function CompaniesPage() {
     id: string
     name: string
   } | null>(null)
-  const debouncedSearchQuery = useDebounce(searchQuery, 300)
-
-  const observerTarget = useRef(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const [formData, setFormData] = usePersistedState("companies_form_data", {
     name: "",
@@ -145,8 +119,49 @@ export default function CompaniesPage() {
   const canEdit = hasPermission("companies", "edit")
   const canDelete = hasPermission("companies", "delete")
 
-  const fetchStats = useCallback(async () => {
-    try {
+  const sortColumns = [
+    { label: dict.LABEL_NAME, value: "name" },
+    { label: dict.LABEL_NICKNAME, value: "nickname" },
+    { label: dict.LABEL_IS_ACTIVE, value: "is_active" },
+  ]
+
+  const {
+    rows: companies,
+    isLoading,
+    isFetching,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    sortLevels,
+    setSortLevels,
+    stats,
+    containerRef,
+    sentinelRef,
+  } = useTableData({
+    table: "companies",
+    select: "id, name, nickname, type, is_active, details",
+    searchColumns: [
+      "name",
+      "nickname",
+      "details->>email",
+      "details->>phone",
+      "details->>contact_person",
+    ],
+    filters: typeFilter,
+    applyFilters: (q) =>
+      typeFilter !== "all" ? q.contains("type", [typeFilter]) : q,
+    sortColumns,
+    defaultSort: [
+      { id: "is_active", column: "is_active", direction: "desc" },
+      { id: "name", column: "name", direction: "asc" },
+    ],
+    sortPersistKey: "companies_sort",
+    persistKey: "companies_search",
+    pageSize: 50,
+    // Counts only — fire on mount + after save/delete, never per keystroke.
+    statsFetcher: async () => {
       const [
         { count: activeCount },
         { count: customerCount },
@@ -170,122 +185,14 @@ export default function CompaniesPage() {
           .select("*", { count: "exact", head: true })
           .contains("type", ["Transporter"]),
       ])
-
-      setStats({
+      return {
         activeCompanies: activeCount || 0,
         totalCustomers: customerCount || 0,
         totalSuppliers: supplierCount || 0,
         totalTransporters: transporterCount || 0,
-      })
-    } catch (err) {
-      console.error("Fetch Stats Error:", err)
-    }
-  }, [supabase])
-
-  const fetchCompanies = useCallback(
-    async (isInitial = false) => {
-      if (isInitial) {
-        setLoading(true)
-        setOffset(0)
-        fetchStats()
-      } else {
-        setLoadingMore(true)
-      }
-
-      try {
-        const currentOffset = isInitial ? 0 : offset
-        let query = supabase
-          .from("companies")
-          .select("*")
-          .order("is_active", { ascending: false })
-          .order("name", { ascending: true })
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        if (debouncedSearchQuery) {
-          // Deep filtering in JSONB and text fields
-          const searchStr = constructMultiWordSearch(debouncedSearchQuery, [
-            "name",
-            "nickname",
-            "details->>email",
-            "details->>phone",
-            "details->>contact_person",
-          ])
-          if (searchStr) query = query.or(searchStr)
-        }
-
-        if (typeFilter !== "all") {
-          query = query.contains("type", [typeFilter])
-        }
-
-        const { data, error } = await query
-
-        if (error) {
-          console.error("Fetch Companies Error:", error)
-          notify.error(dict.MSG_DATA_FETCH_FAILED, error.message)
-        } else if (data) {
-          if (isInitial) {
-            setCompanies(data)
-          } else {
-            setCompanies((prev) => {
-              const newItems = data.filter(
-                (item: any) => !prev.some((p) => p.id === item.id)
-              )
-              return [...prev, ...newItems]
-            })
-          }
-          setHasMore(data.length === PAGE_SIZE)
-          setOffset(currentOffset + data.length)
-        }
-      } catch (err) {
-        console.error("Fetch Companies Exception:", err)
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
       }
     },
-    [
-      supabase,
-      offset,
-      debouncedSearchQuery,
-      typeFilter,
-      dict.MSG_DATA_FETCH_FAILED,
-      fetchStats,
-    ]
-  )
-
-  // Initial fetch and reset when filters change
-  useEffect(() => {
-    startTransition(() => {
-      fetchCompanies(true)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchQuery, typeFilter])
-
-  // Infinite Scroll Observer
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchCompanies(false)
-        }
-      },
-      {
-        root: containerRef.current,
-        rootMargin: "400px",
-        threshold: 0,
-      }
-    )
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
-    }
-
-    return () => observer.disconnect()
-  }, [fetchCompanies, hasMore, loading, loadingMore])
-
-  const handleRefresh = () => {
-    fetchCompanies(true)
-  }
+  })
 
   // Open Dialog
   const handleOpenDialog = (company: any = null, isViewOnly = false) => {
@@ -501,18 +408,13 @@ export default function CompaniesPage() {
     }
     try {
       if (editingCompany) {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("companies")
           .update(payload)
           .eq("id", editingCompany.id)
-          .select()
-          .single()
 
         if (error) throw error
 
-        setCompanies((prev) =>
-          prev.map((c) => (c.id === editingCompany.id ? data : c))
-        )
         setUpdatedRowId(editingCompany.id)
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`),
@@ -532,7 +434,7 @@ export default function CompaniesPage() {
 
         if (error) throw error
 
-        setCompanies((prev) => [data, ...prev])
+        setUpdatedRowId(data?.id ?? null)
         notify.success(
           dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`),
           dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace(
@@ -543,8 +445,8 @@ export default function CompaniesPage() {
           true
         )
       }
-      fetchStats()
       setIsOpen(false)
+      refresh()
     } catch (err) {
       console.error("Submit Company Error:", err)
       notify.error(
@@ -579,8 +481,8 @@ export default function CompaniesPage() {
         undefined,
         true
       )
-      setCompanies((prev) => prev.filter((c) => c.id !== deleteConfirm.id))
-      fetchStats()
+      setDeleteConfirm(null)
+      refresh()
     } catch (err: any) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${deleteConfirm.name}]`),
@@ -591,7 +493,7 @@ export default function CompaniesPage() {
     }
   }
 
-  if (!canView && !loading && !authLoading) {
+  if (!canView && !isLoading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <div className="space-y-2 text-center">
@@ -620,16 +522,11 @@ export default function CompaniesPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || loadingMore}
+            onClick={refresh}
+            disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
-            <RefreshCw
-              className={cn(
-                "size-4",
-                (loading || loadingMore) && "animate-spin"
-              )}
-            />
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -1152,7 +1049,7 @@ export default function CompaniesPage() {
       </div>
 
       <div className="action-bar shrink-0">
-        <div className="relative min-w-0 w-full flex-1">
+        <div className="relative min-w-0 flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -1160,6 +1057,9 @@ export default function CompaniesPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {isFetching && (
+            <Loader2 className="absolute top-2.5 right-2.5 size-4 animate-spin text-muted-foreground" />
+          )}
         </div>
 
         <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -1175,6 +1075,11 @@ export default function CompaniesPage() {
             </SelectItem>
           </SelectContent>
         </Select>
+        <SortDialog
+          sortLevels={sortLevels}
+          sortColumns={sortColumns}
+          onSortLevelsChange={setSortLevels}
+        />
       </div>
 
       <Card
@@ -1193,7 +1098,7 @@ export default function CompaniesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={4} className="p-0">
                   <SectionLoader />
@@ -1373,14 +1278,14 @@ export default function CompaniesPage() {
             )}
 
             {/* Infinite Scroll Sentinel & Loader */}
-            <TableRow ref={observerTarget} className="border-0">
+            <TableRow ref={sentinelRef} className="border-0">
               <TableCell colSpan={4} className="overflow-hidden border-0 p-0">
-                {loadingMore && (
+                {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
-                {!hasMore && companies.length > 0 && !loading && (
+                {!hasMore && companies.length > 0 && !isLoading && (
                   <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>
@@ -1393,25 +1298,25 @@ export default function CompaniesPage() {
       <div className="mb-1 grid shrink-0 grid-cols-4 gap-2 md:gap-4">
         <SummaryCard
           label={dict.LABEL_ACTIVE_COMPANIES}
-          value={stats.activeCompanies}
+          value={stats?.activeCompanies ?? 0}
           icon={CheckCircle}
           color="green"
         />
         <SummaryCard
           label={dict.LABEL_TOTAL_CUSTOMERS}
-          value={stats.totalCustomers}
+          value={stats?.totalCustomers ?? 0}
           icon={Users}
           color="blue"
         />
         <SummaryCard
           label={dict.LABEL_TOTAL_SUPPLIERS}
-          value={stats.totalSuppliers}
+          value={stats?.totalSuppliers ?? 0}
           icon={Warehouse}
           color="amber"
         />
         <SummaryCard
           label={dict.LABEL_TOTAL_TRANSPORTERS}
-          value={stats.totalTransporters}
+          value={stats?.totalTransporters ?? 0}
           icon={Truck}
           color="green"
         />

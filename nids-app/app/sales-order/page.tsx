@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
-import { useDebounce } from "@/hooks/use-debounce"
 import {
   Table,
   TableBody,
@@ -30,8 +29,8 @@ import {
   AlertCircle,
   ShoppingBag,
   RefreshCw,
-  Sparkles,
   FileUp,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -55,13 +54,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import {
-  cn,
-  constructMultiWordSearch,
-  constructIdInFilter,
-  searchRelatedIds,
-  formatBulletList,
-} from "@/lib/utils"
+import { cn, constructMultiWordSearch, formatBulletList } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 import { FundersDialog } from "@/components/funders-dialog"
@@ -92,10 +85,10 @@ import {
 } from "@/lib/so-auto-match"
 import { fuzzyScore } from "@/lib/fuzzy-match"
 import dynamic from "next/dynamic"
+import { useTableData } from "@/hooks/use-table-data"
+import { SortDialog } from "@/components/sort-dialog"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
-
-const PAGE_SIZE = 50
 
 type FieldFlag = "low" | "warning"
 
@@ -104,26 +97,14 @@ export default function SalesOrdersPage() {
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
-  const [orders, setOrders] = useState<any[]>([])
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
   const [isOpen, setIsOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<any>(null)
   const [viewOnly, setViewOnly] = useState(false)
-
-  // Filter States
-  const [searchQuery, setSearchQuery] = useState("")
-  const debouncedSearchQuery = useDebounce(searchQuery, 300)
-
-  const observerTarget = useRef(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -328,134 +309,74 @@ export default function SalesOrdersPage() {
     }
   }
 
-  // Fetch Data
-  const fetchData = useCallback(
-    async (isInitial = false) => {
-      if (isInitial) {
-        setLoading(true)
-        setOffset(0)
-      } else {
-        setLoadingMore(true)
-      }
-
-      try {
-        const currentOffset = isInitial ? 0 : offset
-
-        if (isInitial) {
-          const [qRes, tRes, cRes] = await Promise.all([
-            supabase
-              .from("quotations")
-              .select(
-                "*, company:companies(id, name, nickname, details), product:products(id, sku, name)"
-              )
-              .eq("status", "Accepted"),
-            supabase.from("app_settings").select("*").eq("category", "tax"),
-            supabase.from("app_settings").select("*").eq("category", "company"),
-          ])
-          if (qRes.error) throw qRes.error
-          if (tRes.error) throw tRes.error
-          setGlobalTaxes(tRes.data || [])
-          if (cRes.data) {
-            const info: any = {}
-            cRes.data.forEach((r: any) => {
-              info[r.name] = r.value
-            })
-            setCompanyInfo(info)
-          }
-        }
-
-        let query = supabase
-          .from("sales_orders")
-          .select(
-            "*, company:companies(id, name, nickname, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, delivery_taxable, company:companies!quotations_company_id_fkey(id, name))"
-          )
-          .order("created_at", { ascending: false })
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        if (debouncedSearchQuery) {
-          // PostgREST or() does not support related fields (company.name,
-          // product.sku), so resolve them to ids and match via in() filters.
-          const [companyIds, productIds] = await Promise.all([
-            searchRelatedIds(supabase, "companies", debouncedSearchQuery, [
-              "name",
-            ]),
-            searchRelatedIds(supabase, "products", debouncedSearchQuery, [
-              "sku",
-            ]),
-          ])
-          const orConditions: string[] = []
-          const localSearch = constructMultiWordSearch(debouncedSearchQuery, [
-            "so_number",
-          ])
-          if (localSearch) orConditions.push(localSearch)
-          const companyFilter = constructIdInFilter(companyIds, "company_id")
-          if (companyFilter) orConditions.push(companyFilter)
-          const productFilter = constructIdInFilter(productIds, "product_id")
-          if (productFilter) orConditions.push(productFilter)
-          if (orConditions.length > 0) query = query.or(orConditions.join(","))
-        }
-
-        const { data, error } = await query
-        if (error) throw error
-
-        if (data) {
-          if (isInitial) {
-            setOrders(data)
-          } else {
-            setOrders((prev) => {
-              const newItems = data.filter(
-                (item: any) => !prev.some((p) => p.id === item.id)
-              )
-              return [...prev, ...newItems]
-            })
-          }
-          setHasMore(data.length === PAGE_SIZE)
-          setOffset(currentOffset + data.length)
-        }
-      } catch (err: any) {
-        notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
-      }
-    },
-    [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED]
-  )
-
-  const handleRefresh = () => {
-    fetchData(true)
-  }
-
+  // Settings (taxes + company info) — mount only
   useEffect(() => {
-    fetchData(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchQuery])
-
-  // Ordinary Infinite Scroll
-  useEffect(() => {
-    const rootElement = containerRef.current
-    if (!rootElement) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchData(false)
-        }
-      },
-      {
-        root: rootElement,
-        rootMargin: "400px",
-        threshold: 0,
+    let cancelled = false
+    ;(async () => {
+      const [tRes, cRes] = await Promise.all([
+        supabase.from("app_settings").select("*").eq("category", "tax"),
+        supabase.from("app_settings").select("*").eq("category", "company"),
+      ])
+      if (cancelled) return
+      if (tRes.error) throw tRes.error
+      setGlobalTaxes(tRes.data || [])
+      if (cRes.data) {
+        const info: any = {}
+        cRes.data.forEach((r: any) => {
+          info[r.name] = r.value
+        })
+        setCompanyInfo(info)
       }
-    )
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
+    })().catch((err: any) => {
+      if (!cancelled) notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
+    })
+    return () => {
+      cancelled = true
     }
+  }, [supabase, dict.MSG_DATA_FETCH_FAILED])
 
-    return () => observer.disconnect()
-  }, [fetchData, hasMore, loading, loadingMore])
+  const sortColumns = [
+    { label: dict.LABEL_CREATED_AT, value: "created_at" },
+    { label: dict.LABEL_SO_NUMBER, value: "so_number" },
+    { label: dict.LABEL_COMPANY_NAME, value: "company_id" },
+    { label: dict.LABEL_SKU, value: "product_id" },
+    { label: dict.LABEL_STATUS, value: "status" },
+  ]
+
+  const {
+    rows: orders,
+    isLoading,
+    isFetching,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    sortLevels,
+    setSortLevels,
+    containerRef,
+    sentinelRef,
+  } = useTableData({
+    table: "sales_orders",
+    select:
+      "*, company:companies(id, name, nickname, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, delivery_taxable, company:companies!quotations_company_id_fkey(id, name))",
+    searchColumns: ["so_number"],
+    relatedSearches: [
+      {
+        table: "companies",
+        columns: ["name", "nickname"],
+        matchColumn: "company_id",
+      },
+      { table: "products", columns: ["sku"], matchColumn: "product_id" },
+    ],
+    sortColumns,
+    defaultSort: [
+      { id: "created_at", column: "created_at", direction: "desc" },
+    ],
+    sortPersistKey: "sales-order_sort",
+    persistKey: "sales-order_search",
+    pageSize: 50,
+  })
 
   // Permission Checks
   const canView = hasPermission("sales-order", "view")
@@ -529,7 +450,7 @@ export default function SalesOrdersPage() {
     )
   }
 
-  if (!canView && !loading && !authLoading) {
+  if (!canView && !isLoading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <div className="space-y-2 text-center">
@@ -988,23 +909,8 @@ export default function SalesOrdersPage() {
           .eq("id", editingItem.id)
         if (error) throw error
 
-        // Fetch updated row to keep local state in sync with relations
-        const { data: updatedRow, error: fetchError } = await supabase
-          .from("sales_orders")
-          .select(
-            "*, company:companies(id, name, nickname, details), product:products(id, sku, name), quotation:quotations(id, quotation_number, tax_details, discounts, company:companies!quotations_company_id_fkey(id, name))"
-          )
-          .eq("id", editingItem.id)
-          .single()
-
-        if (!fetchError && updatedRow) {
-          setOrders((prev) =>
-            prev.map((o) => (o.id === editingItem.id ? updatedRow : o))
-          )
-          setUpdatedRowId(editingItem.id)
-        } else {
-          fetchData(true)
-        }
+        setUpdatedRowId(editingItem.id)
+        refresh()
 
         const docLabel = `[${payload.so_number || formData.so_number}]`
         notify.success(
@@ -1043,7 +949,7 @@ export default function SalesOrdersPage() {
           undefined,
           true
         )
-        fetchData(true)
+        refresh()
       }
       setIsOpen(false)
     } catch (err: any) {
@@ -1080,7 +986,7 @@ export default function SalesOrdersPage() {
         .eq("id", id)
       if (error) throw error
 
-      setOrders((prev) => prev.filter((o) => o.id !== id))
+      refresh()
       notify.deleted(
         dict.MSG_SO_DELETED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "sales order").replace(
@@ -1109,6 +1015,7 @@ export default function SalesOrdersPage() {
       )
       return
     }
+    if (!item) return
     const docLabel = `[${item.so_number}]`
     const companyName = item.company?.name || ""
     try {
@@ -1118,8 +1025,8 @@ export default function SalesOrdersPage() {
         .eq("id", id)
       if (error) throw error
 
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)))
       setUpdatedRowId(id)
+      refresh()
       notify.success(
         dict.MSG_SO_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -1157,16 +1064,11 @@ export default function SalesOrdersPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || loadingMore}
+            onClick={refresh}
+            disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
-            <RefreshCw
-              className={cn(
-                "size-4",
-                (loading || loadingMore) && "animate-spin"
-              )}
-            />
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
           </Button>
           <Button
             variant={isDraggingFile ? "secondary" : "outline"}
@@ -1411,14 +1313,14 @@ export default function SalesOrdersPage() {
                           fetchData={async (query) => {
                             let q = supabase
                               .from("companies")
-                              .select("id, name, details")
+                              .select("id, name, nickname, details")
                               .contains("type", ["Customer"])
                               .eq("is_active", true)
                               .limit(8)
                             if (query) {
                               const searchStr = constructMultiWordSearch(
                                 query,
-                                ["name"]
+                                ["name", "nickname"]
                               )
                               if (searchStr) q = q.or(searchStr)
                             }
@@ -1450,7 +1352,7 @@ export default function SalesOrdersPage() {
                           keyField="id"
                           displayField="name"
                           defaultDisplay={selectedCompanyInfo?.name || ""}
-                          searchColumns={["name"]}
+                          searchColumns={["name", "nickname"]}
                           visualColumns={[
                             {
                               key: "name",
@@ -1992,7 +1894,15 @@ export default function SalesOrdersPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {isFetching && (
+            <Loader2 className="absolute top-2.5 right-2.5 size-4 animate-spin text-muted-foreground" />
+          )}
         </div>
+        <SortDialog
+          sortLevels={sortLevels}
+          sortColumns={sortColumns}
+          onSortLevelsChange={setSortLevels}
+        />
       </div>
 
       {/* Data Area */}
@@ -2022,7 +1932,7 @@ export default function SalesOrdersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={8} className="p-0">
                   <SectionLoader />
@@ -2067,6 +1977,9 @@ export default function SalesOrdersPage() {
                       <div className="flex items-center justify-between gap-4 text-xs">
                         <span className="min-w-0 flex-1 truncate">
                           {o.company?.name || "-"}
+                          {o.company?.nickname
+                            ? ` ( ${o.company.nickname} )`
+                            : ""}
                         </span>
                         <span className="shrink-0 font-mono font-medium">
                           {new Intl.NumberFormat(
@@ -2095,7 +2008,12 @@ export default function SalesOrdersPage() {
                     <span className="hidden md:inline">{o.so_number}</span>
                   </TableCell>
                   <TableCell className="max-md:hidden">
-                    {o.company?.name || "-"}
+                    <span className="text-foreground">
+                      {o.company?.name || "-"}
+                    </span>
+                    <span className="ml-2 text-muted-foreground">
+                      ( {o.company?.nickname || "-"} )
+                    </span>
                   </TableCell>
                   <TableCell className="text-center text-sm text-muted-foreground max-md:hidden">
                     {format(new Date(o.so_date), "dd MMM yyyy")}
@@ -2224,14 +2142,14 @@ export default function SalesOrdersPage() {
             )}
 
             {/* Infinite Scroll Sentinel & Loader */}
-            <TableRow ref={observerTarget} className="border-0">
+            <TableRow ref={sentinelRef} className="border-0">
               <TableCell colSpan={8} className="overflow-hidden border-0 p-0">
-                {loadingMore && (
+                {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
-                {!hasMore && orders.length > 0 && !loading && (
+                {!hasMore && orders.length > 0 && !isLoading && (
                   <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>

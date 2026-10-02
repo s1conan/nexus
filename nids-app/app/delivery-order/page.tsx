@@ -1,10 +1,9 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
-import { useDebounce } from "@/hooks/use-debounce"
 import {
   Table,
   TableBody,
@@ -34,10 +33,8 @@ import {
   AlertCircle,
   MapPin,
   Phone,
-  ArrowUpDown,
-  ArrowUpAZ,
-  ArrowDownZA,
   RefreshCw,
+  Loader2,
   FileUp,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -70,13 +67,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import {
-  cn,
-  constructMultiWordSearch,
-  constructIdInFilter,
-  searchRelatedIds,
-  formatBulletList,
-} from "@/lib/utils"
+import { cn, constructMultiWordSearch, formatBulletList } from "@/lib/utils"
 import { fuzzyScore } from "@/lib/fuzzy-match"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
@@ -95,35 +86,24 @@ import { autoMatchDO, type DOMatch } from "@/lib/do-auto-match"
 import dynamic from "next/dynamic"
 import { ButtonLoader } from "@/components/button-loader"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
+import { useTableData } from "@/hooks/use-table-data"
+import { SortDialog } from "@/components/sort-dialog"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
-
-const PAGE_SIZE = 50
 
 type FieldFlag = "low" | "warning"
 
 // Sentinel value for the SO field's "Fill SO later" option (so_id stays empty)
 const FILL_SO_LATER_VALUE = "__fill_later__"
 
-interface SortLevel {
-  id: string
-  column: string
-  direction: "asc" | "desc"
-}
-
 export default function DeliveryOrdersPage() {
   const { dict, lang } = useDictionary()
-  const { hasPermission, profile, loading: authLoading } = useAuth()
+  const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
-  const [orders, setOrders] = useState<any[]>([])
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [companyInfo, setCompanyInfo] = useState<any>(null)
   const [previewDoc, setPreviewDoc] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
@@ -148,16 +128,7 @@ export default function DeliveryOrdersPage() {
   })
 
   // Filter States
-  const [searchQuery, setSearchQuery] = useState("")
-  const debouncedSearchQuery = useDebounce(searchQuery, 300)
-  const [isSortOpen, setIsSortOpen] = useState(false)
-  const [sortLevels, setSortLevels] = useState<SortLevel[]>([
-    { id: "1", column: "created_at", direction: "desc" },
-  ])
   const [pendingPOFilter, setPendingPOFilter] = useState(false)
-
-  const observerTarget = useRef(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const statusStyles: Record<string, string> = {
     Draft:
@@ -179,6 +150,10 @@ export default function DeliveryOrdersPage() {
   const [selectedProductInfo, setSelectedProductInfo] = useState<any>(null)
   const [selectedVehicleInfo, setSelectedVehicleInfo] = useState<any>(null)
   const [availableStock, setAvailableStock] = useState<number | null>(null)
+  // Bumped whenever an action mutates the inventory ledger (save / status
+  // change / delete / manual refresh) so the stock badge and the supplier
+  // dropdown stock map re-fetch instead of showing a stale value.
+  const [stockRefreshKey, setStockRefreshKey] = useState(0)
   const [remainingSOQty, setRemainingSOQty] = useState<number | null>(null)
   // True when the user explicitly chose "Fill SO later" (or is editing a DO
   // without an SO) — used to show feedback on the SO field
@@ -228,158 +203,77 @@ export default function DeliveryOrdersPage() {
     }[],
   }))
 
-  // Fetch Data
-  const fetchData = useCallback(
-    async (isInitial = false) => {
-      if (isInitial) {
-        setLoading(true)
-        setOffset(0)
-      } else {
-        setLoadingMore(true)
-      }
+  const sortColumns = [
+    { label: dict.LABEL_CREATED_AT, value: "created_at" },
+    { label: dict.LABEL_DO_NUMBER, value: "do_number" },
+    { label: dict.LABEL_QUANTITY, value: "quantity" },
+    { label: dict.LABEL_STATUS, value: "status" },
+  ]
 
-      try {
-        const currentOffset = isInitial ? 0 : offset
-
-        if (isInitial) {
-          const { data: sRes } = await supabase
-            .from("app_settings")
-            .select("*")
-            .eq("category", "company")
-          if (sRes) {
-            const info: any = {}
-            sRes.forEach((r: any) => {
-              info[r.name] = r.value
-            })
-            setCompanyInfo(info)
-          }
-
-          const { data: nRes } = await supabase
-            .from("app_settings")
-            .select("value")
-            .eq("category", "numbering")
-            .eq("name", "delivery-order")
-            .maybeSingle()
-          if (nRes?.value) {
-            setDoNumberFormat(String(nRes.value))
-          }
-        }
-
-        let query = supabase
-          .from("delivery_orders")
-          .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, po_number, quantity, so_date, delivery_address, shrinkage_tolerance), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
-          )
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        // Dynamic sorting
-        sortLevels.forEach((level) => {
-          const [relation, col] = level.column.split(".")
-          if (!col) {
-            query = query.order(level.column, {
-              ascending: level.direction === "asc",
-            })
-          }
+  // Settings (company info + DO numbering format) — mount only
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const [sRes, nRes] = await Promise.all([
+        supabase.from("app_settings").select("*").eq("category", "company"),
+        supabase
+          .from("app_settings")
+          .select("value")
+          .eq("category", "numbering")
+          .eq("name", "delivery-order")
+          .maybeSingle(),
+      ])
+      if (cancelled) return
+      if (sRes.data) {
+        const info: any = {}
+        sRes.data.forEach((r: any) => {
+          info[r.name] = r.value
         })
-        query = query.order("created_at", { ascending: false })
-
-        if (debouncedSearchQuery) {
-          // PostgREST or() does not support related fields (company.name,
-          // product.sku), so resolve them to ids and match via in() filters.
-          const [companyIds, productIds] = await Promise.all([
-            searchRelatedIds(supabase, "companies", debouncedSearchQuery, [
-              "name",
-            ]),
-            searchRelatedIds(supabase, "products", debouncedSearchQuery, [
-              "sku",
-            ]),
-          ])
-          const orConditions: string[] = []
-          const localSearch = constructMultiWordSearch(debouncedSearchQuery, [
-            "do_number",
-            "driver_info->>name",
-            "vehicle_number",
-          ])
-          if (localSearch) orConditions.push(localSearch)
-          const companyFilter = constructIdInFilter(companyIds, "company_id")
-          if (companyFilter) orConditions.push(companyFilter)
-          const productFilter = constructIdInFilter(productIds, "product_id")
-          if (productFilter) orConditions.push(productFilter)
-          if (orConditions.length > 0) query = query.or(orConditions.join(","))
-        }
-
-        // Pending PO filter: Delivered DOs without SO
-        if (pendingPOFilter) {
-          query = query.eq("status", "Delivered").is("so_id", null)
-        }
-
-        const { data, error } = await query
-        if (error) throw error
-
-        if (data) {
-          if (isInitial) {
-            setOrders(data)
-          } else {
-            setOrders((prev) => {
-              const newItems = data.filter(
-                (item: any) => !prev.some((p) => p.id === item.id)
-              )
-              return [...prev, ...newItems]
-            })
-          }
-          setHasMore(data.length === PAGE_SIZE)
-          setOffset(currentOffset + data.length)
-        }
-      } catch (err: any) {
-        notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
+        setCompanyInfo(info)
       }
-    },
-    [
-      supabase,
-      offset,
-      debouncedSearchQuery,
-      sortLevels,
-      pendingPOFilter,
-      dict.MSG_DATA_FETCH_FAILED,
-    ]
-  )
-
-  const handleRefresh = () => {
-    fetchData(true)
-  }
-
-  useEffect(() => {
-    fetchData(true)
-  }, [debouncedSearchQuery, sortLevels])
-
-  // Ordinary Infinite Scroll
-  useEffect(() => {
-    const rootElement = containerRef.current
-    if (!rootElement) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchData(false)
-        }
-      },
-      {
-        root: rootElement,
-        rootMargin: "400px",
-        threshold: 0,
+      if (nRes.data?.value) {
+        setDoNumberFormat(String(nRes.data.value))
       }
-    )
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
+    })()
+    return () => {
+      cancelled = true
     }
+  }, [supabase])
 
-    return () => observer.disconnect()
-  }, [fetchData, hasMore, loading, loadingMore])
+  const {
+    rows: orders,
+    isLoading,
+    isFetching,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    sortLevels,
+    setSortLevels,
+    containerRef,
+    sentinelRef,
+  } = useTableData({
+    table: "delivery_orders",
+    select:
+      "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, po_number, quantity, so_date, delivery_address, shrinkage_tolerance), product:products(id, sku, name), vehicle:vehicles(id, license_number)",
+    // Local columns mirror the original search (incl. the driver_info JSON path).
+    searchColumns: ["do_number", "driver_info->>name", "vehicle_number"],
+    relatedSearches: [
+      { table: "companies", columns: ["name"], matchColumn: "company_id" },
+      { table: "products", columns: ["sku"], matchColumn: "product_id" },
+    ],
+    filters: pendingPOFilter,
+    // Matches the original filter: Delivered DOs without a linked SO.
+    applyFilters: (q) =>
+      pendingPOFilter ? q.eq("status", "Delivered").is("so_id", null) : q,
+    sortColumns,
+    defaultSort: [
+      { id: "created_at", column: "created_at", direction: "desc" },
+    ],
+    sortPersistKey: "delivery-order_sort",
+    pageSize: 50,
+  })
 
   // Fetch Stock for selected supplier and product
   useEffect(() => {
@@ -400,7 +294,7 @@ export default function DeliveryOrdersPage() {
       }
     }
     fetchStock()
-  }, [formData.supplier_id, formData.product_id])
+  }, [supabase, formData.supplier_id, formData.product_id, stockRefreshKey])
 
   // Compute remaining SO qty: SO total qty - sum of existing DO qties (excluding current DO if editing)
   useEffect(() => {
@@ -426,7 +320,7 @@ export default function DeliveryOrdersPage() {
       setRemainingSOQty(remaining > 0 ? remaining : 0)
     }
     fetchRemainingSOQty()
-  }, [formData.so_id, selectedPOInfo?.quantity, editingItem])
+  }, [supabase, formData.so_id, selectedPOInfo?.quantity, editingItem])
 
   // Sync seal numbers to cache whenever compartment_details changes
   useEffect(() => {
@@ -659,7 +553,7 @@ export default function DeliveryOrdersPage() {
   const canDelete = hasPermission("delivery-order", "delete")
   const canPrint = hasPermission("delivery-order", "print")
 
-  if (!canView && !loading && !authLoading) {
+  if (!canView && !isLoading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <div className="space-y-2 text-center">
@@ -893,26 +787,12 @@ export default function DeliveryOrdersPage() {
       }
 
       if (editingItem) {
-        // Fetch updated row to keep local state in sync with relations
-        const { data: updatedRow, error: fetchError } = await supabase
-          .from("delivery_orders")
-          .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), supplier:companies!delivery_orders_supplier_id_fkey(id, name), transporter:companies!delivery_orders_transporter_id_fkey(id, name), po:sales_orders(id, so_number, quantity, so_date, delivery_address, shrinkage_tolerance), product:products(id, sku, name), vehicle:vehicles(id, license_number)"
-          )
-          .eq("id", editingItem.id)
-          .single()
-
-        if (!fetchError && updatedRow) {
-          setOrders((prev) =>
-            prev.map((o) => (o.id === editingItem.id ? updatedRow : o))
-          )
-          setUpdatedRowId(editingItem.id)
-        } else {
-          fetchData(true)
-        }
-      } else {
-        fetchData(true)
+        setUpdatedRowId(editingItem.id)
       }
+      refresh()
+
+      // Ledger may have changed (OUT row booked/removed, auto-deposit created)
+      setStockRefreshKey((k) => k + 1)
 
       // Automatically update Sales Order Status (covers both the newly linked
       // SO and a previously linked SO when the link changed or was cleared)
@@ -1026,7 +906,8 @@ export default function DeliveryOrdersPage() {
         .eq("id", id)
       if (error) throw error
 
-      setOrders((prev) => prev.filter((o) => o.id !== id))
+      refresh()
+      setStockRefreshKey((k) => k + 1)
       notify.deleted(
         dict.MSG_DO_DELETED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_DELETE_DESC.replace(
@@ -1058,8 +939,9 @@ export default function DeliveryOrdersPage() {
         .eq("id", id)
       if (error) throw error
 
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)))
       setUpdatedRowId(id)
+      setStockRefreshKey((k) => k + 1)
+      refresh()
       notify.success(
         dict.MSG_DO_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -1107,13 +989,7 @@ export default function DeliveryOrdersPage() {
         .eq("id", id)
       if (error) throw error
 
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === id
-            ? { ...o, status: "Delivered", received_quantity, delivered_date }
-            : o
-        )
-      )
+      refresh()
       notify.success(
         dict.MSG_DO_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", "[Delivered]").replace(
@@ -1416,13 +1292,10 @@ export default function DeliveryOrdersPage() {
 
   const isFromSO = !!formData.so_id
 
-  const companyAddresses = useMemo(() => {
-    if (!selectedCompanyInfo?.details?.addresses) return []
-    return selectedCompanyInfo.details.addresses as {
-      label: string
-      address: string
-    }[]
-  }, [selectedCompanyInfo])
+  const companyAddresses = (selectedCompanyInfo?.details?.addresses || []) as {
+    label: string
+    address: string
+  }[]
 
   return (
     <div className="page-container">
@@ -1437,16 +1310,11 @@ export default function DeliveryOrdersPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || loadingMore}
+            onClick={refresh}
+            disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
-            <RefreshCw
-              className={cn(
-                "size-4",
-                (loading || loadingMore) && "animate-spin"
-              )}
-            />
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
           </Button>
           <Button
             variant={isDraggingFile ? "secondary" : "outline"}
@@ -2278,6 +2146,7 @@ export default function DeliveryOrdersPage() {
                                   })
                                 )
                               }}
+                              refreshKey={stockRefreshKey}
                               value={formData.supplier_id}
                               onSelect={(val, item) => {
                                 setFormData({ ...formData, supplier_id: val })
@@ -2441,128 +2310,15 @@ export default function DeliveryOrdersPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {isFetching && (
+            <Loader2 className="absolute top-2.5 right-2.5 size-4 animate-spin text-muted-foreground" />
+          )}
         </div>
-        <Dialog open={isSortOpen} onOpenChange={setIsSortOpen}>
-          <DialogTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              title={dict.LABEL_SORT}
-              aria-label={dict.LABEL_SORT}
-              className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
-            >
-              <ArrowUpDown className="size-4" />
-              <span className="hidden md:inline">{dict.LABEL_SORT}</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>{dict.TITLE_SORT_SETTINGS}</DialogTitle>
-              <DialogDescription />
-            </DialogHeader>
-            <div className="flex flex-col gap-4 p-5">
-              {sortLevels.map((level, index) => (
-                <div key={level.id} className="flex items-center gap-3">
-                  <div className="w-17 shrink-0 text-sm font-semibold text-muted-foreground">
-                    {index === 0 ? dict.LABEL_SORT_BY : dict.LABEL_THEN_BY}
-                  </div>
-                  <Select
-                    value={level.column}
-                    onValueChange={(val) =>
-                      setSortLevels(
-                        sortLevels.map((l) =>
-                          l.id === level.id ? { ...l, column: val } : l
-                        )
-                      )
-                    }
-                  >
-                    <SelectTrigger className="h-9 flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="created_at">
-                        {dict.LABEL_DO_DATE}
-                      </SelectItem>
-                      <SelectItem value="do_number">
-                        {dict.LABEL_DO_NUMBER}
-                      </SelectItem>
-                      <SelectItem value="quantity">
-                        {dict.LABEL_QUANTITY}
-                      </SelectItem>
-                      <SelectItem value="status">
-                        {dict.LABEL_STATUS}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9"
-                    onClick={() =>
-                      setSortLevels(
-                        sortLevels.map((l) =>
-                          l.id === level.id
-                            ? {
-                                ...l,
-                                direction:
-                                  l.direction === "asc" ? "desc" : "asc",
-                              }
-                            : l
-                        )
-                      )
-                    }
-                  >
-                    {level.direction === "asc" ? (
-                      <ArrowUpAZ className="size-4" />
-                    ) : (
-                      <ArrowDownZA className="size-4" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-9 text-destructive"
-                    disabled={sortLevels.length <= 1}
-                    onClick={() => {
-                      if (sortLevels.length > 1)
-                        setSortLevels(
-                          sortLevels.filter((l) => l.id !== level.id)
-                        )
-                    }}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2 w-fit"
-                onClick={() =>
-                  setSortLevels([
-                    ...sortLevels,
-                    {
-                      id: Math.random().toString(),
-                      column: "created_at",
-                      direction: "asc",
-                    },
-                  ])
-                }
-              >
-                <Plus className="mr-2 size-4" />
-                {dict.BUTTON_ADD_LEVEL}
-              </Button>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsSortOpen(false)}>
-                {dict.BUTTON_CANCEL}
-              </Button>
-              <Button onClick={() => setIsSortOpen(false)}>
-                {dict.LABEL_APPLY}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <SortDialog
+          sortLevels={sortLevels}
+          sortColumns={sortColumns}
+          onSortLevelsChange={setSortLevels}
+        />
         <Button
           variant="outline"
           size="sm"
@@ -2602,7 +2358,7 @@ export default function DeliveryOrdersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={9} className="p-0">
                   <SectionLoader />
@@ -2864,14 +2620,14 @@ export default function DeliveryOrdersPage() {
             )}
 
             {/* Infinite Scroll Sentinel & Loader */}
-            <TableRow ref={observerTarget} className="border-0">
+            <TableRow ref={sentinelRef} className="border-0">
               <TableCell colSpan={9} className="overflow-hidden border-0 p-0">
-                {loadingMore && (
+                {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
-                {!hasMore && orders.length > 0 && !loading && (
+                {!hasMore && orders.length > 0 && !isLoading && (
                   <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>

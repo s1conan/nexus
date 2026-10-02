@@ -1,12 +1,6 @@
 "use client"
 
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  startTransition,
-} from "react"
+import { useState } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
@@ -33,6 +27,7 @@ import {
   MinusCircle,
   RefreshCw,
   AlertCircle,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -40,13 +35,14 @@ import { Switch } from "@/components/ui/switch"
 import { SummaryCard } from "@/components/summary-card"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 
-import { cn, sanitizePostgrestValue } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { usePersistedState } from "@/hooks/use-persisted-state"
 import { ButtonLoader } from "@/components/button-loader"
 import { NumberInput } from "@/components/number-input"
-import { useDebounce } from "@/hooks/use-debounce"
+import { useTableData } from "@/hooks/use-table-data"
+import { SortDialog } from "@/components/sort-dialog"
 import {
   Dialog,
   DialogContent,
@@ -56,19 +52,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
-const PAGE_SIZE = 50
-
 export default function VehiclesPage() {
   const { dict } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
-  const [vehicles, setVehicles] = useState<any[]>([])
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [viewOnly, setViewOnly] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -76,25 +65,12 @@ export default function VehiclesPage() {
     name: string
   } | null>(null)
 
-  const [stats, setStats] = useState({
-    totalVehicles: 0,
-    activeVehicles: 0,
-    totalCapacity: 0,
-  })
-
   // Dialog State
   const [isOpen, setIsOpen] = usePersistedState("vehicles_dialog_open", false)
   const [editingItem, setEditingItem] = usePersistedState<any>(
     "vehicles_editing_data",
     null
   )
-
-  // Filter States
-  const [searchQuery, setSearchQuery] = usePersistedState("vehicles_search", "")
-  const debouncedSearchQuery = useDebounce(searchQuery, 300)
-
-  const observerTarget = useRef(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   // Form State
   const [formData, setFormData] = usePersistedState("vehicles_form_data", {
@@ -115,132 +91,56 @@ export default function VehiclesPage() {
   const canEdit = hasPermission("vehicles", "edit")
   const canDelete = hasPermission("vehicles", "delete")
 
-  const fetchStats = useCallback(async () => {
-    try {
-      const [
-        { count: totalCount },
-        { count: activeCount },
-        { data: capacities },
-      ] = await Promise.all([
+  const sortColumns = [
+    { label: dict.LABEL_LICENSE_NUMBER, value: "license_number" },
+    { label: dict.LABEL_VEHICLE_TYPE, value: "vehicle_type" },
+    { label: dict.LABEL_CAPACITY, value: "capacity" },
+    { label: dict.LABEL_IS_ACTIVE, value: "is_active" },
+  ]
+
+  const {
+    rows: vehicles,
+    isLoading,
+    isFetching,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    sortLevels,
+    setSortLevels,
+    stats,
+    containerRef,
+    sentinelRef,
+  } = useTableData({
+    table: "vehicles",
+    select:
+      "id, license_number, vehicle_type, capacity, number_of_seals, is_active, compartments",
+    searchColumns: ["license_number", "vehicle_type"],
+    sortColumns,
+    defaultSort: [
+      { id: "is_active", column: "is_active", direction: "desc" },
+      { id: "vehicle_type", column: "vehicle_type", direction: "asc" },
+      { id: "license_number", column: "license_number", direction: "asc" },
+    ],
+    sortPersistKey: "vehicles_sort",
+    persistKey: "vehicles_search",
+    pageSize: 50,
+    // Counts only — the "Total Capacity" stat was display-only and removed.
+    statsFetcher: async () => {
+      const [{ count: totalCount }, { count: activeCount }] = await Promise.all([
         supabase.from("vehicles").select("*", { count: "exact", head: true }),
         supabase
           .from("vehicles")
           .select("*", { count: "exact", head: true })
           .eq("is_active", true),
-        supabase.from("vehicles").select("capacity"),
       ])
-
-      const totalCap =
-        capacities?.reduce(
-          (acc: number, v: any) => acc + (v.capacity || 0),
-          0
-        ) || 0
-
-      setStats({
+      return {
         totalVehicles: totalCount || 0,
         activeVehicles: activeCount || 0,
-        totalCapacity: totalCap,
-      })
-    } catch (err) {
-      console.error("Fetch Vehicles Stats Error:", err)
-    }
-  }, [supabase])
-
-  // Fetch Data
-  const fetchData = useCallback(
-    async (isInitial = false) => {
-      if (isInitial) {
-        setLoading(true)
-        setOffset(0)
-        fetchStats()
-      } else {
-        setLoadingMore(true)
-      }
-
-      try {
-        const currentOffset = isInitial ? 0 : offset
-        let query = supabase
-          .from("vehicles")
-          .select("*")
-          .order("is_active", { ascending: false })
-          .order("vehicle_type", { ascending: true })
-          .order("license_number", { ascending: true })
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        if (debouncedSearchQuery) {
-          query = query.or(
-            `license_number.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%,vehicle_type.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%`
-          )
-        }
-
-        const { data, error } = await query
-
-        if (error) throw error
-
-        if (data) {
-          if (isInitial) {
-            setVehicles(data)
-          } else {
-            setVehicles((prev) => {
-              const newItems = data.filter(
-                (item: any) => !prev.some((p) => p.id === item.id)
-              )
-              return [...prev, ...newItems]
-            })
-          }
-          setHasMore(data.length === PAGE_SIZE)
-          setOffset(currentOffset + data.length)
-        }
-      } catch (err: any) {
-        notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
       }
     },
-    [
-      supabase,
-      offset,
-      debouncedSearchQuery,
-      dict.MSG_DATA_FETCH_FAILED,
-      fetchStats,
-    ]
-  )
-
-  useEffect(() => {
-    startTransition(() => {
-      fetchData(true)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchQuery])
-
-  useEffect(() => {
-    const rootElement = containerRef.current
-    if (!rootElement) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchData(false)
-        }
-      },
-      {
-        root: rootElement,
-        rootMargin: "400px",
-        threshold: 0,
-      }
-    )
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
-    }
-
-    return () => observer.disconnect()
-  }, [fetchData, hasMore, loading, loadingMore])
-
-  const handleRefresh = () => {
-    fetchData(true)
-  }
+  })
 
   // Open Dialog
   const handleOpenDialog = (item: any = null, isViewOnly = false) => {
@@ -312,16 +212,11 @@ export default function VehiclesPage() {
       }
 
       if (editingItem) {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("vehicles")
           .update(payload)
           .eq("id", editingItem.id)
-          .select()
-          .single()
         if (error) throw error
-        setVehicles((prev) =>
-          prev.map((v) => (v.id === editingItem.id ? data : v))
-        )
         setUpdatedRowId(editingItem.id)
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace(
@@ -342,7 +237,7 @@ export default function VehiclesPage() {
           .select()
           .single()
         if (error) throw error
-        setVehicles((prev) => [data, ...prev])
+        setUpdatedRowId(data?.id ?? null)
         notify.success(
           dict.MSG_SAVE_SUCCESS.replace(
             "%data%",
@@ -356,8 +251,8 @@ export default function VehiclesPage() {
           true
         )
       }
-      fetchStats()
       setIsOpen(false)
+      refresh()
     } catch (err: any) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${formData.license_number}]`),
@@ -391,8 +286,8 @@ export default function VehiclesPage() {
         undefined,
         true
       )
-      setVehicles((prev) => prev.filter((v) => v.id !== deleteConfirm.id))
-      fetchStats()
+      setDeleteConfirm(null)
+      refresh()
     } catch (err: any) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${deleteConfirm.name}]`),
@@ -423,7 +318,7 @@ export default function VehiclesPage() {
     setFormData({ ...formData, compartments: reindexed, capacity: newTotal })
   }
 
-  if (!canView && !loading && !authLoading) {
+  if (!canView && !isLoading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <div className="space-y-2 text-center">
@@ -453,16 +348,11 @@ export default function VehiclesPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || loadingMore}
+            onClick={refresh}
+            disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
-            <RefreshCw
-              className={cn(
-                "size-4",
-                (loading || loadingMore) && "animate-spin"
-              )}
-            />
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -689,7 +579,7 @@ export default function VehiclesPage() {
 
       {/* Action Bar / Filters */}
       <div className="action-bar shrink-0">
-        <div className="relative min-w-0 w-full flex-1">
+        <div className="relative min-w-0 flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -697,7 +587,15 @@ export default function VehiclesPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {isFetching && (
+            <Loader2 className="absolute top-2.5 right-2.5 size-4 animate-spin text-muted-foreground" />
+          )}
         </div>
+        <SortDialog
+          sortLevels={sortLevels}
+          sortColumns={sortColumns}
+          onSortLevelsChange={setSortLevels}
+        />
       </div>
 
       {/* Data Area */}
@@ -715,6 +613,9 @@ export default function VehiclesPage() {
                 {dict.LABEL_VEHICLE_TYPE}
               </TableHead>
               <TableHead className="max-md:hidden">
+                {dict.LABEL_CAPACITY}
+              </TableHead>
+              <TableHead className="max-md:hidden">
                 {dict.LABEL_COMPARTMENTS}
               </TableHead>
               <TableHead className="max-md:hidden">
@@ -724,9 +625,9 @@ export default function VehiclesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="p-0">
+                <TableCell colSpan={6} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
@@ -734,7 +635,7 @@ export default function VehiclesPage() {
               <>
                 {vehicles.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center">
+                    <TableCell colSpan={6} className="py-8 text-center">
                       {dict.NO_DATA}
                     </TableCell>
                   </TableRow>
@@ -768,7 +669,7 @@ export default function VehiclesPage() {
                             <span className="text-xs text-muted-foreground md:hidden">
                               {v.vehicle_type}
                             </span>
-                            <span className="font-mono text-sm text-muted-foreground">
+                            <span className="font-mono text-sm text-muted-foreground md:hidden">
                               {v.capacity?.toLocaleString()}
                             </span>
                           </div>
@@ -776,6 +677,9 @@ export default function VehiclesPage() {
                       </TableCell>
                       <TableCell className="max-md:hidden">
                         {v.vehicle_type}
+                      </TableCell>
+                      <TableCell className="font-mono max-md:hidden">
+                        {v.capacity?.toLocaleString()}
                       </TableCell>
                       <TableCell className="max-md:hidden">
                         {v.compartments?.length || 0} Comp.
@@ -815,14 +719,14 @@ export default function VehiclesPage() {
             )}
 
             {/* Infinite Scroll Sentinel & Loader */}
-            <TableRow ref={observerTarget} className="border-0">
-              <TableCell colSpan={5} className="overflow-hidden border-0 p-0">
-                {loadingMore && (
+            <TableRow ref={sentinelRef} className="border-0">
+              <TableCell colSpan={6} className="overflow-hidden border-0 p-0">
+                {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
-                {!hasMore && vehicles.length > 0 && !loading && (
+                {!hasMore && vehicles.length > 0 && !isLoading && (
                   <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>
@@ -832,24 +736,18 @@ export default function VehiclesPage() {
           </TableBody>
         </Table>
       </Card>
-      <div className="mb-1 grid shrink-0 grid-cols-3 gap-2 md:gap-4">
+      <div className="mb-1 grid shrink-0 grid-cols-2 gap-2 md:gap-4">
         <SummaryCard
           label={dict.LABEL_TOTAL_VEHICLES || "Total Vehicles"}
-          value={stats.totalVehicles}
+          value={stats?.totalVehicles ?? 0}
           icon={Truck}
           color="primary"
         />
         <SummaryCard
           label={dict.LABEL_ACTIVE_VEHICLES || "Active Vehicles"}
-          value={stats.activeVehicles}
+          value={stats?.activeVehicles ?? 0}
           icon={Truck}
           color="green"
-        />
-        <SummaryCard
-          label={dict.LABEL_TOTAL_CAPACITY || "Total Capacity"}
-          value={`${stats.totalCapacity.toLocaleString()} L`}
-          icon={Package}
-          color="blue"
         />
       </div>
 

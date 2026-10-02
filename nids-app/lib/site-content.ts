@@ -443,12 +443,14 @@ export const SITE_CONTENT = {
     NO_DATA: "No data found.",
     LABEL_ALL: "All",
     LABEL_SORT_BY: "Sort By",
-    LABEL_THEN_BY: "",
+    LABEL_THEN_BY: "Then By",
     LABEL_ASCENDING: "A to Z (Ascending)",
     LABEL_DESCENDING: "Z to A (Descending)",
     BUTTON_ADD_LEVEL: "Add Level",
     BUTTON_DELETE_LEVEL: "Delete Level",
     TITLE_SORT_SETTINGS: "Sort Configuration",
+    BUTTON_APPLY: "Apply",
+    LABEL_CREATED_AT: "Created Date",
 
     // Status & Notifications
     MSG_STATUS_UPDATED: "Status %data% Updated",
@@ -1068,12 +1070,14 @@ export const SITE_CONTENT = {
     NO_DATA: "Data tidak ditemukan.",
     LABEL_ALL: "Semua",
     LABEL_SORT_BY: "Urutkan",
-    LABEL_THEN_BY: "",
+    LABEL_THEN_BY: "Lalu",
     LABEL_ASCENDING: "A ke Z (Meningkat)",
     LABEL_DESCENDING: "Z ke A (Menurun)",
     BUTTON_ADD_LEVEL: "Tambah Level",
     BUTTON_DELETE_LEVEL: "Hapus Level",
     TITLE_SORT_SETTINGS: "Konfigurasi Pengurutan",
+    BUTTON_APPLY: "Terapkan",
+    LABEL_CREATED_AT: "Tanggal Dibuat",
 
     // Status & Notifications
     MSG_STATUS_UPDATED: "Status %data% Diperbarui",

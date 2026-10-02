@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
-import { useDebounce } from "@/hooks/use-debounce"
 import {
   Table,
   TableBody,
@@ -22,17 +21,14 @@ import {
   Search,
   Pencil,
   Save,
-  X,
   Trash2,
   ChevronDown,
   CheckCircle2,
-  Banknote,
-  Calendar,
   CirclePile,
-  Wallet,
   Printer,
   AlertCircle,
   RefreshCw,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/number-input"
@@ -60,8 +56,6 @@ import { Label } from "@/components/ui/label"
 import {
   cn,
   constructMultiWordSearch,
-  constructIdInFilter,
-  searchRelatedIds,
 } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
@@ -70,22 +64,17 @@ import { LiveSearch } from "@/components/live-search"
 import { format } from "date-fns"
 import { ButtonLoader } from "@/components/button-loader"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
-
-const PAGE_SIZE = 50
+import { useTableData } from "@/hooks/use-table-data"
+import { SortDialog } from "@/components/sort-dialog"
 
 export default function DepositsPage() {
   const { dict, lang } = useDictionary()
-  const { hasPermission, profile, loading: authLoading } = useAuth()
+  const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
-  const [deposits, setDeposits] = useState<any[]>([])
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [appBanks, setAppBanks] = useState<any[]>([])
   const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
@@ -98,14 +87,8 @@ export default function DepositsPage() {
     company_name: string
   } | null>(null)
 
-  // Filter States
-  const [searchQuery, setSearchQuery] = useState("")
-  const debouncedSearchQuery = useDebounce(searchQuery, 300)
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
   const [selectedProductInfo, setSelectedProductInfo] = useState<any>(null)
-
-  const observerTarget = useRef(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const statusStyles: Record<string, string> = {
     Pending:
@@ -140,123 +123,65 @@ export default function DepositsPage() {
   const canDelete = hasPermission("deposit", "delete")
   const canPrint = hasPermission("deposit", "print")
 
-  // Fetch Data
-  const fetchData = useCallback(
-    async (isInitial = false) => {
-      if (isInitial) {
-        setLoading(true)
-        setOffset(0)
-      } else {
-        setLoadingMore(true)
-      }
-
-      try {
-        const currentOffset = isInitial ? 0 : offset
-
-        // Fetch settings in parallel only on initial load
-        if (isInitial) {
-          const [bRes, tRes] = await Promise.all([
-            supabase
-              .from("app_settings")
-              .select("value")
-              .eq("category", "company")
-              .eq("name", "bank")
-              .maybeSingle(),
-            supabase.from("app_settings").select("*").eq("category", "tax"),
-          ])
-          if (bRes.error) throw bRes.error
-          if (tRes.error) throw tRes.error
-          setAppBanks(bRes.data?.value || [])
-          setGlobalTaxes(tRes.data || [])
-        }
-
-        let query = supabase
-          .from("deposits")
-          .select(
-            "*, company:companies(id, name, details->contact_person), product:products(id, name, sku)"
-          )
-          .order("created_at", { ascending: false })
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        if (debouncedSearchQuery) {
-          // PostgREST or() does not support related fields (company.name),
-          // so resolve them to ids and match via in() filters.
-          const companyIds = await searchRelatedIds(
-            supabase,
-            "companies",
-            debouncedSearchQuery,
-            ["name"]
-          )
-          const orConditions: string[] = []
-          const localSearch = constructMultiWordSearch(debouncedSearchQuery, [
-            "deposit_number",
-          ])
-          if (localSearch) orConditions.push(localSearch)
-          const companyFilter = constructIdInFilter(companyIds, "company_id")
-          if (companyFilter) orConditions.push(companyFilter)
-          if (orConditions.length > 0) query = query.or(orConditions.join(","))
-        }
-
-        const { data, error } = await query
-        if (error) throw error
-
-        if (data) {
-          if (isInitial) {
-            setDeposits(data)
-          } else {
-            setDeposits((prev) => {
-              const newItems = data.filter(
-                (item: any) => !prev.some((p) => p.id === item.id)
-              )
-              return [...prev, ...newItems]
-            })
-          }
-          setHasMore(data.length === PAGE_SIZE)
-          setOffset(currentOffset + data.length)
-        }
-      } catch (err: any) {
-        notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
-      }
-    },
-    [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED]
-  )
-
-  const handleRefresh = () => {
-    fetchData(true)
-  }
-
+  // Settings (banks + taxes) — mount only
   useEffect(() => {
-    fetchData(true)
-  }, [debouncedSearchQuery])
-
-  // Ordinary Infinite Scroll
-  useEffect(() => {
-    const rootElement = containerRef.current
-    if (!rootElement) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchData(false)
-        }
-      },
-      {
-        root: rootElement,
-        rootMargin: "400px",
-        threshold: 0,
-      }
-    )
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
+    let cancelled = false
+    ;(async () => {
+      const [bRes, tRes] = await Promise.all([
+        supabase
+          .from("app_settings")
+          .select("value")
+          .eq("category", "company")
+          .eq("name", "bank")
+          .maybeSingle(),
+        supabase.from("app_settings").select("*").eq("category", "tax"),
+      ])
+      if (bRes.error || tRes.error || cancelled) return
+      setAppBanks(bRes.data?.value || [])
+      setGlobalTaxes(tRes.data || [])
+    })()
+    return () => {
+      cancelled = true
     }
+  }, [supabase])
 
-    return () => observer.disconnect()
-  }, [fetchData, hasMore, loading, loadingMore])
+  const sortColumns = [
+    { label: dict.LABEL_CREATED_AT, value: "created_at" },
+    { label: dict.LABEL_DEPOSIT_NUMBER, value: "deposit_number" },
+    { label: dict.LABEL_DEPOSIT_DATE, value: "deposit_date" },
+    { label: dict.LABEL_TOTAL_PRICE, value: "total_amount" },
+    { label: dict.LABEL_STATUS, value: "status" },
+  ]
+
+  const {
+    rows: deposits,
+    isLoading,
+    isFetching,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    sortLevels,
+    setSortLevels,
+    containerRef,
+    sentinelRef,
+  } = useTableData({
+    table: "deposits",
+    select:
+      "*, company:companies(id, name, details->contact_person), product:products(id, name, sku)",
+    searchColumns: ["deposit_number"],
+    relatedSearches: [
+      { table: "companies", columns: ["name"], matchColumn: "company_id" },
+    ],
+    sortColumns,
+    defaultSort: [
+      { id: "created_at", column: "created_at", direction: "desc" },
+    ],
+    sortPersistKey: "deposit_sort",
+    persistKey: "deposit_search",
+    pageSize: 50,
+  })
 
   // Calculation logic
   const totals = useMemo(() => {
@@ -367,23 +292,7 @@ export default function DepositsPage() {
           .eq("id", editingItem.id)
         if (error) throw error
 
-        // Fetch updated row to keep local state in sync with relations
-        const { data: updatedRow, error: fetchError } = await supabase
-          .from("deposits")
-          .select(
-            "*, company:companies(id, name, details->contact_person), product:products(id, name, sku)"
-          )
-          .eq("id", editingItem.id)
-          .single()
-
-        if (!fetchError && updatedRow) {
-          setDeposits((prev) =>
-            prev.map((d) => (d.id === editingItem.id ? updatedRow : d))
-          )
-          setUpdatedRowId(editingItem.id)
-        } else {
-          fetchData(true)
-        }
+        setUpdatedRowId(editingItem.id)
 
         const docLabel = `[${payload.deposit_number || formData.deposit_number}]`
         notify.success(
@@ -418,7 +327,7 @@ export default function DepositsPage() {
           undefined,
           true
         )
-        fetchData(true)
+        refresh()
       }
       setIsOpen(false)
     } catch (err: any) {
@@ -488,7 +397,7 @@ export default function DepositsPage() {
         .eq("id", deleteConfirm.id)
       if (error) throw error
 
-      setDeposits((prev) => prev.filter((d) => d.id !== deleteConfirm.id))
+      refresh()
       notify.deleted(
         dict.MSG_DEPOSIT_DELETED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "deposit").replace(
@@ -538,9 +447,6 @@ export default function DepositsPage() {
         .eq("id", id)
       if (error) throw error
 
-      setDeposits((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, status } : d))
-      )
       setUpdatedRowId(id)
       notify.success(
         dict.MSG_DEPOSIT_STATUS_UPDATED.replace("%data%", docLabel),
@@ -569,7 +475,7 @@ export default function DepositsPage() {
     handleSave()
   }
 
-  if (!canView && !loading && !authLoading) {
+  if (!canView && !isLoading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <div className="space-y-2 text-center">
@@ -599,16 +505,11 @@ export default function DepositsPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || loadingMore}
+            onClick={refresh}
+            disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
-            <RefreshCw
-              className={cn(
-                "size-4",
-                (loading || loadingMore) && "animate-spin"
-              )}
-            />
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -1008,7 +909,15 @@ export default function DepositsPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {isFetching && (
+            <Loader2 className="absolute top-2.5 right-2.5 size-4 animate-spin text-muted-foreground" />
+          )}
         </div>
+        <SortDialog
+          sortLevels={sortLevels}
+          sortColumns={sortColumns}
+          onSortLevelsChange={setSortLevels}
+        />
       </div>
 
       <Card
@@ -1033,7 +942,7 @@ export default function DepositsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={8} className="p-0">
                   <SectionLoader />
@@ -1219,14 +1128,14 @@ export default function DepositsPage() {
             )}
 
             {/* Infinite Scroll Sentinel & Loader */}
-            <TableRow ref={observerTarget} className="border-0">
+            <TableRow ref={sentinelRef} className="border-0">
               <TableCell colSpan={8} className="overflow-hidden border-0 p-0">
-                {loadingMore && (
+                {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
-                {!hasMore && deposits.length > 0 && !loading && (
+                {!hasMore && deposits.length > 0 && !isLoading && (
                   <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>

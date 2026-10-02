@@ -49,6 +49,7 @@ interface LiveSearchProps<T> {
   defaultDisplay?: string // Initial text to show before data is fetched/available
   allowCustomValue?: boolean
   onCustomValue?: (value: string) => void
+  refreshKey?: number // Bump to force a re-fetch (e.g. after data mutations)
   footerOptions?: {
     value: string
     label: string
@@ -82,6 +83,7 @@ export function LiveSearch<T extends Record<string, any>>({
   defaultDisplay,
   allowCustomValue = false,
   onCustomValue,
+  refreshKey,
   footerOptions,
 }: LiveSearchProps<T>) {
   const [open, setOpen] = React.useState(false)
@@ -123,7 +125,7 @@ export function LiveSearch<T extends Record<string, any>>({
         isMounted = false
       }
     }
-  }, [debouncedQuery])
+  }, [debouncedQuery, refreshKey])
 
   // Combine static data and fetched results to find the currently selected item
   const allKnownItems = React.useMemo(() => {

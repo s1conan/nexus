@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
-import { useDebounce } from "@/hooks/use-debounce"
 import {
   Table,
   TableBody,
@@ -30,6 +29,7 @@ import {
   Printer,
   CheckCircle2,
   FileText,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -72,11 +72,11 @@ import { NumberInput } from "@/components/number-input"
 import { generateStandardPaymentPDF } from "@/lib/pdf-generator"
 import { SummaryCard } from "@/components/summary-card"
 import { usePersistedState } from "@/hooks/use-persisted-state"
+import { useTableData } from "@/hooks/use-table-data"
+import { SortDialog } from "@/components/sort-dialog"
 import dynamic from "next/dynamic"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
-
-const PAGE_SIZE = 50
 
 interface AppSettingsRow {
   id?: string
@@ -156,23 +156,10 @@ export default function PaymentsPage() {
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
-  const [payments, setPayments] = useState<PaymentWithRelations[]>([])
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null)
   const [previewDoc, setPreviewDoc] = useState<PreviewDoc | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
-
-  // Stats State
-  const [stats, setStats] = useState({
-    totalPayments: 0,
-    totalAmount: 0,
-    pendingCount: 0,
-    verifiedCount: 0,
-  })
 
   // Dialog State
   const [isOpen, setIsOpen] = usePersistedState("payments_dialog_open", false)
@@ -180,13 +167,6 @@ export default function PaymentsPage() {
     null
   )
   const [viewOnly, setViewOnly] = useState(false)
-
-  // Filter States
-  const [searchQuery, setSearchQuery] = useState("")
-  const debouncedSearchQuery = useDebounce(searchQuery, 300)
-
-  const observerTarget = useRef(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const statusStyles: Record<string, string> = {
     Pending:
@@ -197,35 +177,95 @@ export default function PaymentsPage() {
       "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
   }
 
-  // Fetch Stats
-  const fetchStats = useCallback(async () => {
-    try {
+  const sortColumns = [
+    { label: dict.LABEL_CREATED_AT || "Created Date", value: "created_at" },
+    {
+      label: dict.LABEL_PAYMENT_NUMBER || "Payment No",
+      value: "payment_number",
+    },
+    { label: dict.LABEL_AMOUNT, value: "amount" },
+    { label: dict.LABEL_STATUS, value: "status" },
+    { label: dict.LABEL_PAYMENT_DATE || "Payment Date", value: "payment_date" },
+  ]
+
+  const {
+    rows: payments,
+    isLoading,
+    isFetching,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    sortLevels,
+    setSortLevels,
+    stats,
+    containerRef,
+    sentinelRef,
+  } = useTableData<
+    PaymentWithRelations,
+    {
+      totalAmount: number
+      totalPayments: number
+      pendingCount: number
+      verifiedCount: number
+    }
+  >({
+    table: "payments",
+    select:
+      "*, invoice:invoices(id, invoice_number, total_amount, paid_amount, company:companies(name, nickname))",
+    searchColumns: ["payment_number", "reference_number"],
+    sortColumns,
+    defaultSort: [
+      { id: "created_at", column: "created_at", direction: "desc" },
+    ],
+    sortPersistKey: "payments_sort",
+    persistKey: "payments_search",
+    pageSize: 50,
+    // Stats fire on mount + after save/delete/status only.
+    statsFetcher: async () => {
       const { data: allPayments } = await supabase
         .from("payments")
         .select("id, amount, status")
 
-      if (allPayments) {
-        type PaymentStatsRow = (typeof allPayments)[number]
-        const totalAmount = allPayments.reduce(
-          (sum: number, p: PaymentStatsRow) => sum + (Number(p.amount) || 0),
-          0
-        )
-        const pendingCount = allPayments.filter(
-          (p: PaymentStatsRow) => p.status === "Pending"
-        ).length
-        const verifiedCount = allPayments.filter(
-          (p: PaymentStatsRow) => p.status === "Verified"
-        ).length
+      const rows = (allPayments ?? []) as {
+        id: string
+        amount: number | null
+        status: string | null
+      }[]
+      const totalAmount = rows.reduce(
+        (sum, p) => sum + (Number(p.amount) || 0),
+        0
+      )
+      const pendingCount = rows.filter((p) => p.status === "Pending").length
+      const verifiedCount = rows.filter((p) => p.status === "Verified").length
 
-        setStats({
-          totalPayments: allPayments.length,
-          totalAmount,
-          pendingCount,
-          verifiedCount,
-        })
+      return {
+        totalPayments: rows.length,
+        totalAmount,
+        pendingCount,
+        verifiedCount,
       }
-    } catch (err) {
-      console.error("Fetch Stats Error:", err)
+    },
+  })
+
+  // Company settings — mount only
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data: settings } = await supabase
+        .from("app_settings")
+        .select("*")
+        .eq("category", "company")
+      if (cancelled) return
+      const info: Record<string, string> = {}
+      settings?.forEach((r: AppSettingsRow) => {
+        info[r.name] = (r.value as string) || ""
+      })
+      setCompanyInfo(info as CompanyInfo)
+    })()
+    return () => {
+      cancelled = true
     }
   }, [supabase])
 
@@ -244,126 +284,13 @@ export default function PaymentsPage() {
   const [selectedInvoiceInfo, setSelectedInvoiceInfo] =
     useState<InvoiceInfo | null>(null)
 
-  const fetchData = useCallback(
-    async (isInitial = false) => {
-      if (isInitial) {
-        setLoading(true)
-        setOffset(0)
-        fetchStats()
-      } else {
-        setLoadingMore(true)
-      }
-
-      try {
-        const currentOffset = isInitial ? 0 : offset
-
-        // Fetch company settings on initial load
-        if (isInitial) {
-          const { data: settings } = await supabase
-            .from("app_settings")
-            .select("*")
-            .eq("category", "company")
-          const info: Record<string, string> = {}
-          settings?.forEach((r: AppSettingsRow) => {
-            info[r.name] = (r.value as string) || ""
-          })
-          setCompanyInfo(info as CompanyInfo)
-        }
-
-        let query = supabase
-          .from("payments")
-          .select(
-            "*, invoice:invoices(id, invoice_number, total_amount, paid_amount, company:companies(name, nickname))"
-          )
-          .order("created_at", { ascending: false })
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        if (debouncedSearchQuery) {
-          const searchStr = constructMultiWordSearch(debouncedSearchQuery, [
-            "payment_number",
-            "reference_number",
-          ])
-          if (searchStr) query = query.or(searchStr)
-        }
-
-        const { data, error } = await query
-        if (error) throw error
-
-        if (data) {
-          const rows = data as PaymentWithRelations[]
-          if (isInitial) {
-            setPayments(rows)
-          } else {
-            setPayments((prev) => {
-              const newItems = rows.filter(
-                (item) => !prev.some((p) => p.id === item.id)
-              )
-              return [...prev, ...newItems]
-            })
-          }
-          setHasMore(rows.length === PAGE_SIZE)
-          setOffset(currentOffset + rows.length)
-        }
-      } catch (err: unknown) {
-        notify.error(
-          dict.MSG_DATA_FETCH_FAILED,
-          err instanceof Error ? err.message : String(err)
-        )
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
-      }
-    },
-    [
-      supabase,
-      offset,
-      debouncedSearchQuery,
-      dict.MSG_DATA_FETCH_FAILED,
-      fetchStats,
-    ]
-  )
-
-  const handleRefresh = () => {
-    fetchData(true)
-  }
-
-  useEffect(() => {
-    fetchData(true)
-  }, [debouncedSearchQuery])
-
-  // Ordinary Infinite Scroll
-  useEffect(() => {
-    const rootElement = containerRef.current
-    if (!rootElement) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchData(false)
-        }
-      },
-      {
-        root: rootElement,
-        rootMargin: "400px",
-        threshold: 0,
-      }
-    )
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
-    }
-
-    return () => observer.disconnect()
-  }, [fetchData, hasMore, loading, loadingMore])
-
   const canView = hasPermission("payments", "view")
   const canInsert = hasPermission("payments", "insert")
   const canEdit = hasPermission("payments", "edit")
   const canDelete = hasPermission("payments", "delete")
   const canPrint = hasPermission("payments", "print")
 
-  if (!canView && !loading && !authLoading) {
+  if (!canView && !isLoading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <div className="space-y-2 text-center">
@@ -439,29 +366,12 @@ export default function PaymentsPage() {
           .update(payload)
           .eq("id", editingItem.id)
         if (error) throw error
-
-        // Fetch updated row to keep local state in sync with relations
-        const { data: updatedRow, error: fetchError } = await supabase
-          .from("payments")
-          .select(
-            "*, invoice:invoices(id, invoice_number, total_amount, paid_amount, company:companies(name, nickname))"
-          )
-          .eq("id", editingItem.id)
-          .single()
-
-        if (!fetchError && updatedRow) {
-          setPayments((prev) =>
-            prev.map((p) => (p.id === editingItem.id ? updatedRow : p))
-          )
-          setUpdatedRowId(editingItem.id)
-        } else {
-          fetchData(true)
-        }
+        setUpdatedRowId(editingItem.id)
       } else {
         const { error } = await supabase.from("payments").insert([payload])
         if (error) throw error
-        fetchData(true)
       }
+      refresh()
 
       const companyName = selectedInvoiceInfo?.company?.name || ""
       const docLabel = `[${payload.payment_number || formData.payment_number}]`
@@ -508,7 +418,7 @@ export default function PaymentsPage() {
       const { error } = await supabase.from("payments").delete().eq("id", id)
       if (error) throw error
 
-      setPayments((prev) => prev.filter((p) => p.id !== id))
+      refresh()
       notify.deleted(
         dict.MSG_DELETE_SUCCESS.replace("%data%", docLabel),
         dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "payment").replace(
@@ -538,10 +448,8 @@ export default function PaymentsPage() {
         .eq("id", id)
       if (error) throw error
 
-      setPayments((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, status } : p))
-      )
       setUpdatedRowId(id)
+      refresh()
       notify.success(
         dict.MSG_QUOTATION_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -551,7 +459,6 @@ export default function PaymentsPage() {
         undefined,
         true
       )
-      fetchStats()
     } catch (err: unknown) {
       notify.error(
         dict.MSG_UPDATE_FAILED.replace("%data%", docLabel),
@@ -777,15 +684,12 @@ export default function PaymentsPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || loadingMore}
+            onClick={refresh}
+            disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
             <RefreshCw
-              className={cn(
-                "size-4",
-                (loading || loadingMore) && "animate-spin"
-              )}
+              className={cn("size-4", isFetching && "animate-spin")}
             />
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -1059,7 +963,15 @@ export default function PaymentsPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {isFetching && (
+            <Loader2 className="absolute top-2.5 right-2.5 size-4 animate-spin text-muted-foreground" />
+          )}
         </div>
+        <SortDialog
+          sortLevels={sortLevels}
+          sortColumns={sortColumns}
+          onSortLevelsChange={setSortLevels}
+        />
       </div>
 
       <Card
@@ -1080,7 +992,7 @@ export default function PaymentsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={6} className="p-0">
                   <SectionLoader />
@@ -1249,14 +1161,14 @@ export default function PaymentsPage() {
             )}
 
             {/* Infinite Scroll Sentinel & Loader */}
-            <TableRow ref={observerTarget} className="border-0">
+            <TableRow ref={sentinelRef} className="border-0">
               <TableCell colSpan={6} className="overflow-hidden border-0 p-0">
-                {loadingMore && (
+                {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
-                {!hasMore && payments.length > 0 && !loading && (
+                {!hasMore && payments.length > 0 && !isLoading && (
                   <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>
@@ -1270,25 +1182,25 @@ export default function PaymentsPage() {
       <div className="grid shrink-0 grid-cols-4 gap-2 md:gap-4">
         <SummaryCard
           label="Total Payments"
-          value={stats.totalPayments}
+          value={stats?.totalPayments ?? 0}
           icon={Wallet}
           color="slate"
         />
         <SummaryCard
           label="Total Amount"
-          value={`${SITE_CONFIG.currencySymbol} ${stats.totalAmount.toLocaleString()}`}
+          value={`${SITE_CONFIG.currencySymbol} ${(stats?.totalAmount ?? 0).toLocaleString()}`}
           icon={FileText}
           color="green"
         />
         <SummaryCard
           label="Pending"
-          value={stats.pendingCount}
+          value={stats?.pendingCount ?? 0}
           icon={AlertCircle}
           color="amber"
         />
         <SummaryCard
           label="Verified"
-          value={stats.verifiedCount}
+          value={stats?.verifiedCount ?? 0}
           icon={CheckCircle2}
           color="blue"
         />

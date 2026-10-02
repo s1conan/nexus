@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
@@ -30,14 +30,12 @@ import {
   Clock,
   MinusCircle,
   AlertCircle,
-  ArrowUpAZ,
-  ArrowDownZA,
-  ArrowUpDown,
   RefreshCw,
   Send,
   FileText,
   FileEdit,
   AlertTriangle,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { SummaryCard } from "@/components/summary-card"
@@ -62,11 +60,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import {
-  cn,
-  constructMultiWordSearch,
-  sanitizePostgrestValue,
-} from "@/lib/utils"
+import { cn, constructMultiWordSearch } from "@/lib/utils"
 import { SectionLoader } from "@/components/section-loader"
 import { Checkbox } from "@/components/ui/checkbox"
 import { notify } from "@/lib/notifications"
@@ -84,49 +78,30 @@ import { format } from "date-fns"
 import { generateStandardQuotationPDF } from "@/lib/pdf-generator"
 import { ButtonLoader } from "@/components/button-loader"
 import { NumberInput } from "@/components/number-input"
-import { useDebounce } from "@/hooks/use-debounce"
 import { Switch } from "@/components/ui/switch"
 import dynamic from "next/dynamic"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
+import { useTableData } from "@/hooks/use-table-data"
+import { SortDialog } from "@/components/sort-dialog"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
 
-const PAGE_SIZE = 50
 const ALMOST_EXPIRED_DAYS_THRESHOLD = 7 // Configurable variable for X days
-
-interface SortLevel {
-  id: string
-  column: string
-  direction: "asc" | "desc"
-}
 
 export default function QuotationsPage() {
   const { dict, lang } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
-  const [quotations, setQuotations] = useState<any[]>([])
   const [availableBanks, setAvailableBanks] = useState<any[]>([])
   const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
   const [companyInfo, setCompanyInfo] = useState<any>(null)
   const [previewDoc, setPreviewDoc] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
 
-  const [stats, setStats] = useState({
-    totalQuotations: 0,
-    draftQuotations: 0,
-    sentQuotations: 0,
-    almostExpired: 0,
-  })
-
   // Dialog State
   const [isOpen, setIsOpen] = useState(false)
-  const [isSortOpen, setIsSortOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<any>(null)
   const [viewOnly, setViewOnly] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -134,16 +109,6 @@ export default function QuotationsPage() {
     quotation_number: string
     company_name: string
   } | null>(null)
-
-  // Filter States
-  const [searchQuery, setSearchQuery] = useState("")
-  const debouncedSearchQuery = useDebounce(searchQuery, 300)
-  const [sortLevels, setSortLevels] = useState<SortLevel[]>([
-    { id: "1", column: "created_at", direction: "desc" },
-  ])
-
-  const observerTarget = useRef(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const statusStyles: Record<string, string> = {
     Draft:
@@ -213,13 +178,87 @@ export default function QuotationsPage() {
   const canDelete = hasPermission("quotation", "delete")
   const canPrint = hasPermission("quotation", "print")
 
-  const fetchStats = useCallback(async () => {
-    try {
+  // Settings (banks, company info, taxes) — mount only
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const [bRes, sRes, tRes] = await Promise.all([
+        supabase
+          .from("app_settings")
+          .select("value")
+          .eq("category", "company")
+          .eq("name", "bank")
+          .maybeSingle(),
+        supabase.from("app_settings").select("*").eq("category", "company"),
+        supabase.from("app_settings").select("*").eq("category", "tax"),
+      ])
+      if (cancelled) return
+      setAvailableBanks((bRes.data?.value as any[]) || [])
+      if (sRes.data) {
+        const info: any = {}
+        sRes.data.forEach((r: any) => {
+          info[r.name] = r.value
+        })
+        setCompanyInfo(info)
+      }
+      if (tRes.data) setGlobalTaxes(tRes.data)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [supabase])
+
+  const sortColumns = [
+    { label: dict.LABEL_CREATED_AT, value: "created_at" },
+    { label: dict.LABEL_QUOTATION_NUMBER, value: "quotation_number" },
+    { label: dict.LABEL_COMPANY_NAME, value: "company_id" },
+    { label: dict.LABEL_SKU, value: "product_id" },
+    { label: dict.LABEL_QUOTATION_DATE, value: "quotation_date" },
+    { label: dict.LABEL_EXPIRY_DATE, value: "expiry_date" },
+    { label: dict.LABEL_MIN_ORDER, value: "minimum_order" },
+    { label: dict.LABEL_STATUS, value: "status" },
+  ]
+
+  const {
+    rows: quotations,
+    isLoading,
+    isFetching,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    sortLevels,
+    setSortLevels,
+    stats,
+    containerRef,
+    sentinelRef,
+  } = useTableData({
+    table: "quotations",
+    select:
+      "*, company:companies(id, name, nickname, details), product:products(id, sku, name, base_price)",
+    searchColumns: ["quotation_number"],
+    relatedSearches: [
+      {
+        table: "companies",
+        columns: ["name", "nickname"],
+        matchColumn: "company_id",
+      },
+      { table: "products", columns: ["sku"], matchColumn: "product_id" },
+    ],
+    sortColumns,
+    defaultSort: [
+      { id: "created_at", column: "created_at", direction: "desc" },
+    ],
+    sortPersistKey: "quotations_sort",
+    persistKey: "quotations_search",
+    pageSize: 50,
+    // Stats fire on mount + after save/delete/status only.
+    statsFetcher: async () => {
       const now = new Date()
       const futureDate = new Date(
         now.getTime() + ALMOST_EXPIRED_DAYS_THRESHOLD * 24 * 60 * 60 * 1000
       )
-
       const [
         { count: totalCount },
         { count: draftCount },
@@ -243,158 +282,14 @@ export default function QuotationsPage() {
           .neq("status", "Accepted")
           .neq("status", "Rejected"),
       ])
-
-      setStats({
+      return {
         totalQuotations: totalCount || 0,
         draftQuotations: draftCount || 0,
         sentQuotations: sentCount || 0,
         almostExpired: almostExpiredCount || 0,
-      })
-    } catch (err) {
-      console.error("Fetch Stats Error:", err)
-    }
-  }, [supabase])
-
-  // Fetch Data
-  const fetchData = useCallback(
-    async (isInitial = false) => {
-      if (isInitial) {
-        setLoading(true)
-        setOffset(0)
-        fetchStats()
-      } else {
-        setLoadingMore(true)
-      }
-
-      try {
-        const currentOffset = isInitial ? 0 : offset
-
-        // We still need banks and company settings (only once)
-        if (isInitial) {
-          const [bRes, sRes, tRes] = await Promise.all([
-            supabase
-              .from("app_settings")
-              .select("value")
-              .eq("category", "company")
-              .eq("name", "bank")
-              .maybeSingle(),
-            supabase.from("app_settings").select("*").eq("category", "company"),
-            supabase.from("app_settings").select("*").eq("category", "tax"),
-          ])
-
-          if (bRes.data?.value) setAvailableBanks(bRes.data.value as any[])
-          else setAvailableBanks([])
-
-          if (sRes.data) {
-            const info: any = {}
-            sRes.data.forEach((r: any) => {
-              info[r.name] = r.value
-            })
-            setCompanyInfo(info)
-          }
-
-          if (tRes.data) {
-            setGlobalTaxes(tRes.data)
-          }
-        }
-
-        let query = supabase
-          .from("quotations")
-          .select(
-            "*, company:companies(id, name, nickname, details), product:products(id, sku, name, base_price)"
-          )
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        // Dynamic sorting
-        sortLevels.forEach((level) => {
-          const [, col] = level.column.split(".")
-          if (col) {
-            // Relation sorting not supported natively via range easily for joined tables in simple .order
-            // For now we sort by top level cols primarily
-          } else {
-            query = query.order(level.column, {
-              ascending: level.direction === "asc",
-            })
-          }
-        })
-
-        // Ensure stable secondary sort
-        query = query.order("created_at", { ascending: false })
-
-        if (debouncedSearchQuery) {
-          query = query.or(
-            `quotation_number.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%`
-          )
-        }
-
-        const { data, error } = await query
-        if (error) throw error
-
-        if (data) {
-          if (isInitial) {
-            setQuotations(data)
-          } else {
-            setQuotations((prev) => {
-              const newItems = data.filter(
-                (item: any) => !prev.some((p) => p.id === item.id)
-              )
-              return [...prev, ...newItems]
-            })
-          }
-          setHasMore(data.length === PAGE_SIZE)
-          setOffset(currentOffset + data.length)
-        }
-      } catch (err: any) {
-        notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
       }
     },
-    [
-      supabase,
-      offset,
-      debouncedSearchQuery,
-      sortLevels,
-      dict.MSG_DATA_FETCH_FAILED,
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    ]
-  )
-
-  useEffect(() => {
-    fetchData(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchQuery, sortLevels])
-
-  // Ordinary Infinite Scroll
-  useEffect(() => {
-    const rootElement = containerRef.current
-    if (!rootElement) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchData(false)
-        }
-      },
-      {
-        root: rootElement,
-        rootMargin: "400px",
-        threshold: 0,
-      }
-    )
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
-    }
-
-    return () => observer.disconnect()
-  }, [fetchData, hasMore, loading, loadingMore])
-
-  const handleRefresh = () => {
-    fetchData(true)
-  }
+  })
 
   // Linked Expiry Logic
   const handleQuotationDateChange = (dateStr: string) => {
@@ -680,24 +575,7 @@ export default function QuotationsPage() {
           .eq("id", editingItem.id)
         if (error) throw error
 
-        // Fetch updated row to keep local state in sync with relations
-        const { data: updatedRow, error: fetchError } = await supabase
-          .from("quotations")
-          .select(
-            "*, company:companies(id, name, nickname, details), product:products(id, sku, name, base_price)"
-          )
-          .eq("id", editingItem.id)
-          .single()
-
-        if (!fetchError && updatedRow) {
-          setQuotations((prev) =>
-            prev.map((q) => (q.id === editingItem.id ? updatedRow : q))
-          )
-          setUpdatedRowId(editingItem.id)
-        } else {
-          // Fallback if fetch fails
-          fetchData(true)
-        }
+        setUpdatedRowId(editingItem.id)
 
         const docLabel = `[${payload.quotation_number || formData.quotation_number}]`
         notify.success(
@@ -709,7 +587,7 @@ export default function QuotationsPage() {
           undefined,
           true
         )
-        fetchStats()
+        refresh()
       } else {
         // Generate document number if empty
         if (!payload.quotation_number) {
@@ -745,7 +623,7 @@ export default function QuotationsPage() {
           undefined,
           true
         )
-        fetchData(true)
+        refresh()
       }
       setIsOpen(false)
     } catch (err: any) {
@@ -784,7 +662,7 @@ export default function QuotationsPage() {
         .eq("id", deleteConfirm.id)
       if (error) throw error
 
-      setQuotations((prev) => prev.filter((q) => q.id !== deleteConfirm.id))
+      refresh()
       notify.deleted(
         dict.MSG_QUOTATION_DELETED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "quotation").replace(
@@ -794,7 +672,6 @@ export default function QuotationsPage() {
         undefined,
         true
       )
-      fetchStats()
     } catch (err: any) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", docLabel),
@@ -821,10 +698,8 @@ export default function QuotationsPage() {
         .eq("id", id)
       if (error) throw error
 
-      setQuotations((prev) =>
-        prev.map((q) => (q.id === id ? { ...q, status } : q))
-      )
       setUpdatedRowId(id)
+      refresh()
       notify.success(
         dict.MSG_QUOTATION_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -834,7 +709,6 @@ export default function QuotationsPage() {
         undefined,
         true
       )
-      fetchStats()
     } catch (err: any) {
       notify.error(
         dict.MSG_UPDATE_FAILED.replace("%data%", docLabel),
@@ -1066,75 +940,6 @@ export default function QuotationsPage() {
     }
   }
 
-  const sortedAndFilteredData = useMemo(() => {
-    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
-    let result = quotations
-
-    if (words.length > 0) {
-      result = quotations.filter((q) => {
-        const searchFields = [
-          q.quotation_number,
-          q.company?.name || "",
-          q.product?.sku || "",
-        ]
-        return searchFields.some((field) => {
-          const val = String(field).toLowerCase()
-          return words.every((word) => val.includes(word))
-        })
-      })
-    }
-    return [...result].sort((a, b) => {
-      for (const level of sortLevels) {
-        const aVal =
-          level.column === "company.name"
-            ? a.company?.name || ""
-            : level.column === "product.sku"
-              ? a.product?.sku || ""
-              : a[level.column]
-        const bVal =
-          level.column === "company.name"
-            ? b.company?.name || ""
-            : level.column === "product.sku"
-              ? b.product?.sku || ""
-              : b[level.column]
-        if (aVal === bVal) continue
-        const multiplier = level.direction === "asc" ? 1 : -1
-        if (typeof aVal === "number" && typeof bVal === "number")
-          return (aVal - bVal) * multiplier
-        return String(aVal).localeCompare(String(bVal)) * multiplier
-      }
-      return 0
-    })
-  }, [quotations, searchQuery, sortLevels])
-
-  const addSortLevel = () =>
-    setSortLevels([
-      ...sortLevels,
-      {
-        id: Math.random().toString(),
-        column: "quotation_number",
-        direction: "asc",
-      },
-    ])
-  const removeSortLevel = (id: string) => {
-    if (sortLevels.length > 1)
-      setSortLevels(sortLevels.filter((l) => l.id !== id))
-  }
-  const updateSortLevel = (id: string, field: keyof SortLevel, value: any) =>
-    setSortLevels(
-      sortLevels.map((l) => (l.id === id ? { ...l, [field]: value } : l))
-    )
-
-  const sortColumns = [
-    { label: dict.LABEL_QUOTATION_NUMBER, value: "quotation_number" },
-    { label: dict.LABEL_COMPANY_NAME, value: "company_id" },
-    { label: dict.LABEL_SKU, value: "product_id" },
-    { label: dict.LABEL_QUOTATION_DATE, value: "quotation_date" },
-    { label: dict.LABEL_EXPIRY_DATE, value: "expiry_date" },
-    { label: dict.LABEL_MIN_ORDER, value: "minimum_order" },
-    { label: dict.LABEL_STATUS, value: "status" },
-  ]
-
   const editorVariables = [
     { id: "quotation_number", label: dict.LABEL_QUOTATION_NUMBER },
     { id: "quotation_date", label: dict.LABEL_QUOTATION_DATE },
@@ -1204,7 +1009,7 @@ export default function QuotationsPage() {
     formData.discounts,
   ])
 
-  if (!canView && !loading && !authLoading) {
+  if (!canView && !isLoading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <div className="space-y-2 text-center">
@@ -1232,16 +1037,11 @@ export default function QuotationsPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || loadingMore}
+            onClick={refresh}
+            disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
-            <RefreshCw
-              className={cn(
-                "size-4",
-                (loading || loadingMore) && "animate-spin"
-              )}
-            />
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -2013,95 +1813,15 @@ export default function QuotationsPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {isFetching && (
+            <Loader2 className="absolute top-2.5 right-2.5 size-4 animate-spin text-muted-foreground" />
+          )}
         </div>
-        <Dialog open={isSortOpen} onOpenChange={setIsSortOpen}>
-          <DialogTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              title="Sort"
-              aria-label="Sort"
-              className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
-            >
-              <ArrowUpDown className="size-4" />
-              <span className="hidden md:inline">Sort</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>{dict.TITLE_SORT_SETTINGS}</DialogTitle>
-              <DialogDescription />
-            </DialogHeader>
-            <div className="flex flex-col gap-4 p-5">
-              {sortLevels.map((level, index) => (
-                <div key={level.id} className="flex items-center gap-3">
-                  <div className="w-17 shrink-0 text-sm font-semibold text-muted-foreground">
-                    {index === 0 ? dict.LABEL_SORT_BY : dict.LABEL_THEN_BY}
-                  </div>
-                  <Select
-                    value={level.column}
-                    onValueChange={(val) =>
-                      updateSortLevel(level.id, "column", val)
-                    }
-                  >
-                    <SelectTrigger className="h-9 flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortColumns.map((col) => (
-                        <SelectItem key={col.value} value={col.value}>
-                          {col.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9"
-                    onClick={() =>
-                      updateSortLevel(
-                        level.id,
-                        "direction",
-                        level.direction === "asc" ? "desc" : "asc"
-                      )
-                    }
-                  >
-                    {level.direction === "asc" ? (
-                      <ArrowUpAZ className="size-4" />
-                    ) : (
-                      <ArrowDownZA className="size-4" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-9 text-destructive"
-                    disabled={sortLevels.length <= 1}
-                    onClick={() => removeSortLevel(level.id)}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2 w-fit"
-                onClick={addSortLevel}
-              >
-                <Plus className="mr-2 size-4" />
-                {dict.BUTTON_ADD_LEVEL}
-              </Button>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsSortOpen(false)}>
-                {dict.BUTTON_CANCEL}
-              </Button>
-              <Button onClick={() => setIsSortOpen(false)}>Apply</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <SortDialog
+          sortLevels={sortLevels}
+          sortColumns={sortColumns}
+          onSortLevelsChange={setSortLevels}
+        />
       </div>
 
       <Card
@@ -2128,13 +1848,13 @@ export default function QuotationsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={8} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
-            ) : sortedAndFilteredData.length === 0 ? (
+            ) : quotations.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={8}
@@ -2144,7 +1864,7 @@ export default function QuotationsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              sortedAndFilteredData.map((q) => (
+              quotations.map((q) => (
                 <TableRow
                   key={q.id}
                   className={cn(
@@ -2189,7 +1909,12 @@ export default function QuotationsPage() {
                     </span>
                   </TableCell>
                   <TableCell className="max-md:hidden">
-                    {q.company?.name || "-"}
+                    <span className="text-foreground">
+                      {q.company?.name || "-"}
+                    </span>
+                    <span className="ml-2 text-muted-foreground">
+                      ( {q.company?.nickname || "-"} )
+                    </span>
                   </TableCell>
                   <TableCell className="font-mono text-xs max-md:hidden">
                     {q.product?.sku || "-"}
@@ -2318,14 +2043,14 @@ export default function QuotationsPage() {
             )}
 
             {/* Infinite Scroll Sentinel & Loader */}
-            <TableRow ref={observerTarget} className="border-0">
+            <TableRow ref={sentinelRef} className="border-0">
               <TableCell colSpan={8} className="overflow-hidden border-0 p-0">
-                {loadingMore && (
+                {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
-                {!hasMore && quotations.length > 0 && !loading && (
+                {!hasMore && quotations.length > 0 && !isLoading && (
                   <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>
@@ -2339,19 +2064,19 @@ export default function QuotationsPage() {
       <div className="grid shrink-0 grid-cols-4 gap-2 md:gap-4">
         <SummaryCard
           label={dict.LABEL_TOTAL_QUOTATIONS || "Total Quotation"}
-          value={stats.totalQuotations}
+          value={stats?.totalQuotations ?? 0}
           icon={FileText}
           color="slate"
         />
         <SummaryCard
           label={dict.LABEL_DRAFT_QUOTATIONS || "Draft"}
-          value={stats.draftQuotations}
+          value={stats?.draftQuotations ?? 0}
           icon={FileEdit}
           color="blue"
         />
         <SummaryCard
           label={dict.LABEL_SENT_QUOTATIONS || "Sent"}
-          value={stats.sentQuotations}
+          value={stats?.sentQuotations ?? 0}
           icon={Send}
           color="amber"
         />
@@ -2360,7 +2085,7 @@ export default function QuotationsPage() {
             dict.LABEL_ALMOST_EXPIRED ||
             `Exp. < ${ALMOST_EXPIRED_DAYS_THRESHOLD} days`
           }
-          value={stats.almostExpired}
+          value={stats?.almostExpired ?? 0}
           icon={AlertTriangle}
           color="red"
         />

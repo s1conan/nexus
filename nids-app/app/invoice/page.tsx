@@ -1,13 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
-import { useDebounce } from "@/hooks/use-debounce"
 import {
   Table,
   TableBody,
@@ -33,12 +31,10 @@ import {
   Send,
   FileEdit,
   AlertTriangle,
-  ArrowUpAZ,
-  ArrowDownZA,
-  ArrowUpDown,
   CheckCircle2,
   Info,
   Truck,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { SummaryCard } from "@/components/summary-card"
@@ -84,6 +80,8 @@ import { NumberInput } from "@/components/number-input"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 import { Switch } from "@/components/ui/switch"
 import { usePersistedState } from "@/hooks/use-persisted-state"
+import { useTableData } from "@/hooks/use-table-data"
+import { SortDialog } from "@/components/sort-dialog"
 import dynamic from "next/dynamic"
 
 const Gallery = dynamic(() => import("@/components/Gallery"), { ssr: false })
@@ -92,19 +90,11 @@ import {
   generateStandardDeliveryOrderPDF,
 } from "@/lib/pdf-generator"
 
-const PAGE_SIZE = 50
-
 const INITIAL_ISSUE_DATE = format(new Date(), "yyyy-MM-dd")
 const INITIAL_DUE_DATE = format(
   new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
   "yyyy-MM-dd"
 )
-
-interface SortLevel {
-  id: string
-  column: string
-  direction: "asc" | "desc"
-}
 
 function calculateBilledQuantity(doInfo: any): number {
   if (!doInfo) return 0
@@ -185,55 +175,31 @@ export default function InvoicePage() {
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
 
-  const [invoices, setInvoices] = useState<any[]>([])
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [availableBanks, setAvailableBanks] = useState<any[]>([])
   const [companyInfo, setCompanyInfo] = useState<any>(null)
   const [previewDoc, setPreviewDoc] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
   // Dialog State
   const [isOpen, setIsOpen] = usePersistedState("invoice_dialog_open", false)
-  const [isSortOpen, setIsSortOpen] = useState(false)
   const [editingItem, setEditingItem] = usePersistedState<any>(
     "invoice_editing_data",
     null
   )
   const [viewOnly, setViewOnly] = useState(false)
 
-  // Filter States
-  const [searchQuery, setSearchQuery] = usePersistedState("invoice_search", "")
+  // Filter State
   const [statusFilter, setStatusFilter] = usePersistedState(
     "invoice_status_filter",
     "all"
   )
-  const debouncedSearchQuery = useDebounce(searchQuery, 300)
-
-  // Stats State
-  const [stats, setStats] = useState({
-    draft: 0,
-    sent: 0,
-    overdue: 0,
-    paid: 0,
-  })
 
   // Delete Confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<{
     id: string
     name: string
   } | null>(null)
-
-  // Sorting
-  const [sortLevels, setSortLevels] = useState<SortLevel[]>([
-    { id: "1", column: "created_at", direction: "desc" },
-  ])
-
-  const observerTarget = useRef(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const statusStyles: Record<string, string> = {
     Draft:
@@ -504,8 +470,7 @@ export default function InvoicePage() {
     const received = hasReceived ? Number(d.received_quantity) : null
     const tolerancePct =
       Number(
-        d?.so?.shrinkage_tolerance ??
-          invoiceCalc?.soInfo?.shrinkage_tolerance
+        d?.so?.shrinkage_tolerance ?? invoiceCalc?.soInfo?.shrinkage_tolerance
       ) || 0
     const allowed = sent * (tolerancePct / 100)
     const shortfall = received !== null ? sent - received : 0
@@ -523,9 +488,80 @@ export default function InvoicePage() {
     }
   }
 
-  // Fetch Stats
-  const fetchStats = useCallback(async () => {
-    try {
+  // Settings (banks + company info) — mount only
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const [bRes, sRes] = await Promise.all([
+        supabase
+          .from("app_settings")
+          .select("value")
+          .eq("category", "company")
+          .eq("name", "bank")
+          .maybeSingle(),
+        supabase.from("app_settings").select("*").eq("category", "company"),
+      ])
+      if (cancelled) return
+      setAvailableBanks((bRes.data?.value as any[]) || [])
+      if (sRes.data) {
+        const info: any = {}
+        sRes.data.forEach((r: any) => {
+          info[r.name] = r.value
+        })
+        setCompanyInfo(info)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [supabase])
+
+  const sortColumns = [
+    { label: dict.LABEL_CREATED_AT || "Created Date", value: "created_at" },
+    {
+      label: dict.LABEL_INVOICE_NUMBER || "Invoice Number",
+      value: "invoice_number",
+    },
+    { label: dict.LABEL_COMPANY_NAME || "Company Name", value: "company.name" },
+    { label: dict.LABEL_ISSUE_DATE || "Issue Date", value: "issue_date" },
+    { label: dict.LABEL_DUE_DATE || "Due Date", value: "due_date" },
+    { label: dict.LABEL_GRAND_TOTAL || "Total Amount", value: "total_amount" },
+    { label: dict.LABEL_STATUS || "Status", value: "status" },
+  ]
+
+  const {
+    rows: invoices,
+    isLoading,
+    isFetching,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    sortLevels,
+    setSortLevels,
+    stats,
+    containerRef,
+    sentinelRef,
+  } = useTableData({
+    table: "invoices",
+    select:
+      "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, quantity, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))",
+    searchColumns: ["invoice_number"],
+    relatedSearches: [
+      { table: "companies", columns: ["name"], matchColumn: "company_id" },
+      { table: "sales_orders", columns: ["so_number"], matchColumn: "so_id" },
+    ],
+    filters: statusFilter,
+    applyFilters: (q) =>
+      statusFilter !== "all" ? q.eq("status", statusFilter) : q,
+    sortColumns,
+    defaultSort: [{ id: "1", column: "created_at", direction: "desc" }],
+    sortPersistKey: "invoice_sort",
+    persistKey: "invoice_search",
+    pageSize: 50,
+    // Counts only — fire on mount + refresh(), never per keystroke.
+    statsFetcher: async () => {
       const todayStr = format(new Date(), "yyyy-MM-dd")
       const [
         { count: draftCount },
@@ -552,174 +588,14 @@ export default function InvoicePage() {
           .select("*", { count: "exact", head: true })
           .eq("status", "Paid"),
       ])
-
-      setStats({
+      return {
         draft: draftCount || 0,
         sent: sentCount || 0,
         overdue: overdueCount || 0,
         paid: paidCount || 0,
-      })
-    } catch (err) {
-      console.error("Fetch Stats Error:", err)
-    }
-  }, [supabase])
-
-  // Fetch Data
-  const fetchData = useCallback(
-    async (isInitial = false) => {
-      if (isInitial) {
-        setLoading(true)
-        setOffset(0)
-        fetchStats()
-      } else {
-        setLoadingMore(true)
-      }
-
-      try {
-        const currentOffset = isInitial ? 0 : offset
-
-        if (isInitial) {
-          const [bRes, sRes] = await Promise.all([
-            supabase
-              .from("app_settings")
-              .select("value")
-              .eq("category", "company")
-              .eq("name", "bank")
-              .maybeSingle(),
-            supabase.from("app_settings").select("*").eq("category", "company"),
-          ])
-
-          if (bRes.data?.value) setAvailableBanks(bRes.data.value as any[])
-          else setAvailableBanks([])
-
-          if (sRes.data) {
-            const info: any = {}
-            sRes.data.forEach((r: any) => {
-              info[r.name] = r.value
-            })
-            setCompanyInfo(info)
-          }
-        }
-
-        let query = supabase
-          .from("invoices")
-          .select(
-            "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, quantity, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))"
-          )
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        if (statusFilter !== "all") {
-          query = query.eq("status", statusFilter)
-        }
-
-        if (debouncedSearchQuery) {
-          const companySearch = constructMultiWordSearch(debouncedSearchQuery, [
-            "name",
-          ])
-          let companyIds: string[] = []
-          if (companySearch) {
-            const { data: companies } = await supabase
-              .from("companies")
-              .select("id")
-              .or(companySearch)
-            companyIds = (companies || []).map((c: any) => c.id)
-          }
-
-          const invoiceSearch = constructMultiWordSearch(debouncedSearchQuery, [
-            "invoice_number",
-          ])
-          const orConditions: string[] = []
-          if (invoiceSearch) {
-            orConditions.push(invoiceSearch)
-          }
-          if (companyIds.length > 0) {
-            orConditions.push(`company_id.in.(${companyIds.join(",")})`)
-          }
-          if (orConditions.length > 0) {
-            query = query.or(orConditions.join(","))
-          }
-        }
-
-        // Dynamic sorting
-        sortLevels.forEach((level) => {
-          const [, col] = level.column.split(".")
-          if (col) {
-            // Joined sorting
-          } else {
-            query = query.order(level.column, {
-              ascending: level.direction === "asc",
-            })
-          }
-        })
-
-        // Ensure stable secondary sort
-        query = query.order("created_at", { ascending: false })
-
-        const { data, error } = await query
-        if (error) throw error
-
-        if (data) {
-          if (isInitial) {
-            setInvoices(data)
-          } else {
-            setInvoices((prev) => {
-              const newItems = data.filter(
-                (item: any) => !prev.some((p) => p.id === item.id)
-              )
-              return [...prev, ...newItems]
-            })
-          }
-          setHasMore(data.length === PAGE_SIZE)
-          setOffset(currentOffset + data.length)
-        }
-      } catch (err: any) {
-        notify.error(dict.MSG_DATA_FETCH_FAILED, err.message)
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
       }
     },
-    [
-      supabase,
-      offset,
-      debouncedSearchQuery,
-      statusFilter,
-      sortLevels,
-      dict.MSG_DATA_FETCH_FAILED,
-      fetchStats,
-    ]
-  )
-
-  const handleRefresh = () => {
-    fetchData(true)
-  }
-
-  useEffect(() => {
-    fetchData(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchQuery, statusFilter, sortLevels])
-
-  // Ordinary Infinite Scroll
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchData(false)
-        }
-      },
-      {
-        rootMargin: "400px",
-        threshold: 0,
-      }
-    )
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
-    }
-
-    return () => observer.disconnect()
-  }, [fetchData, hasMore, loading, loadingMore])
+  })
 
   const fetchSODOs = useCallback(
     (soId: string) => {
@@ -1064,29 +940,15 @@ export default function InvoicePage() {
           }
         }
 
-        // Fetch updated row to keep local state in sync with relations
-        const { data: updatedRow, error: fetchError } = await supabase
-          .from("invoices")
-          .select(
-            "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, quantity, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))"
-          )
-          .eq("id", editingItem.id)
-          .single()
-
-        if (!fetchError && updatedRow) {
-          setInvoices((prev) =>
-            prev.map((i) => (i.id === editingItem.id ? updatedRow : i))
-          )
-          setUpdatedRowId(editingItem.id)
-        } else {
-          fetchData(true)
-        }
+        // Keep the local row highlight; refresh() re-syncs relations.
+        setUpdatedRowId(editingItem.id)
+        refresh()
       } else {
         const { error } = await supabase.from("invoices").insert([payload])
         if (error) throw error
 
         await updateDOStatus(doIds, "Invoiced")
-        fetchData(true)
+        refresh()
       }
 
       const docLabel = `[${payload.invoice_number || formData.invoice_number}]`
@@ -1111,7 +973,6 @@ export default function InvoicePage() {
           true
         )
       }
-      fetchStats()
       setIsOpen(false)
     } catch (err: any) {
       const docLabel = `[${formData.invoice_number}]`
@@ -1149,7 +1010,7 @@ export default function InvoicePage() {
           .in("id", doIds)
       }
 
-      setInvoices((prev) => prev.filter((i) => i.id !== deleteConfirm.id))
+      refresh()
       notify.deleted(
         dict.MSG_DELETE_SUCCESS.replace("%data%", `[${deleteConfirm.name}]`),
         dict.MSG_SUCCESS_DELETE_DESC.replace("%entity%", "invoice").replace(
@@ -1159,7 +1020,6 @@ export default function InvoicePage() {
         undefined,
         true
       )
-      fetchStats()
     } catch (err: any) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${deleteConfirm.name}]`),
@@ -1198,10 +1058,8 @@ export default function InvoicePage() {
         }
       }
 
-      setInvoices((prev) =>
-        prev.map((i) => (i.id === id ? { ...i, status } : i))
-      )
       setUpdatedRowId(id)
+      refresh()
       notify.success(
         dict.MSG_QUOTATION_STATUS_UPDATED.replace("%data%", docLabel),
         dict.MSG_SUCCESS_STATUS_DESC.replace("%status%", `[${status}]`).replace(
@@ -1211,7 +1069,6 @@ export default function InvoicePage() {
         undefined,
         true
       )
-      fetchStats()
     } catch (err: any) {
       notify.error(
         dict.MSG_UPDATE_FAILED.replace("%data%", docLabel),
@@ -1242,25 +1099,6 @@ export default function InvoicePage() {
       due_date: format(dDate, "yyyy-MM-dd"),
     }))
   }
-
-  // Sorting handlers
-  const addSortLevel = () =>
-    setSortLevels([
-      ...sortLevels,
-      {
-        id: Math.random().toString(),
-        column: "invoice_number",
-        direction: "asc",
-      },
-    ])
-  const removeSortLevel = (id: string) => {
-    if (sortLevels.length > 1)
-      setSortLevels(sortLevels.filter((l) => l.id !== id))
-  }
-  const updateSortLevel = (id: string, field: keyof SortLevel, value: any) =>
-    setSortLevels(
-      sortLevels.map((l) => (l.id === id ? { ...l, [field]: value } : l))
-    )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -1557,67 +1395,6 @@ export default function InvoicePage() {
     }
   }
 
-  // Client side sorting and searching on fetched data
-  const sortedAndFilteredData = useMemo(() => {
-    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean)
-    let result = invoices
-
-    if (words.length > 0) {
-      result = invoices.filter((inv) => {
-        const searchFields = [
-          inv.invoice_number,
-          inv.company?.name || "",
-          (Array.isArray(inv.do_refs)
-            ? inv.do_refs.map((r: any) => r.do_number).join(", ")
-            : "") || "",
-          inv.po?.so_number || "",
-        ]
-        return searchFields.some((field) => {
-          const val = String(field).toLowerCase()
-          return words.every((word) => val.includes(word))
-        })
-      })
-    }
-
-    return [...result].sort((a, b) => {
-      for (const level of sortLevels) {
-        let aVal =
-          level.column === "company.name"
-            ? a.company?.name || ""
-            : a[level.column]
-        let bVal =
-          level.column === "company.name"
-            ? b.company?.name || ""
-            : b[level.column]
-
-        // Resolve dynamic display status for sorting if status is sorted
-        if (level.column === "status") {
-          aVal = getInvoiceStatus(a)
-          bVal = getInvoiceStatus(b)
-        }
-
-        if (aVal === bVal) continue
-        const multiplier = level.direction === "asc" ? 1 : -1
-        if (typeof aVal === "number" && typeof bVal === "number")
-          return (aVal - bVal) * multiplier
-        return String(aVal).localeCompare(String(bVal)) * multiplier
-      }
-      return 0
-    })
-  }, [invoices, searchQuery, sortLevels, getInvoiceStatus])
-
-  const sortColumns = [
-    {
-      label: dict.LABEL_INVOICE_NUMBER || "Invoice Number",
-      value: "invoice_number",
-    },
-    { label: dict.LABEL_COMPANY_NAME || "Company Name", value: "company.name" },
-    { label: dict.LABEL_ISSUE_DATE || "Issue Date", value: "issue_date" },
-    { label: dict.LABEL_DUE_DATE || "Due Date", value: "due_date" },
-    { label: dict.LABEL_GRAND_TOTAL || "Total Amount", value: "total_amount" },
-    { label: dict.LABEL_STATUS || "Status", value: "status" },
-  ]
-
   const editorVariables = [
     {
       id: "invoice_number",
@@ -1704,7 +1481,7 @@ export default function InvoicePage() {
     </div>
   )
 
-  if (!canView && !loading && !authLoading) {
+  if (!canView && !isLoading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <div className="space-y-2 text-center">
@@ -1733,16 +1510,11 @@ export default function InvoicePage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || loadingMore}
+            onClick={refresh}
+            disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
-            <RefreshCw
-              className={cn(
-                "size-4",
-                (loading || loadingMore) && "animate-spin"
-              )}
-            />
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -2205,67 +1977,67 @@ export default function InvoicePage() {
                                   </span>
                                 </div>
                                 <div className="divide-y divide-border/40">
-                                {selectedDOs.map((d: any) => {
-                                  const b = getDoBilling(d)
-                                  return (
-                                    <div
-                                      key={d.id}
-                                      className={cn(
-                                        "flex flex-col gap-0.5 px-1 py-1 text-[10px] md:flex-row md:items-center md:justify-between md:gap-2 md:py-1 md:text-xs",
-                                        b.withinTolerance && "bg-amber-500/5",
-                                        b.beyondTolerance && "bg-rose-500/5"
-                                      )}
-                                    >
-                                      <span className="min-w-0 truncate font-mono">
-                                        {d.do_number}
-                                      </span>
-                                      <span className="flex items-center gap-1.5 md:shrink-0">
-                                        <span
-                                          className="font-mono"
-                                          title="Terkirim / Diterima (L)"
-                                        >
-                                          {b.sent.toLocaleString()}
-                                          <span className="text-muted-foreground">
-                                            {" / "}
+                                  {selectedDOs.map((d: any) => {
+                                    const b = getDoBilling(d)
+                                    return (
+                                      <div
+                                        key={d.id}
+                                        className={cn(
+                                          "flex flex-col gap-0.5 px-1 py-1 text-[10px] md:flex-row md:items-center md:justify-between md:gap-2 md:py-1 md:text-xs",
+                                          b.withinTolerance && "bg-amber-500/5",
+                                          b.beyondTolerance && "bg-rose-500/5"
+                                        )}
+                                      >
+                                        <span className="min-w-0 truncate font-mono">
+                                          {d.do_number}
+                                        </span>
+                                        <span className="flex items-center gap-1.5 md:shrink-0">
+                                          <span
+                                            className="font-mono"
+                                            title="Terkirim / Diterima (L)"
+                                          >
+                                            {b.sent.toLocaleString()}
+                                            <span className="text-muted-foreground">
+                                              {" / "}
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "font-semibold",
+                                                b.beyondTolerance &&
+                                                  "text-rose-600 dark:text-rose-400",
+                                                b.withinTolerance &&
+                                                  "text-amber-600 dark:text-amber-400",
+                                                b.hasReceived &&
+                                                  !b.withinTolerance &&
+                                                  !b.beyondTolerance &&
+                                                  "text-emerald-600 dark:text-emerald-400",
+                                                !b.hasReceived &&
+                                                  "text-muted-foreground"
+                                              )}
+                                            >
+                                              {b.hasReceived
+                                                ? Number(
+                                                    b.received
+                                                  ).toLocaleString()
+                                                : "—"}
+                                            </span>
+                                            <span className="text-muted-foreground">
+                                              {" L"}
+                                            </span>
                                           </span>
                                           <span
                                             className={cn(
-                                              "font-semibold",
-                                              b.beyondTolerance &&
-                                                "text-rose-600 dark:text-rose-400",
-                                              b.withinTolerance &&
-                                                "text-amber-600 dark:text-amber-400",
-                                              b.hasReceived &&
-                                                !b.withinTolerance &&
-                                                !b.beyondTolerance &&
-                                                "text-emerald-600 dark:text-emerald-400",
-                                              !b.hasReceived &&
-                                                "text-muted-foreground"
+                                              "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:px-2",
+                                              doStatusStyles[d.status] ||
+                                                doStatusStyles.Draft
                                             )}
                                           >
-                                            {b.hasReceived
-                                              ? Number(
-                                                  b.received
-                                                ).toLocaleString()
-                                              : "—"}
-                                          </span>
-                                          <span className="text-muted-foreground">
-                                            {" L"}
+                                            {d.status}
                                           </span>
                                         </span>
-                                        <span
-                                          className={cn(
-                                            "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:px-2",
-                                            doStatusStyles[d.status] ||
-                                              doStatusStyles.Draft
-                                          )}
-                                        >
-                                          {d.status}
-                                        </span>
-                                      </span>
-                                    </div>
-                                  )
-                                })}
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               </div>
                             )}
@@ -2289,68 +2061,69 @@ export default function InvoicePage() {
                                 ) : (
                                   <>
                                     <div className="divide-y divide-border/40">
-                                    {soDOs.map((d: any) => {
-                                      const b = getDoBilling(d)
-                                      return (
-                                        <div
-                                          key={d.id}
-                                          className={cn(
-                                            "flex flex-col gap-0.5 px-1 py-1 text-[10px] md:flex-row md:items-center md:justify-between md:gap-2 md:py-1 md:text-xs",
-                                            b.withinTolerance &&
-                                              "bg-amber-500/5",
-                                            b.beyondTolerance && "bg-rose-500/5"
-                                          )}
-                                        >
-                                          <span className="min-w-0 truncate font-mono">
-                                            {d.do_number}
-                                          </span>
-                                          <span className="flex items-center gap-1.5 md:shrink-0">
-                                            <span
-                                              className="font-mono"
-                                              title="Terkirim / Diterima (L)"
-                                            >
-                                              {b.sent.toLocaleString()}
-                                              <span className="text-muted-foreground">
-                                                {" / "}
+                                      {soDOs.map((d: any) => {
+                                        const b = getDoBilling(d)
+                                        return (
+                                          <div
+                                            key={d.id}
+                                            className={cn(
+                                              "flex flex-col gap-0.5 px-1 py-1 text-[10px] md:flex-row md:items-center md:justify-between md:gap-2 md:py-1 md:text-xs",
+                                              b.withinTolerance &&
+                                                "bg-amber-500/5",
+                                              b.beyondTolerance &&
+                                                "bg-rose-500/5"
+                                            )}
+                                          >
+                                            <span className="min-w-0 truncate font-mono">
+                                              {d.do_number}
+                                            </span>
+                                            <span className="flex items-center gap-1.5 md:shrink-0">
+                                              <span
+                                                className="font-mono"
+                                                title="Terkirim / Diterima (L)"
+                                              >
+                                                {b.sent.toLocaleString()}
+                                                <span className="text-muted-foreground">
+                                                  {" / "}
+                                                </span>
+                                                <span
+                                                  className={cn(
+                                                    "font-semibold",
+                                                    b.beyondTolerance &&
+                                                      "text-rose-600 dark:text-rose-400",
+                                                    b.withinTolerance &&
+                                                      "text-amber-600 dark:text-amber-400",
+                                                    b.hasReceived &&
+                                                      !b.withinTolerance &&
+                                                      !b.beyondTolerance &&
+                                                      "text-emerald-600 dark:text-emerald-400",
+                                                    !b.hasReceived &&
+                                                      "text-muted-foreground"
+                                                  )}
+                                                >
+                                                  {b.hasReceived
+                                                    ? Number(
+                                                        b.received
+                                                      ).toLocaleString()
+                                                    : "—"}
+                                                </span>
+                                                <span className="text-muted-foreground">
+                                                  {" L"}
+                                                </span>
                                               </span>
                                               <span
                                                 className={cn(
-                                                  "font-semibold",
-                                                  b.beyondTolerance &&
-                                                    "text-rose-600 dark:text-rose-400",
-                                                  b.withinTolerance &&
-                                                    "text-amber-600 dark:text-amber-400",
-                                                  b.hasReceived &&
-                                                    !b.withinTolerance &&
-                                                    !b.beyondTolerance &&
-                                                    "text-emerald-600 dark:text-emerald-400",
-                                                  !b.hasReceived &&
-                                                    "text-muted-foreground"
+                                                  "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:px-2",
+                                                  doStatusStyles[d.status] ||
+                                                    doStatusStyles.Draft
                                                 )}
                                               >
-                                                {b.hasReceived
-                                                  ? Number(
-                                                      b.received
-                                                    ).toLocaleString()
-                                                  : "—"}
-                                              </span>
-                                              <span className="text-muted-foreground">
-                                                {" L"}
+                                                {d.status}
                                               </span>
                                             </span>
-                                            <span
-                                              className={cn(
-                                                "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:px-2",
-                                                doStatusStyles[d.status] ||
-                                                  doStatusStyles.Draft
-                                              )}
-                                            >
-                                              {d.status}
-                                            </span>
-                                          </span>
-                                        </div>
-                                      )
-                                    })}
+                                          </div>
+                                        )
+                                      })}
                                     </div>
                                     {(() => {
                                       const receivedTotal = soDOs.reduce(
@@ -2370,7 +2143,8 @@ export default function InvoicePage() {
                                       const allowedTotal =
                                         soQty *
                                         ((Number(
-                                          invoiceCalc.soInfo?.shrinkage_tolerance
+                                          invoiceCalc.soInfo
+                                            ?.shrinkage_tolerance
                                         ) || 0) /
                                           100)
                                       if (
@@ -2675,6 +2449,9 @@ export default function InvoicePage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {isFetching && (
+            <Loader2 className="absolute top-2.5 right-2.5 size-4 animate-spin text-muted-foreground" />
+          )}
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="h-9 w-32 shrink-0">
@@ -2690,98 +2467,11 @@ export default function InvoicePage() {
           </SelectContent>
         </Select>
 
-        <Dialog open={isSortOpen} onOpenChange={setIsSortOpen}>
-          <DialogTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              title="Sort"
-              aria-label="Sort"
-              className="md:h-9 md:w-auto md:gap-1.5 md:px-2.5"
-            >
-              <ArrowUpDown className="size-4" />
-              <span className="hidden md:inline">Sort</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>
-                {dict.TITLE_SORT_SETTINGS || "Sort Settings"}
-              </DialogTitle>
-              <DialogDescription />
-            </DialogHeader>
-            <div className="flex flex-col gap-4 p-5">
-              {sortLevels.map((level, index) => (
-                <div key={level.id} className="flex items-center gap-3">
-                  <div className="w-17 shrink-0 text-sm font-semibold text-muted-foreground">
-                    {index === 0
-                      ? dict.LABEL_SORT_BY || "Sort by"
-                      : dict.LABEL_THEN_BY || "Then by"}
-                  </div>
-                  <Select
-                    value={level.column}
-                    onValueChange={(val) =>
-                      updateSortLevel(level.id, "column", val)
-                    }
-                  >
-                    <SelectTrigger className="h-9 flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortColumns.map((col) => (
-                        <SelectItem key={col.value} value={col.value}>
-                          {col.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9"
-                    onClick={() =>
-                      updateSortLevel(
-                        level.id,
-                        "direction",
-                        level.direction === "asc" ? "desc" : "asc"
-                      )
-                    }
-                  >
-                    {level.direction === "asc" ? (
-                      <ArrowUpAZ className="size-4" />
-                    ) : (
-                      <ArrowDownZA className="size-4" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-9 text-destructive"
-                    disabled={sortLevels.length <= 1}
-                    onClick={() => removeSortLevel(level.id)}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2 w-fit"
-                onClick={addSortLevel}
-              >
-                <Plus className="mr-2 size-4" />
-                {dict.BUTTON_ADD_LEVEL || "Add Level"}
-              </Button>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsSortOpen(false)}>
-                {dict.BUTTON_CANCEL}
-              </Button>
-              <Button onClick={() => setIsSortOpen(false)}>Apply</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <SortDialog
+          sortLevels={sortLevels}
+          sortColumns={sortColumns}
+          onSortLevelsChange={setSortLevels}
+        />
       </div>
 
       {/* Data Table */}
@@ -2805,13 +2495,13 @@ export default function InvoicePage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={6} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
-            ) : sortedAndFilteredData.length === 0 ? (
+            ) : invoices.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={6}
@@ -2821,7 +2511,7 @@ export default function InvoicePage() {
                 </TableCell>
               </TableRow>
             ) : (
-              sortedAndFilteredData.map((i) => {
+              invoices.map((i) => {
                 const displayStatus = getInvoiceStatus(i)
                 const amounts = calculateInvoiceTotals(i)
                 return (
@@ -2840,9 +2530,7 @@ export default function InvoicePage() {
                       {/* Mobile: stacked layout */}
                       <div className="flex flex-col gap-1.5 md:hidden">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-sm font-bold">
-                            {i.invoice_number}
-                          </span>
+                          <span className="text-sm">{i.invoice_number}</span>
                           <span
                             className={cn(
                               "inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
@@ -2870,9 +2558,7 @@ export default function InvoicePage() {
                       </div>
                       {/* Desktop */}
                       <div className="hidden md:block">
-                        <div className="font-mono text-sm font-bold">
-                          {i.invoice_number}
-                        </div>
+                        <div className="text-sm">{i.invoice_number}</div>
                         {Array.isArray(i.do_refs) && i.do_refs.length > 0 && (
                           <div
                             className="max-w-[220px] truncate font-mono text-[11px] text-muted-foreground"
@@ -2905,7 +2591,7 @@ export default function InvoicePage() {
                         {format(new Date(i.issue_date), "dd MMM yyyy")}
                       </div>
                       <div className="text-xs font-medium text-destructive">
-                        {dict.LABEL_DUE_DATE?.split(" ")[0] || "Due"}:{" "}
+                        {dict.LABEL_DUE_DATE?.split(" ")[1] || "Due"}:{" "}
                         {format(new Date(i.due_date), "dd MMM yyyy")}
                       </div>
                     </TableCell>
@@ -3033,14 +2719,14 @@ export default function InvoicePage() {
             )}
 
             {/* Infinite Scroll Sentinel */}
-            <TableRow ref={observerTarget} className="border-0">
+            <TableRow ref={sentinelRef} className="border-0">
               <TableCell colSpan={6} className="overflow-hidden border-0 p-0">
-                {loadingMore && (
+                {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
-                {!hasMore && invoices.length > 0 && !loading && (
+                {!hasMore && invoices.length > 0 && !isLoading && (
                   <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>
@@ -3055,25 +2741,25 @@ export default function InvoicePage() {
       <div className="grid shrink-0 grid-cols-4 gap-2 md:gap-4">
         <SummaryCard
           label={dict.LABEL_STATUS_DRAFT || "Draft"}
-          value={stats.draft}
+          value={stats?.draft ?? 0}
           icon={FileEdit}
           color="blue"
         />
         <SummaryCard
           label={dict.LABEL_STATUS_SENT || "Sent"}
-          value={stats.sent}
+          value={stats?.sent ?? 0}
           icon={Send}
           color="amber"
         />
         <SummaryCard
           label={dict.LABEL_STATUS_OVERDUE || "Overdue"}
-          value={stats.overdue}
+          value={stats?.overdue ?? 0}
           icon={AlertTriangle}
           color="red"
         />
         <SummaryCard
           label={dict.LABEL_STATUS_PAID || "Paid"}
-          value={stats.paid}
+          value={stats?.paid ?? 0}
           icon={CheckCircle2}
           color="green"
         />

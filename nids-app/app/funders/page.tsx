@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
@@ -29,6 +29,7 @@ import {
   AlertCircle,
   CheckCircle,
   Users,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { SummaryCard } from "@/components/summary-card"
@@ -44,49 +45,33 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { cn, sanitizePostgrestValue } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { usePersistedState } from "@/hooks/use-persisted-state"
 import { ButtonLoader } from "@/components/button-loader"
-import { useDebounce } from "@/hooks/use-debounce"
-
-const PAGE_SIZE = 50
+import { useTableData } from "@/hooks/use-table-data"
+import { SortDialog } from "@/components/sort-dialog"
 
 export default function FundersPage() {
   const { dict } = useDictionary()
   const supabase = createClient()
-  const { hasPermission, profile, loading: authLoading } = useAuth()
+  const { hasPermission, loading: authLoading } = useAuth()
 
-  const [funders, setFunders] = useState<any[]>([])
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
-
-  const [stats, setStats] = useState({
-    totalFunders: 0,
-    activeFunders: 0,
-  })
 
   const [isOpen, setIsOpen] = usePersistedState("funders_dialog_open", false)
   const [editingFunder, setEditingFunder] = usePersistedState<any>(
     "funders_editing_data",
     null
   )
-  const [searchQuery, setSearchQuery] = usePersistedState("funders_search", "")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [viewOnly, setViewOnly] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{
     id: string
     name: string
   } | null>(null)
-  const debouncedSearchQuery = useDebounce(searchQuery, 300)
-
-  const observerTarget = useRef(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const [formData, setFormData] = usePersistedState("funders_form_data", {
     name: "",
@@ -108,8 +93,41 @@ export default function FundersPage() {
   const canEdit = hasPermission("funders", "edit")
   const canDelete = hasPermission("funders", "delete")
 
-  const fetchStats = useCallback(async () => {
-    try {
+  const sortColumns = [
+    { label: dict.LABEL_NAME, value: "name" },
+    { label: dict.LABEL_ID_NUMBER, value: "id_number" },
+    { label: dict.LABEL_PHONE, value: "phone" },
+    { label: dict.LABEL_IS_ACTIVE, value: "is_active" },
+  ]
+
+  const {
+    rows: funders,
+    isLoading,
+    isFetching,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    sortLevels,
+    setSortLevels,
+    stats,
+    containerRef,
+    sentinelRef,
+  } = useTableData({
+    table: "funders",
+    select: "id, name, id_number, phone, bank_accounts, is_active",
+    searchColumns: ["name", "id_number", "phone"],
+    sortColumns,
+    defaultSort: [
+      { id: "is_active", column: "is_active", direction: "desc" },
+      { id: "name", column: "name", direction: "asc" },
+    ],
+    sortPersistKey: "funders_sort",
+    persistKey: "funders_search",
+    pageSize: 50,
+    // Counts only — fire on mount + after save/delete, never per keystroke.
+    statsFetcher: async () => {
       const [{ count: totalCount }, { count: activeCount }] = await Promise.all(
         [
           supabase.from("funders").select("*", { count: "exact", head: true }),
@@ -119,103 +137,12 @@ export default function FundersPage() {
             .eq("is_active", true),
         ]
       )
-
-      setStats({
+      return {
         totalFunders: totalCount || 0,
         activeFunders: activeCount || 0,
-      })
-    } catch (err) {
-      console.error("Fetch Funders Stats Error:", err)
-    }
-  }, [supabase])
-
-  const fetchFunders = useCallback(
-    async (isInitial = false) => {
-      if (isInitial) {
-        setLoading(true)
-        setOffset(0)
-        fetchStats()
-      } else {
-        setLoadingMore(true)
-      }
-
-      try {
-        const currentOffset = isInitial ? 0 : offset
-        let query = supabase
-          .from("funders")
-          .select("*")
-          .order("is_active", { ascending: false })
-          .order("name", { ascending: true })
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        if (debouncedSearchQuery) {
-          query = query.or(
-            `name.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%,id_number.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%,phone.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%`
-          )
-        }
-
-        const { data, error } = await query
-
-        if (error) {
-          console.error("Fetch Funders Error:", error)
-          notify.error(dict.MSG_DATA_FETCH_FAILED, error.message)
-        } else if (data) {
-          if (isInitial) {
-            setFunders(data)
-          } else {
-            setFunders((prev) => {
-              const newItems = data.filter(
-                (item: any) => !prev.some((p) => p.id === item.id)
-              )
-              return [...prev, ...newItems]
-            })
-          }
-          setHasMore(data.length === PAGE_SIZE)
-          setOffset(currentOffset + data.length)
-        }
-      } catch (err) {
-        console.error("Fetch Funders Exception:", err)
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
       }
     },
-    [supabase, offset, debouncedSearchQuery, dict.MSG_DATA_FETCH_FAILED]
-  )
-
-  useEffect(() => {
-    fetchFunders(true)
-  }, [debouncedSearchQuery])
-
-  // Simple Ordinary Infinite Scroll
-  useEffect(() => {
-    const rootElement = containerRef.current
-    if (!rootElement) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (entry.isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchFunders(false)
-        }
-      },
-      {
-        root: rootElement,
-        rootMargin: "400px",
-        threshold: 0,
-      }
-    )
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
-    }
-
-    return () => observer.disconnect()
-  }, [fetchFunders, hasMore, loading, loadingMore])
-
-  const handleRefresh = () => {
-    fetchFunders(true)
-  }
+  })
 
   const handleOpenDialog = (funder: any = null, isViewOnly = false) => {
     setViewOnly(isViewOnly)
@@ -297,16 +224,11 @@ export default function FundersPage() {
       }
 
       if (editingFunder) {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("funders")
           .update(payload)
           .eq("id", editingFunder.id)
-          .select()
-          .single()
         if (error) throw error
-        setFunders((prev) =>
-          prev.map((f) => (f.id === editingFunder.id ? data : f))
-        )
         setUpdatedRowId(editingFunder.id)
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`),
@@ -324,7 +246,7 @@ export default function FundersPage() {
           .select()
           .single()
         if (error) throw error
-        setFunders((prev) => [data, ...prev])
+        setUpdatedRowId(data?.id ?? null)
         notify.success(
           dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`),
           dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace(
@@ -335,8 +257,8 @@ export default function FundersPage() {
           true
         )
       }
-      fetchStats()
       setIsOpen(false)
+      refresh()
     } catch (err) {
       console.error("Submit Funder Error:", err)
       notify.error(
@@ -371,8 +293,8 @@ export default function FundersPage() {
         undefined,
         true
       )
-      setFunders((prev) => prev.filter((f) => f.id !== deleteConfirm.id))
-      fetchStats()
+      setDeleteConfirm(null)
+      refresh()
     } catch (err: any) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${deleteConfirm.name}]`),
@@ -383,7 +305,7 @@ export default function FundersPage() {
     }
   }
 
-  if (!canView && !loading && !authLoading) {
+  if (!canView && !isLoading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <div className="space-y-2 text-center">
@@ -412,16 +334,11 @@ export default function FundersPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || loadingMore}
+            onClick={refresh}
+            disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
-            <RefreshCw
-              className={cn(
-                "size-4",
-                (loading || loadingMore) && "animate-spin"
-              )}
-            />
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -660,7 +577,7 @@ export default function FundersPage() {
       </div>
 
       <div className="action-bar shrink-0">
-        <div className="relative min-w-0 w-full flex-1">
+        <div className="relative min-w-0 flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -668,7 +585,15 @@ export default function FundersPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {isFetching && (
+            <Loader2 className="absolute top-2.5 right-2.5 size-4 animate-spin text-muted-foreground" />
+          )}
         </div>
+        <SortDialog
+          sortLevels={sortLevels}
+          sortColumns={sortColumns}
+          onSortLevelsChange={setSortLevels}
+        />
       </div>
 
       <Card
@@ -685,7 +610,7 @@ export default function FundersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={4} className="p-0">
                   <SectionLoader />
@@ -792,14 +717,14 @@ export default function FundersPage() {
             )}
 
             {/* Sentinel - ALWAYS mounted so observer doesn't lose it */}
-            <TableRow ref={observerTarget} className="border-0">
+            <TableRow ref={sentinelRef} className="border-0">
               <TableCell colSpan={4} className="overflow-hidden border-0 p-0">
-                {loadingMore && (
+                {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
-                {!hasMore && funders.length > 0 && !loading && (
+                {!hasMore && funders.length > 0 && !isLoading && (
                   <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>
@@ -813,13 +738,13 @@ export default function FundersPage() {
       <div className="mb-1 grid shrink-0 grid-cols-2 gap-4">
         <SummaryCard
           label={dict.TITLE_FUNDERS || "Total Funders"}
-          value={stats.totalFunders}
+          value={stats?.totalFunders ?? 0}
           icon={Users}
           color="primary"
         />
         <SummaryCard
           label={dict.LABEL_ACTIVE_FUNDERS || "Active Funders"}
-          value={stats.activeFunders}
+          value={stats?.activeFunders ?? 0}
           icon={CheckCircle}
           color="green"
         />

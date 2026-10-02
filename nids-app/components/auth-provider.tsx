@@ -97,7 +97,9 @@ export function AuthProvider({
     setIsSigningOut(true)
     try {
       Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith("nids_") && key !== "nids_pref_lang") {
+        // Keep the whole `nids_pref_` namespace: user preferences (language,
+        // sort order) deliberately survive logout; session state does not.
+        if (key.startsWith("nids_") && !key.startsWith("nids_pref_")) {
           localStorage.removeItem(key)
         }
       })
@@ -334,7 +336,9 @@ export function AuthProvider({
       setResolvedPermissions(null)
       if (typeof window !== "undefined") {
         Object.keys(localStorage).forEach((key) => {
-          if (key.startsWith("nids_") && key !== "nids_pref_lang") {
+          // Keep the whole `nids_pref_` namespace: user preferences (language,
+          // sort order) deliberately survive logout; session state does not.
+          if (key.startsWith("nids_") && !key.startsWith("nids_pref_")) {
             localStorage.removeItem(key)
           }
         })

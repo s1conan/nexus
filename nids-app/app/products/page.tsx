@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { useState } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
@@ -24,8 +24,8 @@ import {
   Pencil,
   RefreshCw,
   AlertCircle,
-  Banknote,
   Trash2,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
@@ -41,7 +41,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 
-import { cn, sanitizePostgrestValue } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
@@ -50,38 +50,27 @@ import { NumberInput } from "@/components/number-input"
 
 import { formatCurrency } from "@/lib/formatters"
 import { ButtonLoader } from "@/components/button-loader"
-import { useDebounce } from "@/hooks/use-debounce"
-
-const PAGE_SIZE = 50
+import { useTableData } from "@/hooks/use-table-data"
+import { SortDialog } from "@/components/sort-dialog"
 
 export default function ProductsPage() {
   const { dict, lang } = useDictionary()
   const supabase = createClient()
-  const { hasPermission, profile, loading: authLoading } = useAuth()
+  const { hasPermission, loading: authLoading } = useAuth()
 
-  const [products, setProducts] = useState<any[]>([])
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
 
   const [isOpen, setIsOpen] = usePersistedState("products_dialog_open", false)
   const [editingProduct, setEditingProduct] = usePersistedState<any>(
     "products_editing_data",
     null
   )
-  const [searchQuery, setSearchQuery] = usePersistedState("products_search", "")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [viewOnly, setViewOnly] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{
     id: string
     name: string
   } | null>(null)
-  const debouncedSearchQuery = useDebounce(searchQuery, 300)
-
-  const observerTarget = useRef(null)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const [formData, setFormData] = usePersistedState("products_form_data", {
     sku: "",
@@ -96,88 +85,39 @@ export default function ProductsPage() {
   const canEdit = hasPermission("products", "edit")
   const canDelete = hasPermission("products", "delete")
 
-  const fetchProducts = useCallback(
-    async (isInitial = false) => {
-      if (isInitial) {
-        setLoading(true)
-        setOffset(0)
-      } else {
-        setLoadingMore(true)
-      }
+  const sortColumns = [
+    { label: dict.LABEL_PRODUCT_NAME, value: "name" },
+    { label: dict.LABEL_SKU, value: "sku" },
+    { label: dict.LABEL_BASE_PRICE, value: "base_price" },
+    { label: dict.LABEL_IS_ACTIVE, value: "is_active" },
+  ]
 
-      try {
-        const currentOffset = isInitial ? 0 : offset
-        let query = supabase
-          .from("products")
-          .select("*")
-          .order("is_active", { ascending: false })
-          .order("name", { ascending: true })
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        if (debouncedSearchQuery) {
-          query = query.or(
-            `name.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%,sku.ilike.%${sanitizePostgrestValue(debouncedSearchQuery)}%`
-          )
-        }
-
-        const { data, error } = await query
-
-        if (error) {
-          console.error("Products: Fetch error:", error)
-          notify.error("Data Fetch Failed", error.message)
-        } else if (data) {
-          if (isInitial) {
-            setProducts(data)
-          } else {
-            setProducts((prev) => {
-              const newItems = data.filter(
-                (item: any) => !prev.some((p) => p.id === item.id)
-              )
-              return [...prev, ...newItems]
-            })
-          }
-          setHasMore(data.length === PAGE_SIZE)
-          setOffset(currentOffset + data.length)
-        }
-      } catch (err) {
-        console.error("Products: Unexpected fetch exception:", err)
-      } finally {
-        setLoading(false)
-        setLoadingMore(false)
-      }
-    },
-    [supabase, offset, debouncedSearchQuery]
-  )
-
-  useEffect(() => {
-    fetchProducts(true)
-  }, [debouncedSearchQuery])
-
-  // Infinite Scroll Observer
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          fetchProducts(false)
-        }
-      },
-      {
-        root: containerRef.current,
-        rootMargin: "400px",
-        threshold: 0,
-      }
-    )
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
-    }
-
-    return () => observer.disconnect()
-  }, [fetchProducts, hasMore, loading, loadingMore])
-
-  const handleRefresh = () => {
-    fetchProducts(true)
-  }
+  const {
+    rows: products,
+    isLoading,
+    isFetching,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    sortLevels,
+    setSortLevels,
+    containerRef,
+    sentinelRef,
+  } = useTableData({
+    table: "products",
+    select: "id, sku, name, base_price, is_active",
+    searchColumns: ["name", "sku"],
+    sortColumns,
+    defaultSort: [
+      { id: "is_active", column: "is_active", direction: "desc" },
+      { id: "name", column: "name", direction: "asc" },
+    ],
+    sortPersistKey: "products_sort",
+    persistKey: "products_search",
+    pageSize: 50,
+  })
 
   const handleOpenDialog = (product: any = null, isViewOnly = false) => {
     setViewOnly(isViewOnly)
@@ -217,16 +157,11 @@ export default function ProductsPage() {
 
     try {
       if (editingProduct) {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("products")
           .update(payload)
           .eq("id", editingProduct.id)
-          .select()
-          .single()
         if (error) throw error
-        setProducts((prev) =>
-          prev.map((p) => (p.id === editingProduct.id ? data : p))
-        )
         setUpdatedRowId(editingProduct.id)
         notify.success(
           dict.MSG_UPDATE_SUCCESS.replace("%data%", `[${formData.name}]`),
@@ -244,7 +179,7 @@ export default function ProductsPage() {
           .select()
           .single()
         if (error) throw error
-        setProducts((prev) => [data, ...prev])
+        setUpdatedRowId(data?.id ?? null)
         notify.success(
           dict.MSG_SAVE_SUCCESS.replace("%data%", `[${formData.name}]`),
           dict.MSG_SUCCESS_SAVE_DESC_NO_COMPANY.replace(
@@ -256,6 +191,7 @@ export default function ProductsPage() {
         )
       }
       setIsOpen(false)
+      refresh()
     } catch (err: any) {
       console.error("Products: Save error:", err)
       notify.error(
@@ -290,7 +226,8 @@ export default function ProductsPage() {
         undefined,
         true
       )
-      setProducts((prev) => prev.filter((p) => p.id !== deleteConfirm.id))
+      setDeleteConfirm(null)
+      refresh()
     } catch (err: any) {
       notify.error(
         dict.MSG_SAVE_FAILED.replace("%data%", `[${deleteConfirm.name}]`),
@@ -301,7 +238,7 @@ export default function ProductsPage() {
     }
   }
 
-  if (!canView && !loading && !authLoading) {
+  if (!canView && !isLoading && !authLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <div className="space-y-2 text-center">
@@ -330,16 +267,11 @@ export default function ProductsPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleRefresh}
-            disabled={loading || loadingMore}
+            onClick={refresh}
+            disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
-            <RefreshCw
-              className={cn(
-                "size-4",
-                (loading || loadingMore) && "animate-spin"
-              )}
-            />
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -479,7 +411,15 @@ export default function ProductsPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {isFetching && (
+            <Loader2 className="absolute top-2.5 right-2.5 size-4 animate-spin text-muted-foreground" />
+          )}
         </div>
+        <SortDialog
+          sortLevels={sortLevels}
+          sortColumns={sortColumns}
+          onSortLevelsChange={setSortLevels}
+        />
       </div>
 
       <Card
@@ -494,7 +434,7 @@ export default function ProductsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell colSpan={2} className="p-0">
                   <SectionLoader />
@@ -571,14 +511,14 @@ export default function ProductsPage() {
             )}
 
             {/* Infinite Scroll Sentinel & Loader */}
-            <TableRow ref={observerTarget} className="border-0">
+            <TableRow ref={sentinelRef} className="border-0">
               <TableCell colSpan={2} className="overflow-hidden border-0 p-0">
-                {loadingMore && (
+                {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />
                   </div>
                 )}
-                {!hasMore && products.length > 0 && !loading && (
+                {!hasMore && products.length > 0 && !isLoading && (
                   <div className="py-3 text-center text-xs text-danger/70 select-none">
                     — End of data —
                   </div>
