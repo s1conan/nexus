@@ -81,3 +81,20 @@ export const formatCurrency = (
 ) => {
   return `${SITE_CONFIG.currencySymbol} ${formatNumber(num, locale)}`
 }
+
+/**
+ * Compact currency for tight spaces (e.g. dashboard cards): "Rp 12,3 jt"
+ */
+export const formatCompactCurrency = (
+  num: number | string | null | undefined,
+  locale?: string
+) => {
+  const parsed = typeof num === "string" ? parseFloat(num.replace(/,/g, "")) : num
+  const safe = typeof parsed === "number" && isFinite(parsed) ? parsed : 0
+  const activeLocale = locale || SITE_CONFIG.numberLocale
+  const compact = new Intl.NumberFormat(activeLocale, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(safe)
+  return `${SITE_CONFIG.currencySymbol} ${compact}`
+}

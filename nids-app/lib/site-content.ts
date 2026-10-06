@@ -383,12 +383,16 @@ export const SITE_CONTENT = {
     LABEL_ACTIVE_COMPANIES: "Active",
 
     // Dashboard card sub-captions
-    LABEL_DASH_NEW: "New",
     LABEL_DASH_WILL_EXPIRE: "Will Expire",
     LABEL_DASH_PENDING: "Pending",
     LABEL_DASH_UNDELIVERED: "Undelivered",
+    LABEL_DASH_UNSENT: "Unsent",
     LABEL_DASH_OVERDUE: "Overdue",
     LABEL_DASH_DUE_SOON: "Due Soon",
+    LABEL_DASH_ACCEPTED: "Accepted",
+    LABEL_DASH_IN_TRANSIT: "In Transit",
+    LABEL_DASH_OUTSTANDING: "Outstanding",
+    LABEL_DASH_COLLECTED: "Collected",
 
     // Labels
     LABEL_NAME: "Name",
@@ -1012,12 +1016,16 @@ export const SITE_CONTENT = {
     LABEL_ACTIVE_COMPANIES: "Aktif",
 
     // Dashboard card sub-captions
-    LABEL_DASH_NEW: "Baru",
     LABEL_DASH_WILL_EXPIRE: "Akan Expired",
     LABEL_DASH_PENDING: "Tertunda",
     LABEL_DASH_UNDELIVERED: "Belum Terkirim",
+    LABEL_DASH_UNSENT: "Belum Dikirim",
     LABEL_DASH_OVERDUE: "Jatuh Tempo",
     LABEL_DASH_DUE_SOON: "Segera Jatuh Tempo",
+    LABEL_DASH_ACCEPTED: "Diterima",
+    LABEL_DASH_IN_TRANSIT: "Dalam Perjalanan",
+    LABEL_DASH_OUTSTANDING: "Belum Dibayar",
+    LABEL_DASH_COLLECTED: "Terkumpul",
 
     // Labels
     LABEL_NAME: "Nama",
