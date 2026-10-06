@@ -379,14 +379,6 @@ export const SITE_CONTENT = {
     LABEL_MANAGE_FUNDERS: "Manage Funders",
 
     DASHBOARD_TITLE: "Executive Dashboard",
-    LABEL_THIS_WEEK: "this week",
-    LABEL_NEW_QUOTATIONS: "New Quotations",
-    LABEL_EXPIRING_QUOTATIONS: "Expiring Soon",
-    LABEL_PENDING_SO: "Pending Sales Orders",
-    LABEL_UNDELIVERED_DO: "Undelivered DOs",
-    LABEL_OVERDUE_INVOICES: "Overdue Invoices",
-    LABEL_DUE_SOON_INVOICES: "Due Soon",
-    LABEL_PENDING_PAYMENTS: "Pending Payments",
     LABEL_PENDING_DO: "Pending PO",
     LABEL_ACTIVE_COMPANIES: "Active",
 
@@ -1016,14 +1008,6 @@ export const SITE_CONTENT = {
     LABEL_MANAGE_FUNDERS: "Kelola Funder",
 
     DASHBOARD_TITLE: "Dashboard Eksekutif",
-    LABEL_THIS_WEEK: "minggu ini",
-    LABEL_NEW_QUOTATIONS: "Penawaran Baru",
-    LABEL_EXPIRING_QUOTATIONS: "Akan Expired",
-    LABEL_PENDING_SO: "SO Tertunda",
-    LABEL_UNDELIVERED_DO: "SJ Belum Terkirim",
-    LABEL_OVERDUE_INVOICES: "Invoice Jatuh Tempo",
-    LABEL_DUE_SOON_INVOICES: "Segera Jatuh Tempo",
-    LABEL_PENDING_PAYMENTS: "Pembayaran Tertunda",
     LABEL_PENDING_DO: "PO Tertunda",
     LABEL_ACTIVE_COMPANIES: "Aktif",
 
