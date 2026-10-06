@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { cn, constructMultiWordSearch } from "@/lib/utils"
+import { getStatusBadgeClass } from "@/lib/status-styles"
 import { SectionLoader } from "@/components/section-loader"
 import { Checkbox } from "@/components/ui/checkbox"
 import { notify } from "@/lib/notifications"
@@ -109,18 +110,6 @@ export default function QuotationsPage() {
     quotation_number: string
     company_name: string
   } | null>(null)
-
-  const statusStyles: Record<string, string> = {
-    Draft:
-      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
-    Sent: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
-    Accepted:
-      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
-    Rejected:
-      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-    Processed:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-  }
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -1883,8 +1872,8 @@ export default function QuotationsPage() {
                         <span>{q.quotation_number}</span>
                         <span
                           className={cn(
-                            "inline-flex items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                            statusStyles[q.status]
+                            "inline-flex items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                            getStatusBadgeClass(q.status)
                           )}
                         >
                           {q.status}
@@ -1936,8 +1925,8 @@ export default function QuotationsPage() {
                   <TableCell className="text-center align-middle max-md:hidden">
                     <div
                       className={cn(
-                        "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                        statusStyles[q.status]
+                        "inline-flex w-20 items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                        getStatusBadgeClass(q.status)
                       )}
                     >
                       {q.status}

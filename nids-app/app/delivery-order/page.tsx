@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { Fragment, useState, useEffect, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase"
@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { cn, constructMultiWordSearch, formatBulletList } from "@/lib/utils"
+import { getStatusBadgeClass } from "@/lib/status-styles"
 import { fuzzyScore } from "@/lib/fuzzy-match"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
@@ -95,6 +96,63 @@ type FieldFlag = "low" | "warning"
 
 // Sentinel value for the SO field's "Fill SO later" option (so_id stays empty)
 const FILL_SO_LATER_VALUE = "__fill_later__"
+
+// DO numbers are stored as {SEQ:3}/DO/ABS-{CUS}/{MM}/{YYYY}. The customer code
+// (CUS) varies in length, which makes the rows look ragged when left as plain
+// text. We split each number on "/" and lay the segments out in an
+// inline-grid with fixed column widths so every row lines up. Column widths
+// are derived from the loaded rows: numeric segments use their char count,
+// alphabetic segments get extra room since letter glyphs are wider than "0".
+const ALPHA_WIDTH_FACTOR = 1.08
+
+const buildDoGridColumns = (rows: { do_number?: string | null }[]) => {
+  const widths: number[] = []
+  for (const row of rows) {
+    String(row.do_number || "")
+      .split("/")
+      .forEach((part, i) => {
+        const w = /[A-Za-z]/.test(part)
+          ? part.length * ALPHA_WIDTH_FACTOR + 1
+          : part.length + 0.25
+        widths[i] = Math.max(widths[i] ?? 0, w)
+      })
+  }
+  return widths
+    .map((w, i) => `${i > 0 ? "1ch " : ""}${w.toFixed(2)}ch`)
+    .join(" ")
+}
+
+const DoNumber = ({
+  value,
+  columns,
+  className,
+}: {
+  value?: string | null
+  columns: string
+  className?: string
+}) => {
+  const parts = (value || "").split("/")
+  const useGrid = parts.length >= 2 && !!columns
+  return (
+    <span className={className}>
+      {useGrid ? (
+        <span
+          className="inline-grid items-center"
+          style={{ gridTemplateColumns: columns }}
+        >
+          {parts.map((part, i) => (
+            <Fragment key={i}>
+              {i > 0 && <span>/</span>}
+              <span>{part}</span>
+            </Fragment>
+          ))}
+        </span>
+      ) : (
+        value || "-"
+      )}
+    </span>
+  )
+}
 
 export default function DeliveryOrdersPage() {
   const { dict, lang } = useDictionary()
@@ -129,17 +187,6 @@ export default function DeliveryOrdersPage() {
 
   // Filter States
   const [pendingPOFilter, setPendingPOFilter] = useState(false)
-
-  const statusStyles: Record<string, string> = {
-    Draft:
-      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
-    Shipped:
-      "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
-    Delivered:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-    Cancelled:
-      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-  }
 
   // Tracking info for LiveSearch / Display
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
@@ -1297,6 +1344,9 @@ export default function DeliveryOrdersPage() {
     address: string
   }[]
 
+  // Fixed-width grid columns shared by every DO number cell on the page
+  const doGridColumns = buildDoGridColumns(orders)
+
   return (
     <div className="page-container">
       {/* Page Header */}
@@ -2417,8 +2467,8 @@ export default function DeliveryOrdersPage() {
                         </div>
                         <span
                           className={cn(
-                            "inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                            statusStyles[o.status] || statusStyles.Draft
+                            "inline-flex shrink-0 items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                            getStatusBadgeClass(o.status)
                           )}
                         >
                           {o.status}
@@ -2469,7 +2519,11 @@ export default function DeliveryOrdersPage() {
                       </div>
                     </div>
                     {/* Desktop */}
-                    <span className="hidden md:inline">{o.do_number}</span>
+                    <DoNumber
+                      value={o.do_number}
+                      columns={doGridColumns}
+                      className="hidden md:inline"
+                    />
                   </TableCell>
                   <TableCell className="max-md:hidden">
                     {o.company?.name || "-"}
@@ -2523,8 +2577,8 @@ export default function DeliveryOrdersPage() {
                   <TableCell className="text-center align-middle max-md:hidden">
                     <div
                       className={cn(
-                        "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                        statusStyles[o.status] || statusStyles.Draft
+                        "inline-flex w-20 items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                        getStatusBadgeClass(o.status)
                       )}
                     >
                       {o.status}
@@ -2568,21 +2622,21 @@ export default function DeliveryOrdersPage() {
                               <DropdownMenuSubContent>
                                 <DropdownMenuItem
                                   onClick={() => updateStatus(o.id, "Draft")}
-                                  className="font-medium text-zinc-600 dark:text-zinc-400"
+                                  className="font-medium text-status-neutral"
                                   disabled={!canEdit}
                                 >
                                   Draft
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => updateStatus(o.id, "Shipped")}
-                                  className="font-medium text-blue-600 dark:text-blue-400"
+                                  className="font-medium text-status-progress"
                                   disabled={!canEdit}
                                 >
                                   Shipped
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => handleOpenDeliveryConfirm(o)}
-                                  className="font-medium text-emerald-600 dark:text-emerald-400"
+                                  className="font-medium text-status-success"
                                   disabled={!canEdit}
                                 >
                                   Delivered
@@ -2591,7 +2645,7 @@ export default function DeliveryOrdersPage() {
                                   onClick={() =>
                                     updateStatus(o.id, "Cancelled")
                                   }
-                                  className="font-medium text-rose-600 dark:text-rose-400"
+                                  className="font-medium text-status-danger"
                                   disabled={!canEdit}
                                 >
                                   Cancelled

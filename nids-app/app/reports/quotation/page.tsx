@@ -23,7 +23,7 @@ import {
   Filter,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { StatusBadge } from "@/components/status-badge"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import {
@@ -40,14 +40,6 @@ export default function QuotationReportPage() {
   const { dict } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
-
-  const statusStyles: Record<string, string> = {
-    Processed: "bg-green-100 text-green-700",
-    Accepted: "bg-blue-100 text-blue-700",
-    Rejected: "bg-red-100 text-red-700",
-    Sent: "bg-amber-100 text-amber-700",
-    Draft: "bg-zinc-100 text-zinc-700",
-  }
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -290,14 +282,7 @@ export default function QuotationReportPage() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span
-                      className={cn(
-                        "rounded px-2 py-0.5 text-[10px] font-bold uppercase",
-                        statusStyles[q.status || "Draft"]
-                      )}
-                    >
-                      {q.status || "Draft"}
-                    </span>
+                    <StatusBadge status={q.status || "Draft"} />
                   </TableCell>
                 </TableRow>
               ))

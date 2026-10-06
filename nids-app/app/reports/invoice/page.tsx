@@ -24,7 +24,7 @@ import {
   DollarSign,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { StatusBadge } from "@/components/status-badge"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import {
@@ -41,14 +41,6 @@ export default function InvoiceReportPage() {
   const { dict } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
-
-  const statusStyles: Record<string, string> = {
-    Paid: "bg-green-100 text-green-700",
-    Partial: "bg-purple-100 text-purple-700",
-    Cancelled: "bg-red-100 text-red-700",
-    Sent: "bg-amber-100 text-amber-700",
-    Draft: "bg-zinc-100 text-zinc-700",
-  }
 
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -301,14 +293,7 @@ export default function InvoiceReportPage() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span
-                      className={cn(
-                        "rounded px-2 py-0.5 text-[10px] font-bold uppercase",
-                        statusStyles[i.status || "Draft"]
-                      )}
-                    >
-                      {i.status || "Draft"}
-                    </span>
+                    <StatusBadge status={i.status || "Draft"} />
                   </TableCell>
                 </TableRow>
               ))

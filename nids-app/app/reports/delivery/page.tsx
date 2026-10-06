@@ -23,7 +23,7 @@ import {
   Filter,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { StatusBadge } from "@/components/status-badge"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import {
@@ -39,13 +39,6 @@ export default function DeliveryReportPage() {
   const { dict } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
-
-  const statusStyles: Record<string, string> = {
-    Delivered: "bg-green-100 text-green-700",
-    Shipped: "bg-purple-100 text-purple-700",
-    Cancelled: "bg-red-100 text-red-700",
-    Draft: "bg-zinc-100 text-zinc-700",
-  }
 
   const [orders, setOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -352,14 +345,10 @@ export default function DeliveryReportPage() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span
-                      className={cn(
-                        "rounded px-2 py-0.5 text-[10px] font-bold uppercase",
-                        statusStyles[o.status || "Draft"]
-                      )}
-                    >
-                      {o.status || dict.LABEL_PENDING}
-                    </span>
+                    <StatusBadge
+                      status={o.status || "Draft"}
+                      label={o.status || dict.LABEL_PENDING}
+                    />
                   </TableCell>
                 </TableRow>
               ))

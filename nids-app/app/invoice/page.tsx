@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { cn, constructMultiWordSearch } from "@/lib/utils"
+import { getStatusBadgeClass } from "@/lib/status-styles"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { aiTranslate } from "@/lib/ai-translate"
@@ -201,115 +202,34 @@ export default function InvoicePage() {
     name: string
   } | null>(null)
 
-  const statusStyles: Record<string, string> = {
-    Draft:
-      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
-    Sent: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
-    Partial:
-      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
-    Paid: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-    Cancelled:
-      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-    Overdue:
-      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+  // Status colors come from the shared sRGB tokens (lib/status-styles.ts) so
+  // every Transaction page renders the same status the same way.
+  const statusAbbrev: Record<string, string> = {
+    Default: "D",
+    Draft: "D",
+    Sent: "S",
+    Shipped: "S",
+    Delivered: "✓",
+    Invoiced: "I",
+    Cancelled: "X",
+    Approved: "A",
+    Rejected: "R",
+    Partial: "P",
+    Fulfilled: "✓",
   }
 
-  // 1-char status badges for the DO/SO pickers — colors mirror the DO/SO pages
-  const statusBadge = (
-    status: string | undefined,
-    map: Record<string, { label: string; className: string }>
-  ) => {
-    const fallback = {
-      label: "?",
-      className:
-        "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
-    }
-    const s = (status && map[status]) || fallback
-    return (
-      <span
-        title={status || "-"}
-        className={`inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] leading-none font-bold ${s.className}`}
-      >
-        {s.label}
-      </span>
-    )
-  }
-  const doStatusBadge = (status: string | undefined) =>
-    statusBadge(status, {
-      Draft: {
-        label: "D",
-        className:
-          "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
-      },
-      Shipped: {
-        label: "S",
-        className:
-          "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
-      },
-      Delivered: {
-        label: "✓",
-        className:
-          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-      },
-      Invoiced: {
-        label: "I",
-        className:
-          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
-      },
-      Cancelled: {
-        label: "X",
-        className:
-          "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-      },
-    })
-  const soStatusBadge = (status: string | undefined) =>
-    statusBadge(status, {
-      Draft: {
-        label: "D",
-        className:
-          "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
-      },
-      Sent: {
-        label: "S",
-        className:
-          "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
-      },
-      Approved: {
-        label: "A",
-        className:
-          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
-      },
-      Rejected: {
-        label: "R",
-        className:
-          "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-      },
-      Partial: {
-        label: "P",
-        className:
-          "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
-      },
-      Fulfilled: {
-        label: "✓",
-        className:
-          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-      },
-    })
-
-  // Full-text DO status colors — mirrors app/delivery-order/page.tsx so the
-  // invoice summary badges use the same theme as the Delivery Order page.
-  const doStatusStyles: Record<string, string> = {
-    Draft:
-      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
-    Shipped:
-      "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
-    Delivered:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-    Invoiced:
-      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
-    Cancelled:
-      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-  }
+  // 1-char status badges for the DO/SO pickers
+  const statusBadge = (status: string | undefined) => (
+    <span
+      title={status || "-"}
+      className={cn(
+        "inline-flex size-4 shrink-0 items-center justify-center rounded-full border text-[9px] leading-none font-bold",
+        getStatusBadgeClass(status)
+      )}
+    >
+      {status ? (statusAbbrev[status] ?? "?") : "?"}
+    </span>
+  )
 
   // Form State
   const [formData, setFormData] = usePersistedState("invoice_form_data_v3", {
@@ -1664,7 +1584,7 @@ export default function InvoicePage() {
                                 key: "status",
                                 header: "",
                                 className: "w-8 shrink-0",
-                                render: (d) => doStatusBadge(d.status),
+                                render: (d) => statusBadge(d.status),
                               },
                               {
                                 key: "do_number",
@@ -1810,7 +1730,7 @@ export default function InvoicePage() {
                                 key: "status",
                                 header: "",
                                 className: "w-8 shrink-0",
-                                render: (s) => soStatusBadge(s.status),
+                                render: (s) => statusBadge(s.status),
                               },
                               {
                                 key: "so_number",
@@ -2028,8 +1948,7 @@ export default function InvoicePage() {
                                           <span
                                             className={cn(
                                               "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:px-2",
-                                              doStatusStyles[d.status] ||
-                                                doStatusStyles.Draft
+                                              getStatusBadgeClass(d.status)
                                             )}
                                           >
                                             {d.status}
@@ -2114,8 +2033,7 @@ export default function InvoicePage() {
                                               <span
                                                 className={cn(
                                                   "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:px-2",
-                                                  doStatusStyles[d.status] ||
-                                                    doStatusStyles.Draft
+                                                  getStatusBadgeClass(d.status)
                                                 )}
                                               >
                                                 {d.status}
@@ -2533,8 +2451,8 @@ export default function InvoicePage() {
                           <span className="text-sm">{i.invoice_number}</span>
                           <span
                             className={cn(
-                              "inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                              statusStyles[displayStatus] || statusStyles.Draft
+                              "inline-flex shrink-0 items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                              getStatusBadgeClass(displayStatus)
                             )}
                           >
                             {displayStatus}
@@ -2612,8 +2530,8 @@ export default function InvoicePage() {
                     <TableCell className="text-center align-middle max-md:hidden">
                       <span
                         className={cn(
-                          "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                          statusStyles[displayStatus] || statusStyles.Draft
+                          "inline-flex w-20 items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                          getStatusBadgeClass(displayStatus)
                         )}
                       >
                         {displayStatus}

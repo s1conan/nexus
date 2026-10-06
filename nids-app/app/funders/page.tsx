@@ -604,6 +604,9 @@ export default function FundersPage() {
           <TableHeader>
             <TableRow>
               <TableHead className="px-7">{dict.LABEL_NAME}</TableHead>
+              <TableHead className="max-md:hidden">
+                {dict.LABEL_PHONE}
+              </TableHead>
               <TableHead>{dict.LABEL_ID_NUMBER}</TableHead>
               <TableHead>{dict.LABEL_BANK_ACCOUNTS}</TableHead>
               <TableHead className="text-right"> </TableHead>
@@ -612,7 +615,7 @@ export default function FundersPage() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={4} className="p-0">
+                <TableCell colSpan={5} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
@@ -620,7 +623,7 @@ export default function FundersPage() {
               <>
                 {funders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center">
+                    <TableCell colSpan={5} className="py-8 text-center">
                       {dict.NO_DATA}
                     </TableCell>
                   </TableRow>
@@ -644,7 +647,7 @@ export default function FundersPage() {
                         }}
                       >
                         <TableCell className="font-medium">
-                          <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center justify-between gap-3 md:hidden">
                             <div className="flex min-w-0 items-center gap-3">
                               <div
                                 className={cn(
@@ -660,6 +663,20 @@ export default function FundersPage() {
                               {funder.phone || "-"}
                             </span>
                           </div>
+                          <div className="hidden items-center gap-3 md:flex">
+                            <div
+                              className={cn(
+                                "size-2 shrink-0 rounded-full",
+                                funder.is_active
+                                  ? "bg-green-500"
+                                  : "bg-muted-foreground/30"
+                              )}
+                            />
+                            <div className="truncate">{funder.name}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-md:hidden">
+                          <span className="text-sm">{funder.phone || "-"}</span>
                         </TableCell>
                         <TableCell className="max-md:hidden">
                           <span className="font-mono text-sm">
@@ -718,7 +735,7 @@ export default function FundersPage() {
 
             {/* Sentinel - ALWAYS mounted so observer doesn't lose it */}
             <TableRow ref={sentinelRef} className="border-0">
-              <TableCell colSpan={4} className="overflow-hidden border-0 p-0">
+              <TableCell colSpan={5} className="overflow-hidden border-0 p-0">
                 {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />

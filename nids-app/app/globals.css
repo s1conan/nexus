@@ -52,6 +52,41 @@
   --info: oklch(0.707 0.165 254.624);
   --info-foreground: oklch(0.4 0.12 254.624);
 
+  /*
+   * Status badge tokens — plain sRGB (hex/rgb), no OKLCH / no color-mix, so
+   * border, text and fill render identically on every monitor. Fill and border
+   * are translucent and therefore shared between light and dark; only the text
+   * color is overridden in `.dark`. Used via `lib/status-styles.ts`.
+   */
+  --status-neutral: #52525b;
+  --status-neutral-fill: rgb(113 113 122 / 0.1);
+  --status-neutral-border: rgb(113 113 122 / 0.2);
+  --status-pending: #b45309;
+  --status-pending-fill: rgb(217 119 6 / 0.1);
+  --status-pending-border: rgb(217 119 6 / 0.2);
+  --status-info: #1d4ed8;
+  --status-info-fill: rgb(37 99 235 / 0.1);
+  --status-info-border: rgb(37 99 235 / 0.2);
+  --status-progress: #6d28d9;
+  --status-progress-fill: rgb(124 58 237 / 0.1);
+  --status-progress-border: rgb(124 58 237 / 0.2);
+  --status-success: #047857;
+  --status-success-fill: rgb(5 150 105 / 0.1);
+  --status-success-border: rgb(5 150 105 / 0.2);
+  --status-danger: #b91c1c;
+  --status-danger-fill: rgb(220 38 38 / 0.1);
+  --status-danger-border: rgb(220 38 38 / 0.2);
+  --status-overdue: #be123c;
+  --status-overdue-fill: rgb(225 29 72 / 0.1);
+  --status-overdue-border: rgb(225 29 72 / 0.2);
+
+  /* Dashboard module accent colors */
+  --dash-quotation: #7c3aed;
+  --dash-sales-order: #2563eb;
+  --dash-delivery-order: #d97706;
+  --dash-invoice: #e11d48;
+  --dash-payments: #059669;
+
   --radius: 0.45rem;
   --shadow-2xs: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
   --shadow-xs:
@@ -124,6 +159,21 @@
   --warning-foreground: #1a1000;
   --info: #4d9fc4;
   --info-foreground: #ffffff;
+
+  --status-neutral: #a1a1aa;
+  --status-pending: #fbbf24;
+  --status-info: #60a5fa;
+  --status-progress: #a78bfa;
+  --status-success: #34d399;
+  --status-danger: #f87171;
+  --status-overdue: #fb7185;
+
+  /* Dashboard module accent colors (lighter for dark mode) */
+  --dash-quotation: #a78bfa;
+  --dash-sales-order: #60a5fa;
+  --dash-delivery-order: #fbbf24;
+  --dash-invoice: #fb7185;
+  --dash-payments: #34d399;
 }
 
 /* Small UI tweaks to match the sample dashboard */
@@ -189,6 +239,28 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-fill: var(--status-neutral-fill);
+  --color-status-neutral-border: var(--status-neutral-border);
+  --color-status-pending: var(--status-pending);
+  --color-status-pending-fill: var(--status-pending-fill);
+  --color-status-pending-border: var(--status-pending-border);
+  --color-status-info: var(--status-info);
+  --color-status-info-fill: var(--status-info-fill);
+  --color-status-info-border: var(--status-info-border);
+  --color-status-progress: var(--status-progress);
+  --color-status-progress-fill: var(--status-progress-fill);
+  --color-status-progress-border: var(--status-progress-border);
+  --color-status-success: var(--status-success);
+  --color-status-success-fill: var(--status-success-fill);
+  --color-status-success-border: var(--status-success-border);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-fill: var(--status-danger-fill);
+  --color-status-danger-border: var(--status-danger-border);
+  --color-status-overdue: var(--status-overdue);
+  --color-status-overdue-fill: var(--status-overdue-fill);
+  --color-status-overdue-border: var(--status-overdue-border);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);

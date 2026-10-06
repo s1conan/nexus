@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { cn, constructMultiWordSearch } from "@/lib/utils"
+import { getStatusBadgeClass } from "@/lib/status-styles"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { aiTranslate } from "@/lib/ai-translate"
@@ -167,15 +168,6 @@ export default function PaymentsPage() {
     null
   )
   const [viewOnly, setViewOnly] = useState(false)
-
-  const statusStyles: Record<string, string> = {
-    Pending:
-      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
-    Verified:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-    Rejected:
-      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-  }
 
   const sortColumns = [
     { label: dict.LABEL_CREATED_AT || "Created Date", value: "created_at" },
@@ -688,9 +680,7 @@ export default function PaymentsPage() {
             disabled={isLoading || isLoadingMore}
             title="Refresh Data"
           >
-            <RefreshCw
-              className={cn("size-4", isFetching && "animate-spin")}
-            />
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
           </Button>
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
@@ -924,7 +914,7 @@ export default function PaymentsPage() {
                       <span
                         className={cn(
                           "rounded border px-2 py-0.5 text-[10px] font-bold uppercase",
-                          statusStyles[formData.status] || statusStyles.Pending
+                          getStatusBadgeClass(formData.status)
                         )}
                       >
                         {formData.status}
@@ -955,7 +945,7 @@ export default function PaymentsPage() {
       </div>
 
       <div className="action-bar shrink-0">
-        <div className="relative min-w-0 w-full flex-1">
+        <div className="relative w-full min-w-0 flex-1">
           <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
           <Input
             placeholder={dict.PLACEHOLDER_SEARCH}
@@ -985,7 +975,9 @@ export default function PaymentsPage() {
               <TableHead>
                 {dict.MENU_INVOICE} & {dict.LABEL_TYPE_CUSTOMER}
               </TableHead>
-              <TableHead>{dict.VERIFY_LABEL_DATE || "Date"}</TableHead>
+              <TableHead className="text-center">
+                {dict.VERIFY_LABEL_DATE || "Date"}
+              </TableHead>
               <TableHead className="text-right">{dict.LABEL_AMOUNT}</TableHead>
               <TableHead className="text-center">{dict.LABEL_STATUS}</TableHead>
               <TableHead className="text-right"> </TableHead>
@@ -1027,8 +1019,8 @@ export default function PaymentsPage() {
                         <span className="font-medium">{p.payment_number}</span>
                         <span
                           className={cn(
-                            "inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                            statusStyles[p.status]
+                            "inline-flex shrink-0 items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                            getStatusBadgeClass(p.status)
                           )}
                         >
                           {p.status}
@@ -1053,9 +1045,7 @@ export default function PaymentsPage() {
                       </div>
                     </div>
                     {/* Desktop */}
-                    <span className="hidden md:inline">
-                      {p.payment_number}
-                    </span>
+                    <span className="hidden md:inline">{p.payment_number}</span>
                   </TableCell>
                   <TableCell className="max-md:hidden">
                     <div className="text-sm font-medium">
@@ -1065,18 +1055,18 @@ export default function PaymentsPage() {
                       {p.invoice?.company?.name}
                     </div>
                   </TableCell>
-                  <TableCell className="max-md:hidden text-center text-sm">
+                  <TableCell className="text-center text-sm max-md:hidden">
                     {format(new Date(p.payment_date), "dd MMM yyyy")}
                   </TableCell>
-                  <TableCell className="max-md:hidden text-right font-bold text-green-700">
+                  <TableCell className="text-right font-mono font-bold text-green-700 max-md:hidden">
                     {SITE_CONFIG.currencySymbol}{" "}
                     {Number(p.amount).toLocaleString()}
                   </TableCell>
-                  <TableCell className="max-md:hidden text-center align-middle">
+                  <TableCell className="text-center align-middle max-md:hidden">
                     <div
                       className={cn(
-                        "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                        statusStyles[p.status]
+                        "inline-flex w-20 items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                        getStatusBadgeClass(p.status)
                       )}
                     >
                       {p.status}

@@ -429,14 +429,20 @@ export default function ProductsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="px-7">{dict.LABEL_NAME}</TableHead>
+              <TableHead className="px-7">{dict.LABEL_SKU}</TableHead>
+              <TableHead className="max-md:hidden">
+                {dict.LABEL_NAME}
+              </TableHead>
+              <TableHead className="text-right max-md:hidden">
+                {dict.LABEL_BASE_PRICE}
+              </TableHead>
               <TableHead className="text-right"> </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={2} className="p-0">
+                <TableCell colSpan={4} className="p-0">
                   <SectionLoader />
                 </TableCell>
               </TableRow>
@@ -444,7 +450,7 @@ export default function ProductsPage() {
               <>
                 {products.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={2} className="py-8 text-center">
+                    <TableCell colSpan={4} className="py-8 text-center">
                       {dict.NO_DATA}
                     </TableCell>
                   </TableRow>
@@ -462,7 +468,7 @@ export default function ProductsPage() {
                       }}
                     >
                       <TableCell className="font-medium">
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center justify-between gap-3 md:hidden">
                           <div className="flex min-w-0 items-center gap-3">
                             <div
                               className={cn(
@@ -481,6 +487,26 @@ export default function ProductsPage() {
                             )}
                           </span>
                         </div>
+                        <div className="hidden items-center gap-3 md:flex">
+                          <div
+                            className={cn(
+                              "size-2 shrink-0 rounded-full",
+                              product.is_active
+                                ? "bg-green-500"
+                                : "bg-muted-foreground/30"
+                            )}
+                          />
+                          <span className="font-mono">{product.sku}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-md:hidden">
+                        {product.name}
+                      </TableCell>
+                      <TableCell className="max-md:hidden text-right font-mono">
+                        {formatCurrency(
+                          product.base_price,
+                          lang === "id" ? "id-ID" : "en-US"
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -512,7 +538,7 @@ export default function ProductsPage() {
 
             {/* Infinite Scroll Sentinel & Loader */}
             <TableRow ref={sentinelRef} className="border-0">
-              <TableCell colSpan={2} className="overflow-hidden border-0 p-0">
+              <TableCell colSpan={4} className="overflow-hidden border-0 p-0">
                 {isLoadingMore && (
                   <div className="relative h-24 w-full">
                     <SectionLoader />

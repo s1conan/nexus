@@ -390,6 +390,14 @@ export const SITE_CONTENT = {
     LABEL_PENDING_DO: "Pending PO",
     LABEL_ACTIVE_COMPANIES: "Active",
 
+    // Dashboard card sub-captions
+    LABEL_DASH_NEW: "New",
+    LABEL_DASH_WILL_EXPIRE: "Will Expire",
+    LABEL_DASH_PENDING: "Pending",
+    LABEL_DASH_UNDELIVERED: "Undelivered",
+    LABEL_DASH_OVERDUE: "Overdue",
+    LABEL_DASH_DUE_SOON: "Due Soon",
+
     // Labels
     LABEL_NAME: "Name",
     LABEL_COMPANY_NAME: "Company Name",
@@ -1018,6 +1026,14 @@ export const SITE_CONTENT = {
     LABEL_PENDING_PAYMENTS: "Pembayaran Tertunda",
     LABEL_PENDING_DO: "PO Tertunda",
     LABEL_ACTIVE_COMPANIES: "Aktif",
+
+    // Dashboard card sub-captions
+    LABEL_DASH_NEW: "Baru",
+    LABEL_DASH_WILL_EXPIRE: "Akan Expired",
+    LABEL_DASH_PENDING: "Tertunda",
+    LABEL_DASH_UNDELIVERED: "Belum Terkirim",
+    LABEL_DASH_OVERDUE: "Jatuh Tempo",
+    LABEL_DASH_DUE_SOON: "Segera Jatuh Tempo",
 
     // Labels
     LABEL_NAME: "Nama",

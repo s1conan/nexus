@@ -57,6 +57,7 @@ import {
   cn,
   constructMultiWordSearch,
 } from "@/lib/utils"
+import { getStatusBadgeClass } from "@/lib/status-styles"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import { RichTextEditor } from "@/components/rich-text-editor"
@@ -89,15 +90,6 @@ export default function DepositsPage() {
 
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
   const [selectedProductInfo, setSelectedProductInfo] = useState<any>(null)
-
-  const statusStyles: Record<string, string> = {
-    Pending:
-      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
-    Accepted:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-    Rejected:
-      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-  }
 
   // Form State
   const [formData, setFormData] = useState(() => ({
@@ -935,8 +927,10 @@ export default function DepositsPage() {
               <TableHead className="text-center">
                 {dict.LABEL_DEPOSIT_DATE}
               </TableHead>
-              <TableHead>Qty (L)</TableHead>
-              <TableHead>{dict.LABEL_TOTAL_PRICE}</TableHead>
+              <TableHead className="text-right">Qty (L)</TableHead>
+              <TableHead className="text-right">
+                {dict.LABEL_TOTAL_PRICE}
+              </TableHead>
               <TableHead className="text-center">{dict.LABEL_STATUS}</TableHead>
               <TableHead className="text-right"> </TableHead>
             </TableRow>
@@ -977,8 +971,8 @@ export default function DepositsPage() {
                         <span>{d.deposit_number}</span>
                         <span
                           className={cn(
-                            "inline-flex items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                            statusStyles[d.status] || statusStyles.Pending
+                            "inline-flex items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                            getStatusBadgeClass(d.status)
                           )}
                         >
                           {d.status}
@@ -1041,8 +1035,8 @@ export default function DepositsPage() {
                   <TableCell className="text-center align-middle max-md:hidden">
                     <div
                       className={cn(
-                        "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                        statusStyles[d.status] || statusStyles.Pending
+                        "inline-flex w-20 items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                        getStatusBadgeClass(d.status)
                       )}
                     >
                       {d.status}

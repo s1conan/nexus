@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { cn, constructMultiWordSearch, formatBulletList } from "@/lib/utils"
+import { getStatusBadgeClass } from "@/lib/status-styles"
 import { SectionLoader } from "@/components/section-loader"
 import { DeleteConfirmationDialog } from "@/components/confirmation-dialog"
 import { FundersDialog } from "@/components/funders-dialog"
@@ -162,35 +163,6 @@ export default function SalesOrdersPage() {
     if (flag === "warning") return "border-red-500/60 bg-red-500/5"
     if (flag === "low") return "border-amber-500/60 bg-amber-500/5"
     return ""
-  }
-
-  const statusStyles: Record<string, string> = {
-    Default:
-      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
-    Draft:
-      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
-    Sent: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
-    Approved:
-      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
-    Rejected:
-      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-    Partial:
-      "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
-    Fulfilled:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
-  }
-
-  // Quotation status colors — mirrors app/quotations/page.tsx
-  const quotationStatusStyles: Record<string, string> = {
-    Draft:
-      "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20",
-    Sent: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
-    Accepted:
-      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
-    Rejected:
-      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
-    Processed:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
   }
 
   // Calculation logic
@@ -1287,8 +1259,8 @@ export default function SalesOrdersPage() {
                                   render: (quote) => (
                                     <span
                                       className={cn(
-                                        "inline-flex w-16 items-center justify-center rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase",
-                                        quotationStatusStyles[quote.status]
+                                        "inline-flex w-16 items-center justify-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase",
+                                        getStatusBadgeClass(quote.status)
                                       )}
                                     >
                                       {quote.status}
@@ -1967,8 +1939,8 @@ export default function SalesOrdersPage() {
                         <span>{o.so_number}</span>
                         <span
                           className={cn(
-                            "inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                            statusStyles[o.status] || statusStyles.Default
+                            "inline-flex shrink-0 items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                            getStatusBadgeClass(o.status)
                           )}
                         >
                           {o.status}
@@ -2045,8 +2017,8 @@ export default function SalesOrdersPage() {
                   <TableCell className="text-center align-middle max-md:hidden">
                     <div
                       className={cn(
-                        "inline-flex w-20 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                        statusStyles[o.status] || statusStyles.Default
+                        "inline-flex w-20 items-center justify-center rounded-full border px-2 py-1 text-[10px] font-bold uppercase",
+                        getStatusBadgeClass(o.status)
                       )}
                     >
                       {o.status}

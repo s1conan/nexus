@@ -24,7 +24,7 @@ import {
   DollarSign,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { StatusBadge } from "@/components/status-badge"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
 import {
@@ -41,12 +41,6 @@ export default function PaymentsReportPage() {
   const { dict } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
   const supabase = createClient()
-
-  const statusStyles: Record<string, string> = {
-    Verified: "bg-green-100 text-green-700",
-    Rejected: "bg-red-100 text-red-700",
-    Pending: "bg-amber-100 text-amber-700",
-  }
 
   const [payments, setPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -287,14 +281,7 @@ export default function PaymentsReportPage() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span
-                      className={cn(
-                        "rounded px-2 py-0.5 text-[10px] font-bold uppercase",
-                        statusStyles[p.status || "Pending"]
-                      )}
-                    >
-                      {p.status || "Pending"}
-                    </span>
+                    <StatusBadge status={p.status || "Pending"} />
                   </TableCell>
                 </TableRow>
               ))
