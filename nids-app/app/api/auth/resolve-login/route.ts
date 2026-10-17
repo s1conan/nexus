@@ -3,11 +3,10 @@ import { supabaseAdmin } from "@/lib/supabase-admin"
 
 export const dynamic = "force-dynamic"
 
-// Lightweight per-instance rate limiting. A shared store is required for full
-// protection across serverless instances (tracked separately).
-const WINDOW_MS = 60_000
-const MAX_REQUESTS = 20
-const requestLog = new Map<string, number[]>()
+// Shared-store rate limit. Uses a Postgres function so the counter is global
+// across serverless instances (see issue #7).
+const RATE_LIMIT_WINDOW_SECONDS = 60
+const RATE_LIMIT_MAX = 20
 
 function getClientIp(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for")
@@ -15,20 +14,20 @@ function getClientIp(request: Request): string {
   return request.headers.get("x-real-ip") || "unknown"
 }
 
-function isRateLimited(key: string): boolean {
-  const now = Date.now()
-  const recent = (requestLog.get(key) || []).filter((t) => now - t < WINDOW_MS)
-  recent.push(now)
-  requestLog.set(key, recent)
+async function isRateLimited(key: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin.rpc("check_rate_limit", {
+    p_key: key,
+    p_limit: RATE_LIMIT_MAX,
+    p_window_seconds: RATE_LIMIT_WINDOW_SECONDS,
+  })
 
-  // Opportunistic cleanup so the map cannot grow unbounded.
-  if (requestLog.size > 5000) {
-    for (const [k, timestamps] of requestLog) {
-      if (timestamps.every((t) => now - t >= WINDOW_MS)) requestLog.delete(k)
-    }
+  if (error) {
+    // Fail open: never block sign-in because the limiter is unavailable.
+    console.error("resolve-login: rate limit check failed", error)
+    return false
   }
 
-  return recent.length > MAX_REQUESTS
+  return data === false
 }
 
 interface ResolveLoginBody {
@@ -43,7 +42,7 @@ interface LoginRecord {
 
 export async function POST(request: Request) {
   try {
-    if (isRateLimited(`resolve-login:${getClientIp(request)}`)) {
+    if (await isRateLimited(`resolve-login:${getClientIp(request)}`)) {
       return NextResponse.json({ error: "rate_limited" }, { status: 429 })
     }
 
