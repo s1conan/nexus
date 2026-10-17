@@ -117,47 +117,35 @@ export default function LoginPage() {
     }, 15000)
 
     try {
-      // 1. Find profile by username OR email
-      const lookup = () =>
-        supabase
-          .from("profiles")
-          .select("id, email, is_active, preferred_language")
-          .or(`username.eq.${input},email.eq.${input}`)
-          .maybeSingle()
+      // 1. Resolve the identifier (username or email) to an email on the
+      // server. This must not query `profiles` from the browser: doing so
+      // required a public (anon) read policy that exposed the whole table.
+      const lookupResponse = await fetch("/api/auth/resolve-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: input }),
+      })
 
-      let { data: profileRecord, error: lookupError } = await lookup()
+      const lookupResult = await lookupResponse.json().catch(() => null)
 
-      // supabase-js attaches the stored (possibly expired) session JWT to
-      // every request. After sleep/hibernate that token is dead and PostgREST
-      // rejects the lookup with 401 — even though we are not logged in yet.
-      // Clear the stale session and retry the lookup unauthenticated.
-      if (
-        lookupError &&
-        (lookupError.code === "401" ||
-          lookupError.code === "PGRST301" ||
-          /jwt expired|invalid api key/i.test(lookupError.message ?? ""))
-      ) {
-        console.warn(
-          "Login: Stale session token detected, clearing and retrying lookup"
-        )
-        await supabase.auth.signOut()
-        const retry = await lookup()
-        profileRecord = retry.data
-        lookupError = retry.error
-      }
-
-      if (lookupError) {
-        console.error("Login: Database lookup error", lookupError)
+      if (!lookupResponse.ok || !lookupResult) {
+        console.error("Login: Account lookup failed", lookupResponse.status)
         setLoginError(dict.ERROR_VERIFY_STATUS || "Database error.")
         clearTimeout(timeoutId)
         return
       }
 
-      if (!profileRecord) {
+      if (!lookupResult.found) {
         console.warn("Login: No profile found for", input)
         setLoginError(dict.LOGIN_ERROR_INVALID || "Invalid credentials.")
         clearTimeout(timeoutId)
         return
+      }
+
+      const profileRecord = lookupResult as {
+        email: string
+        is_active: boolean
+        preferred_language: string | null
       }
 
       const emailToUse = profileRecord.email
