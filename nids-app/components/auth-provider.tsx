@@ -11,6 +11,7 @@ import {
   useMemo,
 } from "react"
 import { createClient } from "@/lib/supabase"
+import { PROFILE_COLUMNS } from "@/lib/profile-columns"
 import { useDictionary } from "./dictionary-provider"
 import { notify } from "@/lib/notifications"
 import { useSessionExpiry, LAST_ACTIVE_KEY } from "@/hooks/use-session-expiry"
@@ -120,7 +121,7 @@ export function AuthProvider({
       try {
         const fetchPromise = supabase
           .from("profiles")
-          .select(`*, role_permissions ( permissions )`)
+          .select(`${PROFILE_COLUMNS}, role_permissions ( permissions )`)
           .eq("auth_id", userId)
           .maybeSingle()
 

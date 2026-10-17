@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, startTransition } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { useDictionary } from "@/components/dictionary-provider"
 import { createClient } from "@/lib/supabase"
+import { PROFILE_COLUMNS } from "@/lib/profile-columns"
 import {
   Table,
   TableBody,
@@ -124,14 +125,14 @@ export default function UsersPage() {
         { count: activeCount },
         { count: pendingCount },
       ] = await Promise.all([
-        supabase.from("profiles").select("*", { count: "exact", head: true }),
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
         supabase
           .from("profiles")
-          .select("*", { count: "exact", head: true })
+          .select("id", { count: "exact", head: true })
           .eq("is_active", true),
         supabase
           .from("profiles")
-          .select("*", { count: "exact", head: true })
+          .select("id", { count: "exact", head: true })
           .is("last_login", null)
           .eq("is_active", false),
       ])
@@ -153,7 +154,7 @@ export default function UsersPage() {
       const [userRes, roleRes] = await Promise.all([
         supabase
           .from("profiles")
-          .select("*")
+          .select(PROFILE_COLUMNS)
           .order("created_at", { ascending: false }),
         supabase.from("role_permissions").select("role"),
       ])
@@ -378,7 +379,7 @@ export default function UsersPage() {
         .from("profiles")
         .update(updateData)
         .eq("id", editingUser.id)
-        .select()
+        .select("id")
 
       if (error) {
         console.error("Users: [DEBUG] Update error:", error)

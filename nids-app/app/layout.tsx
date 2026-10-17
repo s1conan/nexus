@@ -14,6 +14,7 @@ import { AuthProvider } from "@/components/auth-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { PwaRegister } from "@/components/pwa-register"
 import { createServerSideClient } from "@/lib/supabase-server"
+import { PROFILE_COLUMNS } from "@/lib/profile-columns"
 import { Language, SITE_CONFIG } from "@/lib/site-content"
 
 export const metadata = {
@@ -76,7 +77,7 @@ export default async function RootLayout({
         .from("profiles")
         .select(
           `
-          *,
+          ${PROFILE_COLUMNS},
           role_permissions (
             permissions
           )
