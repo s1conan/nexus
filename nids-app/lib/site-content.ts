@@ -528,6 +528,8 @@ export const SITE_CONTENT = {
     ERROR_TIMEOUT:
       "Request timed out. Please check your connection and try again.",
     ERROR_VERIFY_STATUS: "Unable to verify account status.",
+    ERROR_WEAK_PASSWORD:
+      "Please choose a stronger password that hasn't appeared in a data breach.",
     ERROR_NICKNAME_EXISTS:
       'The nickname "%nickname%" is already used by company "%company%". Please use a different nickname.',
 
@@ -1163,6 +1165,8 @@ export const SITE_CONTENT = {
     ERROR_TIMEOUT:
       "Request timeout. Silakan periksa koneksi Anda dan coba lagi.",
     ERROR_VERIFY_STATUS: "Tidak dapat memverifikasi status akun.",
+    ERROR_WEAK_PASSWORD:
+      "Silakan pilih kata sandi yang lebih kuat yang belum pernah bocor dalam kebocoran data.",
     ERROR_NICKNAME_EXISTS:
       'Nama panggilan "%nickname%" sudah digunakan oleh perusahaan "%company%". Silakan gunakan nama panggilan yang berbeda.',
 

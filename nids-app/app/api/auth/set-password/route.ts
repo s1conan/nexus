@@ -45,6 +45,16 @@ export async function POST(request: Request) {
 
     if (authError) {
       console.error("Set Password Admin Error:", authError.message)
+      // Supabase rejects passwords found in known breaches when leaked-password
+      // protection is enabled. Surface a stable code so the UI can localize it.
+      const message = authError.message?.toLowerCase() ?? ""
+      const code = (authError as { code?: string }).code
+      if (
+        code === "weak_password" ||
+        /known to be|weak|pwned|breach|leaked/i.test(message)
+      ) {
+        return NextResponse.json({ error: "weak_password" }, { status: 422 })
+      }
       return NextResponse.json({ error: authError.message }, { status: 500 })
     }
 

@@ -114,7 +114,12 @@ function SetupPasswordForm() {
       const result = await response.json()
 
       if (result.error) {
-        setFormError(result.error)
+        setFormError(
+          result.error === "weak_password"
+            ? dict.ERROR_WEAK_PASSWORD ||
+                "Please choose a stronger password that hasn't appeared in a data breach."
+            : result.error
+        )
       } else {
         setSuccess(true)
         // No need for signOut as the user was never signed in during this process
