@@ -215,7 +215,8 @@ export const SITE_CONTENT = {
     IMPORT_DOC_FAILED_TITLE: "AI Extraction Failed",
     IMPORT_DOC_FAILED_DESC: "Could not extract data from the document(s).",
     IMPORT_DOC_INVALID_TYPE_TITLE: "Unsupported File",
-    IMPORT_DOC_INVALID_TYPE_DESC: "Only PDF, PNG, JPEG, or WebP files are allowed.",
+    IMPORT_DOC_INVALID_TYPE_DESC:
+      "Only PDF, PNG, JPEG, or WebP files are allowed.",
     IMPORT_DOC_TOO_LARGE_TITLE: "File Too Large",
     IMPORT_DOC_TOO_LARGE_DESC: "Maximum file size is 10 MB.",
 
@@ -577,7 +578,7 @@ export const SITE_CONTENT = {
     SETTINGS_SEC_COMPANY: "Enterprise Identity Specifications",
     SETTINGS_LABEL_NPWP: "NPWP (Tax Number)",
     SETTINGS_LABEL_LOGO_URL: "Brand Logo URL",
-    SETTINGS_LABEL_HEADER_URL: "PDF Header Image URL",
+    SETTINGS_LABEL_HEADER_URL: "Header Image URL",
     SETTINGS_LABEL_NPWP_ADDRESS: "NPWP Address",
     SETTINGS_LABEL_SHIPPING_ADDRESS: "Operational / Shipping Office Address",
     SETTINGS_PLACEHOLDER_NPWP_ADDRESS:
@@ -830,7 +831,8 @@ export const SITE_CONTENT = {
       "Upload dokumen Purchase Order (PDF atau gambar). AI akan membacanya dan mengisi form SO baru untuk Anda.",
     IMPORT_DOC_DROP_HINT: "Tarik & lepas file di sini, atau",
     IMPORT_DOC_SELECT_FILES: "Pilih File",
-    IMPORT_DOC_LIMITS: "PDF, PNG, JPEG, atau WebP. Maks 4 file, 10 MB per file.",
+    IMPORT_DOC_LIMITS:
+      "PDF, PNG, JPEG, atau WebP. Maks 4 file, 10 MB per file.",
     IMPORT_DOC_ANALYZE: "Analisis",
     IMPORT_DOC_ANALYZING: "Menganalisis...",
     IMPORT_DOC_USE_DATA: "Gunakan Data Ini",
@@ -850,7 +852,8 @@ export const SITE_CONTENT = {
     IMPORT_DOC_FAILED_TITLE: "Extract AI Gagal",
     IMPORT_DOC_FAILED_DESC: "Tidak dapat extract data dari dokumen.",
     IMPORT_DOC_INVALID_TYPE_TITLE: "File Tidak Didukung",
-    IMPORT_DOC_INVALID_TYPE_DESC: "Hanya file PDF, PNG, JPEG, atau WebP yang diizinkan.",
+    IMPORT_DOC_INVALID_TYPE_DESC:
+      "Hanya file PDF, PNG, JPEG, atau WebP yang diizinkan.",
     IMPORT_DOC_TOO_LARGE_TITLE: "File Terlalu Besar",
     IMPORT_DOC_TOO_LARGE_DESC: "Ukuran file maksimal 10 MB.",
 
@@ -972,8 +975,7 @@ export const SITE_CONTENT = {
     MSG_SELECT_AT_LEAST_ONE_DO: "Pilih minimal satu DO.",
     MSG_SELECT_SO: "Pilih Sales Order.",
     MSG_DO_SAME_SO_REQUIRED: "Semua DO harus memiliki SO yang sama.",
-    MSG_DO_SAME_COMPANY_REQUIRED:
-      "Semua DO harus milik perusahaan yang sama.",
+    MSG_DO_SAME_COMPANY_REQUIRED: "Semua DO harus milik perusahaan yang sama.",
     MSG_INCOMPLETE_DELIVERY:
       "Pengiriman belum lengkap: %delivered% dari %total% L terkirim.",
     PLACEHOLDER_SELECT_SO_INVOICE: "Cari nomor SO...",
@@ -1214,7 +1216,7 @@ export const SITE_CONTENT = {
     SETTINGS_SEC_COMPANY: "Spesifikasi Identitas Perusahaan",
     SETTINGS_LABEL_NPWP: "NPWP (Nomor Pajak)",
     SETTINGS_LABEL_LOGO_URL: "URL Logo Brand",
-    SETTINGS_LABEL_HEADER_URL: "URL Gambar Header PDF",
+    SETTINGS_LABEL_HEADER_URL: "URL Logo Kop Surat",
     SETTINGS_LABEL_NPWP_ADDRESS: "Alamat NPWP",
     SETTINGS_LABEL_SHIPPING_ADDRESS: "Alamat Kantor Operasional / Pengiriman",
     SETTINGS_PLACEHOLDER_NPWP_ADDRESS:
