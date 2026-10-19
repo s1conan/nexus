@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useDictionary } from "@/components/dictionary-provider"
 import { SITE_CONFIG } from "@/lib/site-content"
 import { useAuth } from "@/components/auth-provider"
@@ -64,6 +64,7 @@ import { cn, constructMultiWordSearch } from "@/lib/utils"
 import { calculateInvoiceAmounts } from "@/lib/invoice-calc"
 import { getStatusBadgeClass } from "@/lib/status-styles"
 import { SectionLoader } from "@/components/section-loader"
+import { Skeleton } from "@/components/ui/skeleton"
 import { notify } from "@/lib/notifications"
 import { aiTranslate } from "@/lib/ai-translate"
 import { LiveSearch } from "@/components/live-search"
@@ -161,6 +162,36 @@ function calculateInvoiceTotals(inv: any): {
   }
 }
 
+/**
+ * Builds DO rows for a DO-backed invoice from the SO's embedded deliveries.
+ * The list query embeds every DO of the invoice's SO, so the invoice's own
+ * `do_ids` can be resolved — status included — without a second request.
+ * Returns null when the embed is unavailable or incomplete so the caller can
+ * fall back to a fetch.
+ */
+function buildDosFromSo(item: any, doIds: string[]) {
+  const joined = Array.isArray(item?.po?.delivery_orders)
+    ? item.po.delivery_orders
+    : null
+  if (joined === null) return null
+  const byId = new Map<string, any>(joined.map((d: any) => [d.id, d]))
+  const rows = doIds
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .map((d: any) => ({
+      ...d,
+      so: item.po,
+      so_id: item.po?.id || item.so_id || "",
+      company: item.company,
+    }))
+  if (rows.length !== doIds.length) return null
+  return rows.sort((a: any, b: any) =>
+    String(a.do_number).localeCompare(String(b.do_number), undefined, {
+      numeric: true,
+    })
+  )
+}
+
 export default function InvoicePage() {
   const { dict } = useDictionary()
   const { hasPermission, loading: authLoading } = useAuth()
@@ -248,6 +279,9 @@ export default function InvoicePage() {
   const [selectedDOs, setSelectedDOs] = useState<any[]>([])
   const [selectedSOInfo, setSelectedSOInfo] = useState<any>(null)
   const [soDOs, setSoDOs] = useState<any[]>([])
+  const [soDOsLoading, setSoDOsLoading] = useState(false)
+  // Guards against an older delivery fetch resolving after a newer open.
+  const soDosRequestRef = useRef(0)
   const [doSearchValue, setDoSearchValue] = useState("")
 
   const companyAddresses = useMemo(() => {
@@ -456,7 +490,7 @@ export default function InvoicePage() {
   } = useTableData({
     table: "invoices",
     select:
-      "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, quantity, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, product:products(id, name, sku))",
+      "*, company:companies(id, name, nickname, details), po:sales_orders(id, so_number, po_number, so_date, quantity, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable, delivery_orders:delivery_orders(id, do_number, quantity, received_quantity, status), product:products(id, name, sku))",
     searchColumns: ["invoice_number"],
     relatedSearches: [
       { table: "companies", columns: ["name"], matchColumn: "company_id" },
@@ -509,16 +543,120 @@ export default function InvoicePage() {
 
   const fetchSODOs = useCallback(
     (soId: string) => {
+      const requestId = ++soDosRequestRef.current
+      setSoDOsLoading(true)
       supabase
         .from("delivery_orders")
         .select("id, do_number, quantity, received_quantity, status, so_id")
         .eq("so_id", soId)
         .order("do_number", { ascending: true })
         .then(({ data }: { data: any }) => {
+          if (requestId !== soDosRequestRef.current) return
           setSoDOs(data || [])
+          setSoDOsLoading(false)
         })
     },
     [supabase]
+  )
+
+  // Deliveries belonging to a Sales Order — used for SO-mode invoicing.
+  const resolveSoDoRefs = useCallback(
+    async (soId: string) => {
+      const { data, error } = await supabase
+        .from("delivery_orders")
+        .select("id, do_number, quantity, received_quantity, status")
+        .eq("so_id", soId)
+        .order("do_number", { ascending: true })
+      return { refs: (data || []) as any[], error }
+    },
+    [supabase]
+  )
+
+  /**
+   * DOs already covered by another live invoice for the same SO. An SO-mode
+   * invoice (empty `do_ids`) covers every DO of its SO, so it counts as a
+   * blanket cover. Returns `null` when the whole SO is covered.
+   */
+  const getOtherInvoiceCoveredDoIds = useCallback(
+    async (soId: string, excludeInvoiceId?: string) => {
+      if (!soId) return new Set<string>()
+      let query = supabase
+        .from("invoices")
+        .select("id, do_ids")
+        .eq("so_id", soId)
+        .neq("status", "Cancelled")
+      if (excludeInvoiceId) query = query.neq("id", excludeInvoiceId)
+      const { data } = await query
+      const covered = new Set<string>()
+      let coversWholeSo = false
+      ;(data || []).forEach((inv: any) => {
+        const ids = Array.isArray(inv.do_ids) ? inv.do_ids : []
+        if (ids.length === 0) coversWholeSo = true
+        ids.forEach((doId: string) => covered.add(doId))
+      })
+      return coversWholeSo ? null : covered
+    },
+    [supabase]
+  )
+
+  /**
+   * Reconciles which DOs this invoice holds as "Invoiced": reverts the ones it
+   * no longer covers (unless another live invoice still covers them) and marks
+   * every covered DO that is still Shipped/Delivered, so an already-invoiced or
+   * cancelled DO is never overridden.
+   */
+  const syncDeliveryStatuses = useCallback(
+    async ({
+      soId,
+      prevDoIds,
+      nextDoIds,
+      cancelled,
+      excludeInvoiceId,
+    }: {
+      soId?: string
+      prevDoIds: string[]
+      nextDoIds: string[]
+      cancelled?: boolean
+      excludeInvoiceId?: string
+    }) => {
+      const errors: string[] = []
+      const prev = new Set(prevDoIds)
+      const next = new Set(cancelled ? [] : nextDoIds)
+      // Marking is status-driven, not diff-driven: every covered DO that is
+      // still Shipped/Delivered becomes Invoiced. This also repairs legacy
+      // SO-mode invoices that were saved before they tracked their DOs.
+      const toInvoice = cancelled ? [] : nextDoIds
+      const toRevert = [...prev].filter((id) => !next.has(id))
+
+      if (toRevert.length > 0) {
+        const covered = await getOtherInvoiceCoveredDoIds(
+          soId || "",
+          excludeInvoiceId
+        )
+        const revertIds =
+          covered === null ? [] : toRevert.filter((id) => !covered.has(id))
+        if (revertIds.length > 0) {
+          const { error } = await supabase
+            .from("delivery_orders")
+            .update({ status: "Delivered" })
+            .in("id", revertIds)
+            .eq("status", "Invoiced")
+          if (error) errors.push(error.message)
+        }
+      }
+
+      if (toInvoice.length > 0) {
+        const { error } = await supabase
+          .from("delivery_orders")
+          .update({ status: "Invoiced" })
+          .in("id", toInvoice)
+          .in("status", ["Shipped", "Delivered"])
+        if (error) errors.push(error.message)
+      }
+
+      return errors
+    },
+    [supabase, getOtherInvoiceCoveredDoIds]
   )
 
   const handleAddDO = (item: any) => {
@@ -651,7 +789,6 @@ export default function InvoicePage() {
     if (item) {
       setEditingItem(item)
       setSelectedCompanyInfo(item.company)
-      setSelectedDOs([])
       setSelectedSOInfo(null)
       setSoDOs([])
 
@@ -697,20 +834,76 @@ export default function InvoicePage() {
       })
 
       if (mode === "do" && itemDoIds.length > 0) {
-        supabase
-          .from("delivery_orders")
-          .select(
-            "*, company:companies!delivery_orders_company_id_fkey(id, name, nickname, details), product:products(id, name, sku), so:sales_orders(id, so_number, po_number, so_date, quantity, unit_price, delivery_price_per_litre, discount, tax_details, shrinkage_tolerance, shrinkage_in_price, delivery_taxable)"
-          )
-          .in("id", itemDoIds)
-          .order("do_number", { ascending: true })
-          .then(({ data }: { data: any }) => {
-            if (data && data.length > 0) {
-              setSelectedDOs(data)
-              setSelectedCompanyInfo(data[0].company || item.company)
-            }
-          })
+        // The SO embed already carries every DO of this invoice's SO (status
+        // included), so resolve do_ids from it — no fetch, no skeleton pills.
+        const joinedDos = buildDosFromSo(item, itemDoIds)
+        if (joinedDos) {
+          setSelectedDOs(joinedDos)
+        } else {
+          // Fallback: seed from the invoice's DO snapshot so the panel still
+          // paints, then fetch to fill in statuses.
+          const doRefs = Array.isArray(item.do_refs) ? item.do_refs : []
+          if (doRefs.length > 0 && item.po) {
+            setSelectedDOs(
+              doRefs.map((ref: any) => ({
+                id: ref.do_id,
+                do_number: ref.do_number,
+                quantity: ref.quantity,
+                received_quantity: ref.received_quantity,
+                so_id: item.po?.id || item.so_id,
+                so: item.po,
+                company: item.company,
+              }))
+            )
+          } else {
+            setSelectedDOs([])
+          }
+          supabase
+            .from("delivery_orders")
+            // Only the columns the dialog/summary read — company comes from the
+            // invoice row, so it is not joined again here.
+            .select(
+              "id, do_number, quantity, received_quantity, status, so_id, so:sales_orders(id, so_number, quantity, unit_price, delivery_price_per_litre, discount, shrinkage_tolerance, shrinkage_in_price, product:products(id, name, sku))"
+            )
+            .in("id", itemDoIds)
+            .order("do_number", { ascending: true })
+            .then(({ data }: { data: any }) => {
+              if (data && data.length > 0) {
+                setSelectedDOs(
+                  data.map((d: any) => ({ ...d, company: item.company }))
+                )
+                setSelectedCompanyInfo(item.company || null)
+              }
+            })
+        }
       } else if (item.so_id) {
+        setSelectedDOs([])
+        // The list query embeds the SO's DOs, so the delivery panel can render
+        // complete on the first frame (statuses included) with no fetch. Fall
+        // back to the invoice's DO snapshot, then to a fetch.
+        const joinedDos = Array.isArray(item.po?.delivery_orders)
+          ? item.po.delivery_orders
+          : null
+        const doRefs = Array.isArray(item.do_refs) ? item.do_refs : []
+        if (joinedDos !== null) {
+          // Invalidate any delivery fetch still in flight from a prior open.
+          soDosRequestRef.current++
+          setSoDOs(
+            joinedDos.map((d: any) => ({ ...d, so_id: item.so_id }))
+          )
+          setSoDOsLoading(false)
+        } else {
+          setSoDOs(
+            doRefs.map((ref: any) => ({
+              id: ref.do_id,
+              do_number: ref.do_number,
+              quantity: ref.quantity,
+              received_quantity: ref.received_quantity,
+              so_id: item.so_id,
+            }))
+          )
+          fetchSODOs(item.so_id)
+        }
         // Preserve the invoice's stored billed quantity when re-opening
         // (falls back to the SO quantity for legacy rows without one)
         const soInfo = item.po
@@ -720,7 +913,8 @@ export default function InvoicePage() {
             }
           : null
         setSelectedSOInfo(soInfo)
-        fetchSODOs(item.so_id)
+      } else {
+        setSelectedDOs([])
       }
     } else {
       if (!canInsert) return
@@ -778,15 +972,6 @@ export default function InvoicePage() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { payment_days, ...cleanFormData } = formData
-      const doRefs = selectedDOs.map((d: any) => ({
-        do_id: d.id,
-        do_number: d.do_number,
-        quantity: Number(d.quantity) || 0,
-        received_quantity:
-          d.received_quantity !== null && d.received_quantity !== undefined
-            ? Number(d.received_quantity)
-            : null,
-      }))
       const doIds = selectedDOs.map((d: any) => d.id)
       const soId =
         sourceMode === "so"
@@ -798,6 +983,76 @@ export default function InvoicePage() {
         sourceMode === "so"
           ? Number(selectedSOInfo?.quantity) || 0
           : Number(selectedDOs[0]?.so?.quantity) || 0
+
+      // Resolve the SO's deliveries once — reused for the do_refs snapshot and
+      // for the invoice <-> DO status reconciliation.
+      let soDoRefs: any[] = []
+      let nextDoIds: string[] = doIds
+      if (sourceMode === "so" && soId) {
+        const { refs } = await resolveSoDoRefs(soId)
+        soDoRefs = refs
+        nextDoIds = refs
+          .filter((r: any) => r.status !== "Cancelled")
+          .map((r: any) => r.id)
+      }
+
+      const doRefs =
+        sourceMode === "so"
+          ? soDoRefs
+              .filter((r: any) => r.status !== "Cancelled")
+              .map((r: any) => ({
+                do_id: r.id,
+                do_number: r.do_number,
+                quantity: Number(r.quantity) || 0,
+                received_quantity:
+                  r.received_quantity !== null &&
+                  r.received_quantity !== undefined
+                    ? Number(r.received_quantity)
+                    : null,
+              }))
+          : selectedDOs.map((d: any) => ({
+              do_id: d.id,
+              do_number: d.do_number,
+              quantity: Number(d.quantity) || 0,
+              received_quantity:
+                d.received_quantity !== null &&
+                d.received_quantity !== undefined
+                  ? Number(d.received_quantity)
+                  : null,
+            }))
+
+      // Warn (but allow) when every delivery of the SO is already invoiced.
+      if (!editingItem && sourceMode === "so" && soDoRefs.length > 0) {
+        const hasOpenDo = soDoRefs.some(
+          (r: any) => r.status === "Shipped" || r.status === "Delivered"
+        )
+        if (!hasOpenDo) {
+          notify.warning(
+            "Deliveries already invoiced",
+            "Every Delivery Order for this Sales Order is already invoiced. Saving will not mark any additional DOs."
+          )
+        }
+      }
+
+      // DOs this invoice covered before the save (empty when it was cancelled,
+      // since cancelling releases them).
+      let prevDoIds: string[] = []
+      if (editingItem && editingItem.status !== "Cancelled") {
+        const prevDo = Array.isArray(editingItem.do_ids)
+          ? editingItem.do_ids
+          : []
+        const prevRefs = Array.isArray(editingItem.do_refs)
+          ? editingItem.do_refs
+          : []
+        if (prevDo.length > 0) {
+          prevDoIds = prevDo
+        } else if (prevRefs.length > 0) {
+          prevDoIds = prevRefs.map((r: any) => r.do_id).filter(Boolean)
+        } else if (editingItem.so_id) {
+          const { refs } = await resolveSoDoRefs(editingItem.so_id)
+          prevDoIds = refs.map((r: any) => r.id)
+        }
+      }
 
       const payload = {
         ...cleanFormData,
@@ -820,53 +1075,34 @@ export default function InvoicePage() {
         payload.invoice_number = data
       }
 
-      const updateDOStatus = async (ids: string[], status: string) => {
-        if (ids.length > 0) {
-          await supabase
-            .from("delivery_orders")
-            .update({ status })
-            .in("id", ids)
-        }
-      }
-
       if (editingItem) {
-        const oldDoIds = Array.isArray(editingItem.do_ids)
-          ? editingItem.do_ids
-          : []
-        const newStatus = payload.status
-
         const { error } = await supabase
           .from("invoices")
           .update(payload)
           .eq("id", editingItem.id)
         if (error) throw error
-
-        if (newStatus === "Cancelled") {
-          await updateDOStatus(oldDoIds, "Delivered")
-        } else {
-          const removedDoIds = oldDoIds.filter(
-            (id: string) => !doIds.includes(id)
-          )
-          const addedDoIds = doIds.filter(
-            (id: string) => !oldDoIds.includes(id)
-          )
-          await updateDOStatus(removedDoIds, "Delivered")
-          await updateDOStatus(addedDoIds, "Invoiced")
-          if (editingItem.status === "Cancelled") {
-            await updateDOStatus(doIds, "Invoiced")
-          }
-        }
-
         // Keep the local row highlight; refresh() re-syncs relations.
         setUpdatedRowId(editingItem.id)
-        refresh()
       } else {
         const { error } = await supabase.from("invoices").insert([payload])
         if (error) throw error
-
-        await updateDOStatus(doIds, "Invoiced")
-        refresh()
       }
+
+      // Mark the DOs this invoice holds; release any it no longer covers.
+      const doErrors = await syncDeliveryStatuses({
+        soId: soId || editingItem?.so_id || "",
+        prevDoIds,
+        nextDoIds,
+        cancelled: payload.status === "Cancelled",
+        excludeInvoiceId: editingItem?.id,
+      })
+      if (doErrors.length > 0) {
+        notify.warning(
+          "Delivery order status not fully updated",
+          doErrors.join("; ")
+        )
+      }
+      refresh()
 
       const docLabel = `[${payload.invoice_number || formData.invoice_number}]`
       if (editingItem) {
@@ -919,12 +1155,31 @@ export default function InvoicePage() {
         .eq("id", deleteConfirm.id)
       if (error) throw error
 
-      const doIds = Array.isArray(item?.do_ids) ? item.do_ids : []
-      if (doIds.length > 0) {
-        await supabase
-          .from("delivery_orders")
-          .update({ status: "Delivered" })
-          .in("id", doIds)
+      // The invoice is already deleted, so the guard query naturally excludes
+      // it; release every DO it held.
+      const itemDoIds = Array.isArray(item?.do_ids) ? item.do_ids : []
+      const itemDoRefs = Array.isArray(item?.do_refs) ? item.do_refs : []
+      let coverage: string[] = itemDoIds
+      if (coverage.length === 0) {
+        if (itemDoRefs.length > 0) {
+          coverage = itemDoRefs.map((r: any) => r.do_id).filter(Boolean)
+        } else if (item?.so_id) {
+          const { refs } = await resolveSoDoRefs(item.so_id)
+          coverage = refs.map((r: any) => r.id)
+        }
+      }
+      const doErrors = await syncDeliveryStatuses({
+        soId: item?.so_id || "",
+        prevDoIds: coverage,
+        nextDoIds: [],
+        cancelled: true,
+        excludeInvoiceId: item?.id,
+      })
+      if (doErrors.length > 0) {
+        notify.warning(
+          "Delivery order status not fully updated",
+          doErrors.join("; ")
+        )
       }
 
       refresh()
@@ -960,19 +1215,32 @@ export default function InvoicePage() {
         .eq("id", id)
       if (error) throw error
 
-      const doIds = Array.isArray(item?.do_ids) ? item.do_ids : []
-      if (doIds.length > 0) {
-        if (status === "Cancelled" && oldStatus !== "Cancelled") {
-          await supabase
-            .from("delivery_orders")
-            .update({ status: "Delivered" })
-            .in("id", doIds)
-        } else if (oldStatus === "Cancelled" && status !== "Cancelled") {
-          await supabase
-            .from("delivery_orders")
-            .update({ status: "Invoiced" })
-            .in("id", doIds)
+      // Coverage: linked do_ids, else the SO's DO snapshot, else its DOs.
+      const itemDoIds = Array.isArray(item?.do_ids) ? item.do_ids : []
+      const itemDoRefs = Array.isArray(item?.do_refs) ? item.do_refs : []
+      let coverage: string[] = itemDoIds
+      if (coverage.length === 0) {
+        if (itemDoRefs.length > 0) {
+          coverage = itemDoRefs.map((r: any) => r.do_id).filter(Boolean)
+        } else if (item?.so_id) {
+          const { refs } = await resolveSoDoRefs(item.so_id)
+          coverage = refs.map((r: any) => r.id)
         }
+      }
+      const wasCancelled = oldStatus === "Cancelled"
+      const nowCancelled = status === "Cancelled"
+      const doErrors = await syncDeliveryStatuses({
+        soId: item?.so_id || "",
+        prevDoIds: wasCancelled ? [] : coverage,
+        nextDoIds: nowCancelled ? [] : coverage,
+        cancelled: nowCancelled,
+        excludeInvoiceId: id,
+      })
+      if (doErrors.length > 0) {
+        notify.warning(
+          "Delivery order status not fully updated",
+          doErrors.join("; ")
+        )
       }
 
       setUpdatedRowId(id)
@@ -1942,14 +2210,18 @@ export default function InvoicePage() {
                                               {" L"}
                                             </span>
                                           </span>
-                                          <span
-                                            className={cn(
-                                              "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:px-2",
-                                              getStatusBadgeClass(d.status)
-                                            )}
-                                          >
-                                            {d.status}
-                                          </span>
+                                          {d.status ? (
+                                            <span
+                                              className={cn(
+                                                "inline-flex min-w-[68px] items-center justify-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:min-w-[72px] md:px-2",
+                                                getStatusBadgeClass(d.status)
+                                              )}
+                                            >
+                                              {d.status}
+                                            </span>
+                                          ) : (
+                                            <Skeleton className="h-5 w-[68px] rounded-full md:w-[72px]" />
+                                          )}
                                         </span>
                                       </div>
                                     )
@@ -1971,9 +2243,26 @@ export default function InvoicePage() {
                                   </span>
                                 </div>
                                 {soDOs.length === 0 ? (
-                                  <div className="text-xs text-muted-foreground">
-                                    {dict.NO_DATA}
-                                  </div>
+                                  soDOsLoading ? (
+                                    <div className="divide-y divide-border/40">
+                                      {[0, 1, 2].map((i) => (
+                                        <div
+                                          key={i}
+                                          className="flex flex-col gap-0.5 px-1 py-1 text-[10px] md:flex-row md:items-center md:justify-between md:gap-2 md:py-1 md:text-xs"
+                                        >
+                                          <Skeleton className="h-[15px] w-40 md:h-[18px]" />
+                                          <span className="flex items-center gap-1.5 md:shrink-0">
+                                            <Skeleton className="h-[15px] w-20 md:h-[18px]" />
+                                            <Skeleton className="h-5 w-[68px] rounded-full md:w-[72px]" />
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-muted-foreground">
+                                      {dict.NO_DATA}
+                                    </div>
+                                  )
                                 ) : (
                                   <>
                                     <div className="divide-y divide-border/40">
@@ -2027,14 +2316,18 @@ export default function InvoicePage() {
                                                   {" L"}
                                                 </span>
                                               </span>
-                                              <span
-                                                className={cn(
-                                                  "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:px-2",
-                                                  getStatusBadgeClass(d.status)
-                                                )}
-                                              >
-                                                {d.status}
-                                              </span>
+                                              {d.status ? (
+                                                <span
+                                                  className={cn(
+                                                    "inline-flex min-w-[68px] items-center justify-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:min-w-[72px] md:px-2",
+                                                    getStatusBadgeClass(d.status)
+                                                  )}
+                                                >
+                                                  {d.status}
+                                                </span>
+                                              ) : (
+                                                <Skeleton className="h-5 w-[68px] rounded-full md:w-[72px]" />
+                                              )}
                                             </span>
                                           </div>
                                         )
@@ -2063,6 +2356,7 @@ export default function InvoicePage() {
                                         ) || 0) /
                                           100)
                                       if (
+                                        soDOsLoading ||
                                         soQty <= 0 ||
                                         soQty - receivedTotal <= allowedTotal
                                       )

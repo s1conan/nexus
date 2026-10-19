@@ -56,6 +56,59 @@ Exclusive mode is byte-for-byte the previous behaviour (verified numerically:
 - Numeric harness over 6 cases (compiled helper) — all pass; exclusive matches
   the old totals exactly
 
+## Performance fix (invoice open latency)
+- `handleOpenDialog` DO mode no longer clears `selectedDOs` first. It seeds
+  `selectedDOs` synchronously from `item.do_refs` + the already-joined `item.po`
+  so the calculation panel paints on the first frame; the fetch then only fills
+  in `status`.
+- The DO fetch payload was narrowed from `select("*")` + 3 joins to six columns
+  plus a lean SO join. `company` is merged from the invoice row instead of being
+  re-joined; unused `product`, `so.tax_details`, `so.po_number`, `so.so_date` and
+  `so.delivery_taxable` were dropped.
+- The DO-list status badge is guarded so seeded rows (status not yet loaded)
+  render no empty pill.
+- Legacy invoices with an empty `do_refs` still fall back to clear + fetch.
+- Not done: a per-`do_id` cache (repeat opens still re-fetch).
+
+## Loading pills + SO-mode parity
+- The invoice list query now embeds the SO's DOs
+  (`po:sales_orders(..., delivery_orders:delivery_orders(id, do_number,
+  quantity, received_quantity, status))`), so both modes read live DO data
+  from the row:
+  - SO mode uses the whole embedded list.
+  - DO mode filters it by the invoice's `do_ids` (`buildDosFromSo`), attaching
+    `so` + `company` so the calculation and validation work unchanged.
+  Either mode therefore skips the per-open fetch and the skeleton pills in the
+  normal case. `do_refs` + `fetchSODOs` remain the fallback when `po` is
+  missing or the embed is incomplete. The embed was validated against
+  PostgREST (parsed OK; anon RLS returned 0 rows).
+- `do_refs` remains the fallback when `po` is missing; then `fetchSODOs` runs
+  with a request-id guard so a stale response cannot overwrite a newer open.
+- Added `Skeleton` pills for any DO row whose status has not arrived yet, in
+  both the DO List and Delivery Progress sections. Pill skeleton is 20px tall
+  (`h-5`) and 68/72px wide; the real pills now carry
+  `min-w-[68px] md:min-w-[72px] justify-center` so statuses of different
+  lengths do not shift the layout.
+- Skeleton rows mirror the real row structure (same flex-col / `md:flex-row`,
+  `py-1`, `gap-0.5`, `divide-y`), so there is no height jump.
+
+## SO-backed invoices now update DO statuses
+- Save (create/edit): resolves the SO's DOs, snapshots them into `do_refs`
+  (keeps `do_ids` empty so the invoice still reopens in SO mode), then marks
+  every covered DO that is `Shipped`/`Delivered` as `Invoiced`.
+- Manual status change, cancel, and delete reconcile the same way:
+  `Invoiced -> Delivered` for DOs this invoice no longer covers.
+- Reversal guard: a DO is only released when no other live (non-cancelled)
+  invoice covers it; an SO-mode invoice (`do_ids = []`) counts as covering the
+  whole SO.
+- Mode switches reconcile fully (SO -> DO releases unselected DOs; DO -> SO
+  marks the rest of the SO's DOs).
+- Marking is status-driven, so saving a legacy SO-mode invoice (empty
+  `do_refs`) repairs its previously-unmarked DOs.
+- Creating an SO invoice whose DOs are all already invoiced emits a warning
+  toast but is allowed. DO update failures also surface a warning toast.
+- Legacy invoices with an empty `do_refs` still fall back to clear + fetch.
+
 ## Deployment note
 Run `nids-app/add_tax_inclusive.sql` in Supabase BEFORE deploying this code.
 The save payload now includes `tax_inclusive`; without the column every invoice
