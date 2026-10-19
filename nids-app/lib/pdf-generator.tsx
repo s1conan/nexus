@@ -2860,8 +2860,11 @@ export async function generateStandardInvoicePDF(
       shrinkage_in_price: soInfo?.shrinkage_in_price ?? false,
       subtotal,
       tax_details: inv.tax_details || [],
+      // The invoice's own saved flag wins over the SO (so a toggled "delivery
+      // taxable" matches the dialog + list table); legacy rows without one
+      // still fall back to the SO value.
       delivery_taxable:
-        soInfo?.delivery_taxable ?? inv.delivery_taxable ?? false,
+        inv.delivery_taxable ?? soInfo?.delivery_taxable ?? false,
       total_amount: inv.total_amount || 0,
       // Digital stamp/signature is opt-in per customer company — off by
       // default so the printed invoice leaves an empty box for wet signing

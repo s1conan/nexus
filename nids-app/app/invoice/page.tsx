@@ -153,8 +153,10 @@ function calculateInvoiceTotals(inv: any): {
   const afterDiscount = afterDiscountBase + shrinkageAmount
   const deliveryTotal = quantity * deliveryPerLitre
   const subtotal = Math.max(0, Math.round(afterDiscount + deliveryTotal))
+  // The invoice's own saved flag wins over the SO so this list column matches
+  // the dialog and the PDF when "delivery taxable" was toggled on the invoice.
   const deliveryTaxable =
-    soInfo?.delivery_taxable ?? inv?.delivery_taxable ?? false
+    inv?.delivery_taxable ?? soInfo?.delivery_taxable ?? false
   const taxDetails = Array.isArray(inv?.tax_details) ? inv.tax_details : []
   const taxTotal = taxDetails.reduce((sum: number, t: any) => {
     if (!t?.enabled) return sum
@@ -179,6 +181,7 @@ export default function InvoicePage() {
   const [updatedRowId, setUpdatedRowId] = useState<string | null>(null)
   const [availableBanks, setAvailableBanks] = useState<any[]>([])
   const [companyInfo, setCompanyInfo] = useState<any>(null)
+  const [globalTaxes, setGlobalTaxes] = useState<any[]>([])
   const [previewDoc, setPreviewDoc] = useState<any>(null)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -274,6 +277,10 @@ export default function InvoicePage() {
   const canPrint =
     hasPermission("invoice", "print") || hasPermission("invoice", "view") // Default print to view/print
 
+  // Tax parameters are editable only for users who may edit, and only while the
+  // dialog is in edit mode (`viewOnly` covers Paid/Partial + read-only opens).
+  const canToggleTaxes = canEdit && !viewOnly
+
   // Helper to resolve overdue status dynamically
   const getInvoiceStatus = useCallback((inv: any) => {
     if (inv.status === "Paid") return "Paid"
@@ -328,7 +335,7 @@ export default function InvoicePage() {
     const unitPrice = Number(soInfo.unit_price) || 0
     const discountPercent = Number(soInfo.discount) || 0
     const deliveryRate = Number(soInfo.delivery_price_per_litre) || 0
-    const deliveryTaxable = soInfo.delivery_taxable ?? false
+    const deliveryTaxable = formData.delivery_taxable ?? false
     const basePrice = totalQty * unitPrice
     const discountAmount = basePrice * (discountPercent / 100)
     // Shrinkage tolerance builds on the after-discount price (SO PDF rule)
@@ -379,7 +386,14 @@ export default function InvoicePage() {
       taxTotal,
       grandTotal,
     }
-  }, [sourceMode, selectedDOs, selectedSOInfo, soDOs, formData.tax_details])
+  }, [
+    sourceMode,
+    selectedDOs,
+    selectedSOInfo,
+    soDOs,
+    formData.tax_details,
+    formData.delivery_taxable,
+  ])
 
   // Per-DO delivery/billing snapshot for the summary lists. `so` may be joined
   // on the DO (DO mode) or come from the selected SO (SO mode).
@@ -408,11 +422,11 @@ export default function InvoicePage() {
     }
   }
 
-  // Settings (banks + company info) — mount only
+  // Settings (banks + company info + global taxes) — mount only
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const [bRes, sRes] = await Promise.all([
+      const [bRes, sRes, tRes] = await Promise.all([
         supabase
           .from("app_settings")
           .select("value")
@@ -420,6 +434,7 @@ export default function InvoicePage() {
           .eq("name", "bank")
           .maybeSingle(),
         supabase.from("app_settings").select("*").eq("category", "company"),
+        supabase.from("app_settings").select("*").eq("category", "tax"),
       ])
       if (cancelled) return
       setAvailableBanks((bRes.data?.value as any[]) || [])
@@ -430,11 +445,37 @@ export default function InvoicePage() {
         })
         setCompanyInfo(info)
       }
+      setGlobalTaxes(tRes.data || [])
     })()
     return () => {
       cancelled = true
     }
   }, [supabase])
+
+  /**
+   * Merges a document's tax list (inherited from the SO on a new invoice, or
+   * the invoice's saved list when re-opening) with the current global tax
+   * settings, so every configured tax is toggleable in the dialog.
+   *
+   * - Taxes present in both keep the document's locked rate + enabled state
+   *   (the blueprint's "read-only locked rates" rule).
+   * - Global taxes the document lacks are added switched OFF.
+   * - Custom taxes no longer in globals are preserved as-is.
+   * Falls back to the document's own list when no global taxes are loaded.
+   */
+  const buildTaxList = (sourceTaxes: any[]) => {
+    const saved = Array.isArray(sourceTaxes) ? sourceTaxes : []
+    const merged = globalTaxes.map((gt: any) => {
+      const existing = saved.find((st: any) => st.name === gt.name)
+      if (existing)
+        return { ...gt, rate: existing.rate, enabled: existing.enabled }
+      return { ...gt, rate: Number(gt.value) || 0, enabled: false }
+    })
+    saved.forEach((st: any) => {
+      if (!merged.find((mt: any) => mt.name === st.name)) merged.push({ ...st })
+    })
+    return merged
+  }
 
   const sortColumns = [
     { label: dict.LABEL_CREATED_AT || "Created Date", value: "created_at" },
@@ -565,7 +606,7 @@ export default function InvoicePage() {
         company_id: item.company?.id || "",
         so_id: item.so?.id || item.so_id || "",
         issue_date: item.do_date || formData.issue_date,
-        tax_details: soTaxes,
+        tax_details: buildTaxList(soTaxes),
         delivery_taxable: item?.so?.delivery_taxable ?? false,
         address: "",
       })
@@ -619,7 +660,7 @@ export default function InvoicePage() {
       company_id: item.company?.id || "",
       so_id: item.id,
       issue_date: item.so_date || formData.issue_date,
-      tax_details: soTaxes,
+      tax_details: buildTaxList(soTaxes),
       delivery_taxable: item?.delivery_taxable ?? false,
       address: "",
       quantity: Number(item.quantity) || 0,
@@ -695,7 +736,7 @@ export default function InvoicePage() {
         status: item.status,
         note: item.note || "",
         is_note_enabled: item.is_note_enabled ?? true,
-        tax_details: savedTaxes,
+        tax_details: buildTaxList(savedTaxes),
         bank_accounts: initialSelectedBanks,
         delivery_taxable: item.delivery_taxable ?? false,
       })
@@ -2208,27 +2249,135 @@ export default function InvoicePage() {
                                   </span>
                                 </div>
 
-                                {/* Taxes */}
-                                {invoiceCalc.appliedTaxes.map(
-                                  (tax: any, idx: number) => {
-                                    if (!tax.enabled) return null
-                                    return (
-                                      <div
-                                        key={idx}
-                                        className="flex items-center justify-between text-xs md:text-sm"
+                                {/* Taxes — interactive switches for edit-permitted
+                                    users, read-only text for everyone else */}
+                                {canToggleTaxes ? (
+                                  <div className="space-y-2">
+                                    {/* Delivery fee joins the PPN base only when on */}
+                                    <div className="flex items-center justify-between gap-3 rounded border bg-background p-2">
+                                      <Label
+                                        htmlFor="invoice-delivery-taxable"
+                                        className="cursor-pointer text-xs font-medium"
                                       >
-                                        <span className="font-medium text-muted-foreground">
-                                          {tax.name} ({tax.rate}%)
-                                        </span>
-                                        <span className="font-mono font-medium text-muted-foreground">
-                                          + {SITE_CONFIG.currencySymbol}{" "}
-                                          {Math.round(
-                                            tax.amount
-                                          ).toLocaleString()}
-                                        </span>
-                                      </div>
-                                    )
-                                  }
+                                        {dict.LABEL_DELIVERY_TAXABLE ||
+                                          "Include Delivery Fee in Tax (PPN)"}
+                                      </Label>
+                                      <Switch
+                                        id="invoice-delivery-taxable"
+                                        checked={formData.delivery_taxable}
+                                        onCheckedChange={(val) =>
+                                          setFormData({
+                                            ...formData,
+                                            delivery_taxable: val,
+                                          })
+                                        }
+                                      />
+                                    </div>
+                                    {formData.tax_details.map(
+                                      (tax: any, idx: number) => {
+                                        const calculatedAmount =
+                                          invoiceCalc.appliedTaxes.find(
+                                            (t: any) => t.name === tax.name
+                                          )?.amount || 0
+                                        return (
+                                          <div
+                                            key={idx}
+                                            className="flex flex-col gap-2 rounded border bg-background p-2 md:grid md:min-h-12 md:grid-cols-12 md:items-center md:gap-2"
+                                          >
+                                            <div className="flex items-center justify-between md:contents">
+                                              <div className="col-span-3 truncate font-medium">
+                                                <Label
+                                                  htmlFor={`invoice-tax-${idx}`}
+                                                  className="block cursor-pointer truncate text-xs"
+                                                >
+                                                  {tax.name}
+                                                </Label>
+                                              </div>
+                                              <div className="col-span-2 flex items-center justify-center">
+                                                <Switch
+                                                  id={`invoice-tax-${idx}`}
+                                                  checked={tax.enabled}
+                                                  onCheckedChange={(val) => {
+                                                    setFormData({
+                                                      ...formData,
+                                                      tax_details:
+                                                        formData.tax_details.map(
+                                                          (t: any, i: number) =>
+                                                            i === idx
+                                                              ? {
+                                                                  ...t,
+                                                                  enabled: val,
+                                                                }
+                                                              : t
+                                                        ),
+                                                    })
+                                                  }}
+                                                />
+                                              </div>
+                                            </div>
+                                            <div className="grid w-full grid-cols-12 items-center gap-4 md:col-span-7 md:gap-2">
+                                              <div className="col-span-6 min-w-0">
+                                                <div
+                                                  style={{
+                                                    opacity: tax.enabled
+                                                      ? 1
+                                                      : 0.3,
+                                                  }}
+                                                  className="w-full transition-opacity"
+                                                >
+                                                  <NumberInput
+                                                    className="text-right font-mono text-xs"
+                                                    containerClassName="h-8 w-full bg-muted/50"
+                                                    disabled
+                                                    value={tax.rate}
+                                                    onChange={() => {}}
+                                                    rightBadge="%"
+                                                  />
+                                                </div>
+                                              </div>
+                                              <div className="col-span-6 flex min-w-0 justify-end text-right">
+                                                <span
+                                                  className={cn(
+                                                    "block w-full truncate text-right font-mono text-xs font-medium transition-opacity",
+                                                    tax.enabled
+                                                      ? "text-foreground opacity-100"
+                                                      : "text-muted-foreground opacity-30"
+                                                  )}
+                                                >
+                                                  {SITE_CONFIG.currencySymbol}{" "}
+                                                  {Math.round(
+                                                    calculatedAmount
+                                                  ).toLocaleString()}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )
+                                      }
+                                    )}
+                                  </div>
+                                ) : (
+                                  invoiceCalc.appliedTaxes.map(
+                                    (tax: any, idx: number) => {
+                                      if (!tax.enabled) return null
+                                      return (
+                                        <div
+                                          key={idx}
+                                          className="flex items-center justify-between text-xs md:text-sm"
+                                        >
+                                          <span className="font-medium text-muted-foreground">
+                                            {tax.name} ({tax.rate}%)
+                                          </span>
+                                          <span className="font-mono font-medium text-muted-foreground">
+                                            + {SITE_CONFIG.currencySymbol}{" "}
+                                            {Math.round(
+                                              tax.amount
+                                            ).toLocaleString()}
+                                          </span>
+                                        </div>
+                                      )
+                                    }
+                                  )
                                 )}
 
                                 {/* Grand Total */}
