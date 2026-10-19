@@ -6,3 +6,5 @@ tsconfig.tsbuildinfo
 # Database dumps / SQL files (never upload)
 *.sql
 backups/
+*.7z
+*.zip

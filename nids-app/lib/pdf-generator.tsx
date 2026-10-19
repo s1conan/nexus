@@ -12,6 +12,7 @@ import {
 import { format } from "date-fns"
 import { id as dateLocaleId } from "date-fns/locale"
 import { formatNumber } from "./formatters"
+import { calculateInvoiceAmounts } from "./invoice-calc"
 import {
   computeHash,
   canonicalSerialize,
@@ -145,6 +146,7 @@ export interface InvoiceData {
   subtotal: number
   tax_details: { name: string; rate: number; enabled: boolean }[]
   delivery_taxable?: boolean
+  tax_inclusive?: boolean
   total_amount: number
   note: string
   is_note_enabled: boolean
@@ -2073,40 +2075,42 @@ const InvoiceDocument = ({
   company: CompanyInfo
   data: InvoiceData
 }) => {
-  // SO (PO) calculation — copies the quotation PDF workflow:
-  // base price - discount; the delivery fee (OAT) sits at the top of the
-  // tax rows when it is included in PPN (after them otherwise), and ONLY
-  // PPN adds the delivery fee to its taxable base
-  const basePrice = data.quantity * data.unit_price
-  const discountPercent = data.discount_percent || 0
-  const discountAmount = basePrice * (discountPercent / 100)
-  // Shrinkage tolerance builds on the after-discount price (SO PDF rule)
-  const afterDiscountBase = basePrice - discountAmount
-  const shrinkageEnabled =
-    data.shrinkage_in_price && Number(data.shrinkage_tolerance) > 0
-  const shrinkageRaw = shrinkageEnabled
-    ? (afterDiscountBase * (Number(data.shrinkage_tolerance) || 0)) / 100
-    : 0
-  const shrinkageAmount = Math.round(shrinkageRaw)
-  const afterDiscount = afterDiscountBase + shrinkageAmount
-  const deliveryTotal = data.quantity * data.delivery_price_per_litre
-  const enabledTaxes = data.tax_details.filter((t) => t.enabled)
-  const taxLines = enabledTaxes.map((t) => {
-    const isPpn = isPpnTax(t.name)
-    const taxableBase =
-      afterDiscount + (data.delivery_taxable && isPpn ? deliveryTotal : 0)
-    return {
-      name: t.name,
-      rate: Number(t.rate) || 0,
-      amount: Math.round(Math.max(0, taxableBase) * (Number(t.rate) / 100)),
-    }
+  // SO (PO) calculation — shares one formula with the invoice dialog and the
+  // list table (lib/invoice-calc) so the printed figures always match.
+  const amounts = calculateInvoiceAmounts({
+    quantity: data.quantity,
+    unitPrice: data.unit_price,
+    deliveryPricePerLitre: data.delivery_price_per_litre,
+    discountPercent: data.discount_percent || 0,
+    shrinkageTolerance: data.shrinkage_tolerance ?? 0,
+    shrinkageInPrice: Boolean(data.shrinkage_in_price),
+    deliveryTaxable: Boolean(data.delivery_taxable),
+    taxInclusive: Boolean(data.tax_inclusive),
+    taxDetails: data.tax_details || [],
   })
-  const grandTotal =
-    Math.round(afterDiscount + deliveryTotal) +
-    taxLines.reduce((sum, t) => sum + t.amount, 0)
-  const discountPerLitre =
-    data.quantity > 0 ? discountAmount / data.quantity : 0
-  const netPerLitre = data.unit_price - discountPerLitre
+  const {
+    netBasePrice,
+    netProduct,
+    netShrinkageAmount,
+    deliveryTotal,
+    grandTotal,
+    discountPercent,
+  } = amounts
+  const shrinkageEnabled =
+    Boolean(data.shrinkage_in_price) && Number(data.shrinkage_tolerance) > 0
+  const enabledTaxes = amounts.appliedTaxes.filter((t) => t.enabled)
+  // Whole-rupiah display values that always chain exactly:
+  // base − discount + shrinkage === product, so the column adds up.
+  const displayBasePrice = Math.round(netBasePrice)
+  const displayProductAmount = Math.round(netProduct)
+  const displayShrinkageAmount = shrinkageEnabled
+    ? Math.round(netShrinkageAmount)
+    : 0
+  const displayAfterDiscountBase =
+    displayProductAmount - displayShrinkageAmount
+  const displayDiscountAmount = displayBasePrice - displayAfterDiscountBase
+  const pricePerLitre = (amount: number) =>
+    data.quantity > 0 ? amount / data.quantity : 0
   const showDelivery = data.delivery_price_per_litre > 0
   const formatDateShort = (value?: string) =>
     value ? format(new Date(value), "dd-MMM-yyyy") : "-"
@@ -2132,16 +2136,18 @@ const InvoiceDocument = ({
         data.product_name || (data.so_number ? `SO: ${data.so_number}` : "-"),
       bold: true,
       qty: formatNumber(data.quantity),
-      pricePerLitre: data.unit_price,
-      total: basePrice,
+      // Tax-inclusive documents print the NET unit price so that
+      // qty × price + tax rows reconciles to the stated total.
+      pricePerLitre: pricePerLitre(displayBasePrice),
+      total: displayBasePrice,
     },
   ]
-  if (discountAmount > 0) {
+  if (displayDiscountAmount > 0) {
     invoiceRows.push({
       desc: "Discount",
       qty: `${formatNumber(discountPercent)}%`,
-      pricePerLitre: discountPerLitre,
-      total: Math.round(discountAmount),
+      pricePerLitre: pricePerLitre(displayDiscountAmount),
+      total: displayDiscountAmount,
     })
     // "Harga Setelah Discount" is the discounted price BEFORE shrinkage is
     // applied — shrinkage gets its own row below when enabled
@@ -2149,15 +2155,15 @@ const InvoiceDocument = ({
       desc: "Harga Setelah Discount",
       bold: true,
       totalBold: !shrinkageEnabled,
-      pricePerLitre: netPerLitre,
-      total: Math.round(afterDiscountBase),
+      pricePerLitre: pricePerLitre(displayAfterDiscountBase),
+      total: displayAfterDiscountBase,
     })
   }
-  if (shrinkageEnabled && shrinkageAmount !== 0) {
+  if (shrinkageEnabled && displayShrinkageAmount !== 0) {
     invoiceRows.push({
       desc: `Toleransi Susut (${formatNumber(data.shrinkage_tolerance ?? 0)}%)`,
       qty: `${formatNumber(data.shrinkage_tolerance ?? 0)}%`,
-      total: shrinkageAmount,
+      total: displayShrinkageAmount,
     })
   }
   const oatRow: InvoiceRow = {
@@ -2169,7 +2175,7 @@ const InvoiceDocument = ({
   if (showDelivery && data.delivery_taxable) {
     invoiceRows.push(oatRow)
   }
-  taxLines.forEach((tax) => {
+  enabledTaxes.forEach((tax) => {
     invoiceRows.push({
       desc:
         tax.name +
@@ -2865,6 +2871,7 @@ export async function generateStandardInvoicePDF(
       // still fall back to the SO value.
       delivery_taxable:
         inv.delivery_taxable ?? soInfo?.delivery_taxable ?? false,
+      tax_inclusive: inv.tax_inclusive ?? false,
       total_amount: inv.total_amount || 0,
       // Digital stamp/signature is opt-in per customer company — off by
       // default so the printed invoice leaves an empty box for wet signing

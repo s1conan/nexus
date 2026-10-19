@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { cn, constructMultiWordSearch } from "@/lib/utils"
+import { calculateInvoiceAmounts } from "@/lib/invoice-calc"
 import { getStatusBadgeClass } from "@/lib/status-styles"
 import { SectionLoader } from "@/components/section-loader"
 import { notify } from "@/lib/notifications"
@@ -139,38 +140,25 @@ function calculateInvoiceTotals(inv: any): {
   grandTotal: number
 } {
   const soInfo = Array.isArray(inv?.po) ? inv.po[0] || {} : inv?.po || {}
-  const quantity = Number(inv?.quantity) || 0
-  const unitPrice = soInfo?.unit_price || 0
-  const deliveryPerLitre = soInfo?.delivery_price_per_litre || 0
-  const discountPercent = soInfo?.discount || 0
-  const basePrice = quantity * unitPrice
-  const afterDiscountBase = basePrice - basePrice * (discountPercent / 100)
-  // Shrinkage tolerance builds on the after-discount price (SO PDF rule)
-  const shrinkageAmount =
-    soInfo?.shrinkage_in_price && Number(soInfo?.shrinkage_tolerance) > 0
-      ? afterDiscountBase * ((Number(soInfo?.shrinkage_tolerance) || 0) / 100)
-      : 0
-  const afterDiscount = afterDiscountBase + shrinkageAmount
-  const deliveryTotal = quantity * deliveryPerLitre
-  const subtotal = Math.max(0, Math.round(afterDiscount + deliveryTotal))
-  // The invoice's own saved flag wins over the SO so this list column matches
-  // the dialog and the PDF when "delivery taxable" was toggled on the invoice.
-  const deliveryTaxable =
-    inv?.delivery_taxable ?? soInfo?.delivery_taxable ?? false
-  const taxDetails = Array.isArray(inv?.tax_details) ? inv.tax_details : []
-  const taxTotal = taxDetails.reduce((sum: number, t: any) => {
-    if (!t?.enabled) return sum
-    const isPpn = String(t?.name || "")
-      .toUpperCase()
-      .includes("PPN")
-    const taxableBase =
-      afterDiscount + (deliveryTaxable && isPpn ? deliveryTotal : 0)
-    return (
-      sum +
-      Math.round((Math.max(0, taxableBase) * (Number(t?.rate) || 0)) / 100)
-    )
-  }, 0)
-  return { subtotal, taxTotal, grandTotal: subtotal + taxTotal }
+  const amounts = calculateInvoiceAmounts({
+    quantity: Number(inv?.quantity) || 0,
+    unitPrice: Number(soInfo?.unit_price) || 0,
+    deliveryPricePerLitre: Number(soInfo?.delivery_price_per_litre) || 0,
+    discountPercent: Number(soInfo?.discount) || 0,
+    shrinkageTolerance: Number(soInfo?.shrinkage_tolerance) || 0,
+    shrinkageInPrice: Boolean(soInfo?.shrinkage_in_price),
+    // The invoice's own saved flags win over the SO so this list column
+    // matches the dialog and the PDF.
+    deliveryTaxable:
+      inv?.delivery_taxable ?? soInfo?.delivery_taxable ?? false,
+    taxInclusive: inv?.tax_inclusive ?? false,
+    taxDetails: Array.isArray(inv?.tax_details) ? inv.tax_details : [],
+  })
+  return {
+    subtotal: amounts.subtotal,
+    taxTotal: amounts.taxTotal,
+    grandTotal: amounts.grandTotal,
+  }
 }
 
 export default function InvoicePage() {
@@ -252,6 +240,7 @@ export default function InvoicePage() {
     tax_details: [] as any[],
     bank_accounts: [] as any[],
     delivery_taxable: false,
+    tax_inclusive: false,
   })
 
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
@@ -332,60 +321,19 @@ export default function InvoicePage() {
 
     if (!soInfo) return null
 
-    const unitPrice = Number(soInfo.unit_price) || 0
-    const discountPercent = Number(soInfo.discount) || 0
-    const deliveryRate = Number(soInfo.delivery_price_per_litre) || 0
-    const deliveryTaxable = formData.delivery_taxable ?? false
-    const basePrice = totalQty * unitPrice
-    const discountAmount = basePrice * (discountPercent / 100)
-    // Shrinkage tolerance builds on the after-discount price (SO PDF rule)
-    const afterDiscountBase = basePrice - discountAmount
-    const shrinkageAmount =
-      soInfo.shrinkage_in_price && Number(soInfo.shrinkage_tolerance) > 0
-        ? Math.round(
-            afterDiscountBase *
-              ((Number(soInfo.shrinkage_tolerance) || 0) / 100)
-          )
-        : 0
-    const afterDiscount = afterDiscountBase + shrinkageAmount
-    const deliveryTotal = totalQty * deliveryRate
-    const subtotal = Math.max(0, Math.round(afterDiscount + deliveryTotal))
-
-    const appliedTaxes = (formData.tax_details || []).map((t: any) => {
-      const rate = Number(t.rate) || 0
-      const isPpn = String(t.name || "")
-        .toUpperCase()
-        .includes("PPN")
-      const taxableBase =
-        afterDiscount + (deliveryTaxable && isPpn ? deliveryTotal : 0)
-      const amount = t.enabled
-        ? Math.round((Math.max(0, taxableBase) * rate) / 100)
-        : 0
-      return { ...t, amount }
+    const amounts = calculateInvoiceAmounts({
+      quantity: totalQty,
+      unitPrice: Number(soInfo.unit_price) || 0,
+      deliveryPricePerLitre: Number(soInfo.delivery_price_per_litre) || 0,
+      discountPercent: Number(soInfo.discount) || 0,
+      shrinkageTolerance: Number(soInfo.shrinkage_tolerance) || 0,
+      shrinkageInPrice: Boolean(soInfo.shrinkage_in_price),
+      deliveryTaxable: Boolean(formData.delivery_taxable),
+      taxInclusive: Boolean(formData.tax_inclusive),
+      taxDetails: formData.tax_details || [],
     })
-    const taxTotal = appliedTaxes.reduce(
-      (sum: number, t: any) => sum + t.amount,
-      0
-    )
-    const grandTotal = subtotal + taxTotal
 
-    return {
-      soInfo,
-      totalQty,
-      unitPrice,
-      basePrice,
-      discountPercent,
-      discountAmount,
-      afterDiscount,
-      shrinkageAmount,
-      deliveryRate,
-      deliveryTotal,
-      deliveryTaxable,
-      subtotal,
-      appliedTaxes,
-      taxTotal,
-      grandTotal,
-    }
+    return { soInfo, totalQty, ...amounts }
   }, [
     sourceMode,
     selectedDOs,
@@ -393,6 +341,7 @@ export default function InvoicePage() {
     soDOs,
     formData.tax_details,
     formData.delivery_taxable,
+    formData.tax_inclusive,
   ])
 
   // Per-DO delivery/billing snapshot for the summary lists. `so` may be joined
@@ -608,6 +557,7 @@ export default function InvoicePage() {
         issue_date: item.do_date || formData.issue_date,
         tax_details: buildTaxList(soTaxes),
         delivery_taxable: item?.so?.delivery_taxable ?? false,
+        tax_inclusive: false,
         address: "",
       })
       setSelectedCompanyInfo(item.company || null)
@@ -626,6 +576,7 @@ export default function InvoicePage() {
         so_id: "",
         tax_details: [],
         delivery_taxable: false,
+        tax_inclusive: false,
         address: "",
         quantity: 0,
         subtotal: 0,
@@ -646,6 +597,7 @@ export default function InvoicePage() {
         address: "",
         tax_details: [],
         delivery_taxable: false,
+        tax_inclusive: false,
         quantity: 0,
         subtotal: 0,
       }))
@@ -662,6 +614,7 @@ export default function InvoicePage() {
       issue_date: item.so_date || formData.issue_date,
       tax_details: buildTaxList(soTaxes),
       delivery_taxable: item?.delivery_taxable ?? false,
+      tax_inclusive: false,
       address: "",
       quantity: Number(item.quantity) || 0,
     })
@@ -683,6 +636,7 @@ export default function InvoicePage() {
       address: "",
       tax_details: [],
       delivery_taxable: false,
+      tax_inclusive: false,
       quantity: 0,
       subtotal: 0,
     }))
@@ -739,6 +693,7 @@ export default function InvoicePage() {
         tax_details: buildTaxList(savedTaxes),
         bank_accounts: initialSelectedBanks,
         delivery_taxable: item.delivery_taxable ?? false,
+        tax_inclusive: item.tax_inclusive ?? false,
       })
 
       if (mode === "do" && itemDoIds.length > 0) {
@@ -797,6 +752,7 @@ export default function InvoicePage() {
         tax_details: [],
         bank_accounts: [],
         delivery_taxable: false,
+        tax_inclusive: false,
       })
     }
     setIsOpen(true)
@@ -2236,6 +2192,32 @@ export default function InvoicePage() {
                                   </div>
                                 )}
 
+                                {/* Tax already contained in the gross price */}
+                                {invoiceCalc.taxInclusive && (
+                                  <div className="flex items-center justify-between text-xs md:text-sm">
+                                    <div className="flex flex-col">
+                                      <span className="font-medium text-amber-600 dark:text-amber-400">
+                                        {dict.LABEL_TAX_INCLUDED ||
+                                          "Tax Included"}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground md:text-xs">
+                                        {invoiceCalc.appliedTaxes
+                                          .filter((t: any) => t.enabled)
+                                          .map(
+                                            (t: any) => `${t.name} ${t.rate}%`
+                                          )
+                                          .join(" + ")}
+                                      </span>
+                                    </div>
+                                    <span className="font-mono font-medium text-amber-600 dark:text-amber-400">
+                                      - {SITE_CONFIG.currencySymbol}{" "}
+                                      {Math.round(
+                                        invoiceCalc.embeddedTax
+                                      ).toLocaleString()}
+                                    </span>
+                                  </div>
+                                )}
+
                                 {/* Subtotal Divider */}
                                 <div className="flex items-center justify-between border-t pt-2 text-xs font-bold md:text-sm">
                                   <span>
@@ -2269,6 +2251,28 @@ export default function InvoicePage() {
                                           setFormData({
                                             ...formData,
                                             delivery_taxable: val,
+                                          })
+                                        }
+                                      />
+                                    </div>
+                                    {/* Treat the SO unit price as gross (tax-inclusive) */}
+                                    <div className="flex items-center justify-between gap-3 rounded border bg-background p-2">
+                                      <Label
+                                        htmlFor="invoice-tax-inclusive"
+                                        className="cursor-pointer text-xs font-medium"
+                                      >
+                                        {dict.LABEL_TAX_INCLUDED ||
+                                          "Tax Included"}
+                                      </Label>
+                                      <Switch
+                                        id="invoice-tax-inclusive"
+                                        checked={Boolean(
+                                          formData.tax_inclusive
+                                        )}
+                                        onCheckedChange={(val) =>
+                                          setFormData({
+                                            ...formData,
+                                            tax_inclusive: val,
                                           })
                                         }
                                       />
@@ -2357,27 +2361,52 @@ export default function InvoicePage() {
                                     )}
                                   </div>
                                 ) : (
-                                  invoiceCalc.appliedTaxes.map(
-                                    (tax: any, idx: number) => {
-                                      if (!tax.enabled) return null
-                                      return (
-                                        <div
-                                          key={idx}
-                                          className="flex items-center justify-between text-xs md:text-sm"
-                                        >
-                                          <span className="font-medium text-muted-foreground">
-                                            {tax.name} ({tax.rate}%)
-                                          </span>
-                                          <span className="font-mono font-medium text-muted-foreground">
-                                            + {SITE_CONFIG.currencySymbol}{" "}
-                                            {Math.round(
-                                              tax.amount
-                                            ).toLocaleString()}
-                                          </span>
-                                        </div>
-                                      )
-                                    }
-                                  )
+                                  <>
+                                    {invoiceCalc.taxInclusive && (
+                                      <div className="flex items-center justify-between text-xs md:text-sm">
+                                        <span className="font-medium text-muted-foreground">
+                                          {dict.LABEL_TAX_INCLUDED ||
+                                            "Tax Included"}{" "}
+                                          (
+                                          {invoiceCalc.appliedTaxes
+                                            .filter((t: any) => t.enabled)
+                                            .map(
+                                              (t: any) =>
+                                                `${t.name} ${t.rate}%`
+                                            )
+                                            .join(" + ")}
+                                          )
+                                        </span>
+                                        <span className="font-mono font-medium text-amber-600 dark:text-amber-400">
+                                          - {SITE_CONFIG.currencySymbol}{" "}
+                                          {Math.round(
+                                            invoiceCalc.embeddedTax
+                                          ).toLocaleString()}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {invoiceCalc.appliedTaxes.map(
+                                      (tax: any, idx: number) => {
+                                        if (!tax.enabled) return null
+                                        return (
+                                          <div
+                                            key={idx}
+                                            className="flex items-center justify-between text-xs md:text-sm"
+                                          >
+                                            <span className="font-medium text-muted-foreground">
+                                              {tax.name} ({tax.rate}%)
+                                            </span>
+                                            <span className="font-mono font-medium text-muted-foreground">
+                                              + {SITE_CONFIG.currencySymbol}{" "}
+                                              {Math.round(
+                                                tax.amount
+                                              ).toLocaleString()}
+                                            </span>
+                                          </div>
+                                        )
+                                      }
+                                    )}
+                                  </>
                                 )}
 
                                 {/* Grand Total */}
