@@ -144,14 +144,18 @@ function calculateInvoiceTotals(inv: any): {
   const amounts = calculateInvoiceAmounts({
     quantity: Number(inv?.quantity) || 0,
     unitPrice: Number(soInfo?.unit_price) || 0,
-    deliveryPricePerLitre: Number(soInfo?.delivery_price_per_litre) || 0,
+    deliveryPricePerLitre:
+      Number(
+        inv?.details?.delivery_price_per_litre ??
+          soInfo?.delivery_price_per_litre
+      ) || 0,
     discountPercent: Number(soInfo?.discount) || 0,
     shrinkageTolerance: Number(soInfo?.shrinkage_tolerance) || 0,
     shrinkageInPrice: Boolean(soInfo?.shrinkage_in_price),
     // The invoice's own saved flags win over the SO so this list column
     // matches the dialog and the PDF.
-    deliveryTaxable:
-      inv?.delivery_taxable ?? soInfo?.delivery_taxable ?? false,
+    deliveryTaxable: inv?.delivery_taxable ?? soInfo?.delivery_taxable ?? false,
+    deliveryInclusive: Boolean(inv?.details?.delivery_inclusive),
     taxInclusive: inv?.tax_inclusive ?? false,
     taxDetails: Array.isArray(inv?.tax_details) ? inv.tax_details : [],
   })
@@ -272,6 +276,8 @@ export default function InvoicePage() {
     bank_accounts: [] as any[],
     delivery_taxable: false,
     tax_inclusive: false,
+    delivery_price_per_litre: 0,
+    delivery_inclusive: false,
   })
 
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null)
@@ -303,6 +309,12 @@ export default function InvoicePage() {
   // Tax parameters are editable only for users who may edit, and only while the
   // dialog is in edit mode (`viewOnly` covers Paid/Partial + read-only opens).
   const canToggleTaxes = canEdit && !viewOnly
+  // The delivery switches only make sense with a usable delivery fee: the
+  // NumberInput emits 0 when the field is cleared and can emit a negative
+  // value, both of which would make them meaningless no-ops.
+  const deliveryRateValue = Number(formData.delivery_price_per_litre)
+  const hasValidDeliveryFee =
+    Number.isFinite(deliveryRateValue) && deliveryRateValue > 0
 
   // Helper to resolve overdue status dynamically
   const getInvoiceStatus = useCallback((inv: any) => {
@@ -358,11 +370,12 @@ export default function InvoicePage() {
     const amounts = calculateInvoiceAmounts({
       quantity: totalQty,
       unitPrice: Number(soInfo.unit_price) || 0,
-      deliveryPricePerLitre: Number(soInfo.delivery_price_per_litre) || 0,
+      deliveryPricePerLitre: Number(formData.delivery_price_per_litre) || 0,
       discountPercent: Number(soInfo.discount) || 0,
       shrinkageTolerance: Number(soInfo.shrinkage_tolerance) || 0,
       shrinkageInPrice: Boolean(soInfo.shrinkage_in_price),
       deliveryTaxable: Boolean(formData.delivery_taxable),
+      deliveryInclusive: Boolean(formData.delivery_inclusive),
       taxInclusive: Boolean(formData.tax_inclusive),
       taxDetails: formData.tax_details || [],
     })
@@ -375,6 +388,8 @@ export default function InvoicePage() {
     soDOs,
     formData.tax_details,
     formData.delivery_taxable,
+    formData.delivery_inclusive,
+    formData.delivery_price_per_litre,
     formData.tax_inclusive,
   ])
 
@@ -696,6 +711,9 @@ export default function InvoicePage() {
         tax_details: buildTaxList(soTaxes),
         delivery_taxable: item?.so?.delivery_taxable ?? false,
         tax_inclusive: false,
+        delivery_price_per_litre:
+          Number(item?.so?.delivery_price_per_litre) || 0,
+        delivery_inclusive: false,
         address: "",
       })
       setSelectedCompanyInfo(item.company || null)
@@ -715,6 +733,8 @@ export default function InvoicePage() {
         tax_details: [],
         delivery_taxable: false,
         tax_inclusive: false,
+        delivery_price_per_litre: 0,
+        delivery_inclusive: false,
         address: "",
         quantity: 0,
         subtotal: 0,
@@ -736,6 +756,8 @@ export default function InvoicePage() {
         tax_details: [],
         delivery_taxable: false,
         tax_inclusive: false,
+        delivery_price_per_litre: 0,
+        delivery_inclusive: false,
         quantity: 0,
         subtotal: 0,
       }))
@@ -753,6 +775,8 @@ export default function InvoicePage() {
       tax_details: buildTaxList(soTaxes),
       delivery_taxable: item?.delivery_taxable ?? false,
       tax_inclusive: false,
+      delivery_price_per_litre: Number(item?.delivery_price_per_litre) || 0,
+      delivery_inclusive: false,
       address: "",
       quantity: Number(item.quantity) || 0,
     })
@@ -775,6 +799,8 @@ export default function InvoicePage() {
       tax_details: [],
       delivery_taxable: false,
       tax_inclusive: false,
+      delivery_price_per_litre: 0,
+      delivery_inclusive: false,
       quantity: 0,
       subtotal: 0,
     }))
@@ -831,6 +857,12 @@ export default function InvoicePage() {
         bank_accounts: initialSelectedBanks,
         delivery_taxable: item.delivery_taxable ?? false,
         tax_inclusive: item.tax_inclusive ?? false,
+        delivery_price_per_litre: Number(
+          item.details?.delivery_price_per_litre ??
+            item.po?.delivery_price_per_litre ??
+            0
+        ),
+        delivery_inclusive: Boolean(item.details?.delivery_inclusive),
       })
 
       if (mode === "do" && itemDoIds.length > 0) {
@@ -888,9 +920,7 @@ export default function InvoicePage() {
         if (joinedDos !== null) {
           // Invalidate any delivery fetch still in flight from a prior open.
           soDosRequestRef.current++
-          setSoDOs(
-            joinedDos.map((d: any) => ({ ...d, so_id: item.so_id }))
-          )
+          setSoDOs(joinedDos.map((d: any) => ({ ...d, so_id: item.so_id })))
           setSoDOsLoading(false)
         } else {
           setSoDOs(
@@ -947,6 +977,8 @@ export default function InvoicePage() {
         bank_accounts: [],
         delivery_taxable: false,
         tax_inclusive: false,
+        delivery_price_per_litre: 0,
+        delivery_inclusive: false,
       })
     }
     setIsOpen(true)
@@ -970,8 +1002,16 @@ export default function InvoicePage() {
     }
     setIsSaving(true)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { payment_days, ...cleanFormData } = formData
+      // `delivery_price_per_litre` and `delivery_inclusive` are invoice-level
+      // overrides persisted in `details` (the invoices table has no such
+      // columns), so they must not be sent as columns.
+      const {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        payment_days,
+        delivery_price_per_litre,
+        delivery_inclusive,
+        ...cleanFormData
+      } = formData
       const doIds = selectedDOs.map((d: any) => d.id)
       const soId =
         sourceMode === "so"
@@ -1064,6 +1104,15 @@ export default function InvoicePage() {
         subtotal: invoiceCalc ? invoiceCalc.subtotal : formData.subtotal,
         tax_amount: invoiceCalc ? invoiceCalc.taxTotal : totals.taxTotal,
         total_amount: invoiceCalc ? invoiceCalc.grandTotal : totals.grandTotal,
+        details: {
+          ...(editingItem?.details &&
+          typeof editingItem.details === "object" &&
+          !Array.isArray(editingItem.details)
+            ? editingItem.details
+            : {}),
+          delivery_price_per_litre: Number(delivery_price_per_litre) || 0,
+          delivery_inclusive: Boolean(delivery_inclusive),
+        },
       }
 
       if (!editingItem && !payload.invoice_number) {
@@ -2320,7 +2369,9 @@ export default function InvoicePage() {
                                                 <span
                                                   className={cn(
                                                     "inline-flex min-w-[68px] items-center justify-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase md:min-w-[72px] md:px-2",
-                                                    getStatusBadgeClass(d.status)
+                                                    getStatusBadgeClass(
+                                                      d.status
+                                                    )
                                                   )}
                                                 >
                                                   {d.status}
@@ -2388,7 +2439,7 @@ export default function InvoicePage() {
                                   "Calculation Details"}
                               </div>
                               <div className="space-y-2">
-                                {/* Base Price */}
+                                {/* Base Price — the product part of the stated price */}
                                 <div className="flex items-center justify-between text-xs md:text-sm">
                                   <div className="flex flex-col">
                                     <span className="font-medium text-foreground">
@@ -2400,20 +2451,20 @@ export default function InvoicePage() {
                                       ).toLocaleString()}{" "}
                                       L × {SITE_CONFIG.currencySymbol}{" "}
                                       {Number(
-                                        invoiceCalc.unitPrice
+                                        invoiceCalc.productUnitPrice
                                       ).toLocaleString()}
                                     </span>
                                   </div>
                                   <span className="font-mono font-medium">
                                     {SITE_CONFIG.currencySymbol}{" "}
                                     {Math.round(
-                                      invoiceCalc.basePrice
+                                      invoiceCalc.productBasePrice
                                     ).toLocaleString()}
                                   </span>
                                 </div>
 
                                 {/* Discount */}
-                                {invoiceCalc.discountAmount > 0 && (
+                                {invoiceCalc.productDiscountAmount > 0 && (
                                   <div className="flex items-center justify-between text-xs md:text-sm">
                                     <div className="flex flex-col">
                                       <span className="font-medium text-red-600 dark:text-red-400">
@@ -2427,14 +2478,14 @@ export default function InvoicePage() {
                                     <span className="font-mono font-medium text-red-600 dark:text-red-400">
                                       - {SITE_CONFIG.currencySymbol}{" "}
                                       {Math.round(
-                                        invoiceCalc.discountAmount
+                                        invoiceCalc.productDiscountAmount
                                       ).toLocaleString()}
                                     </span>
                                   </div>
                                 )}
 
                                 {/* Shrinkage Tolerance (in price) */}
-                                {invoiceCalc.shrinkageAmount !== 0 && (
+                                {invoiceCalc.productShrinkageAmount !== 0 && (
                                   <div className="flex items-center justify-between text-xs md:text-sm">
                                     <div className="flex flex-col">
                                       <span className="font-medium text-emerald-600 dark:text-emerald-400">
@@ -2452,19 +2503,21 @@ export default function InvoicePage() {
                                     <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400">
                                       + {SITE_CONFIG.currencySymbol}{" "}
                                       {Math.round(
-                                        invoiceCalc.shrinkageAmount
+                                        invoiceCalc.productShrinkageAmount
                                       ).toLocaleString()}
                                     </span>
                                   </div>
                                 )}
 
-                                {/* Delivery Fee */}
+                                {/* Delivery Fee — inside the price or added on top */}
                                 {invoiceCalc.deliveryTotal > 0 && (
                                   <div className="flex items-center justify-between text-xs md:text-sm">
                                     <div className="flex flex-col">
                                       <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                                        {dict.LABEL_DELIVERY_FEE ||
+                                        {dict.LABEL_INVOICE_DELIVERY_FEE ||
                                           "Delivery Fee"}
+                                        {invoiceCalc.deliveryInclusive &&
+                                          " (included)"}
                                       </span>
                                       <span className="text-[10px] text-muted-foreground md:text-xs">
                                         {Number(
@@ -2486,31 +2539,34 @@ export default function InvoicePage() {
                                   </div>
                                 )}
 
-                                {/* Tax already contained in the gross price */}
-                                {invoiceCalc.taxInclusive && (
-                                  <div className="flex items-center justify-between text-xs md:text-sm">
-                                    <div className="flex flex-col">
-                                      <span className="font-medium text-amber-600 dark:text-amber-400">
-                                        {dict.LABEL_TAX_INCLUDED ||
-                                          "Tax Included"}
-                                      </span>
-                                      <span className="text-[10px] text-muted-foreground md:text-xs">
-                                        {invoiceCalc.appliedTaxes
-                                          .filter((t: any) => t.enabled)
-                                          .map(
-                                            (t: any) => `${t.name} ${t.rate}%`
-                                          )
-                                          .join(" + ")}
+                                {/* Tax already contained in the gross price
+                                    (product + delivery when the fee is inside it) */}
+                                {invoiceCalc.taxInclusive &&
+                                  invoiceCalc.embeddedTax > 0 && (
+                                    <div className="flex items-center justify-between text-xs md:text-sm">
+                                      <div className="flex flex-col">
+                                        <span className="font-medium text-amber-600 dark:text-amber-400">
+                                          {dict.LABEL_INVOICE_TAX_INCLUDED ||
+                                            "Tax Included"}
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground md:text-xs">
+                                          {invoiceCalc.appliedTaxes
+                                            .filter((t: any) => t.enabled)
+                                            .map(
+                                              (t: any) =>
+                                                `${t.name} ${t.rate}%`
+                                            )
+                                            .join(" + ")}
+                                        </span>
+                                      </div>
+                                      <span className="font-mono font-medium text-amber-600 dark:text-amber-400">
+                                        - {SITE_CONFIG.currencySymbol}{" "}
+                                        {Math.round(
+                                          invoiceCalc.embeddedTax
+                                        ).toLocaleString()}
                                       </span>
                                     </div>
-                                    <span className="font-mono font-medium text-amber-600 dark:text-amber-400">
-                                      - {SITE_CONFIG.currencySymbol}{" "}
-                                      {Math.round(
-                                        invoiceCalc.embeddedTax
-                                      ).toLocaleString()}
-                                    </span>
-                                  </div>
-                                )}
+                                  )}
 
                                 {/* Subtotal Divider */}
                                 <div className="flex items-center justify-between border-t pt-2 text-xs font-bold md:text-sm">
@@ -2529,25 +2585,90 @@ export default function InvoicePage() {
                                     users, read-only text for everyone else */}
                                 {canToggleTaxes ? (
                                   <div className="space-y-2">
-                                    {/* Delivery fee joins the PPN base only when on */}
-                                    <div className="flex items-center justify-between gap-3 rounded border bg-background p-2">
-                                      <Label
-                                        htmlFor="invoice-delivery-taxable"
-                                        className="cursor-pointer text-xs font-medium"
-                                      >
-                                        {dict.LABEL_DELIVERY_TAXABLE ||
-                                          "Include Delivery Fee in Tax (PPN)"}
-                                      </Label>
-                                      <Switch
-                                        id="invoice-delivery-taxable"
-                                        checked={formData.delivery_taxable}
-                                        onCheckedChange={(val) =>
-                                          setFormData({
-                                            ...formData,
-                                            delivery_taxable: val,
-                                          })
-                                        }
-                                      />
+                                    {/* Delivery fee panel — rate, whether the
+                                        price already contains it, and whether it
+                                        is taxed */}
+                                    <div className="space-y-2 rounded border bg-card p-3">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <Label
+                                          htmlFor="invoice-delivery-rate"
+                                          className="text-xs font-medium"
+                                        >
+                                          {dict.LABEL_INVOICE_DELIVERY_FEE ||
+                                            "Delivery Fee"}
+                                        </Label>
+                                        <div className="w-40 shrink-0">
+                                          <NumberInput
+                                            id="invoice-delivery-rate"
+                                            value={
+                                              Number(
+                                                formData.delivery_price_per_litre
+                                              ) || 0
+                                            }
+                                            onChange={(val) =>
+                                              setFormData({
+                                                ...formData,
+                                                delivery_price_per_litre: val,
+                                              })
+                                            }
+                                            leftBadge={
+                                              SITE_CONFIG.currencySymbol
+                                            }
+                                            rightBadge="/ L"
+                                            className="h-8"
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-3 border-t pt-2">
+                                        <Label
+                                          htmlFor="invoice-delivery-inclusive"
+                                          className={cn(
+                                            "cursor-pointer text-xs font-medium",
+                                            !hasValidDeliveryFee &&
+                                              "text-muted-foreground"
+                                          )}
+                                        >
+                                          {dict.LABEL_INVOICE_PRICE_INCLUDES_DELIVERY ||
+                                            "Price Includes Delivery Fee"}
+                                        </Label>
+                                        <Switch
+                                          id="invoice-delivery-inclusive"
+                                          checked={Boolean(
+                                            formData.delivery_inclusive
+                                          )}
+                                          disabled={!hasValidDeliveryFee}
+                                          onCheckedChange={(val) =>
+                                            setFormData({
+                                              ...formData,
+                                              delivery_inclusive: val,
+                                            })
+                                          }
+                                        />
+                                      </div>
+                                      <div className="flex items-center justify-between gap-3 border-t pt-2">
+                                        <Label
+                                          htmlFor="invoice-delivery-taxable"
+                                          className={cn(
+                                            "cursor-pointer text-xs font-medium",
+                                            !hasValidDeliveryFee &&
+                                              "text-muted-foreground"
+                                          )}
+                                        >
+                                          {dict.LABEL_DELIVERY_TAXABLE ||
+                                            "Include Delivery Fee in Tax (PPN)"}
+                                        </Label>
+                                        <Switch
+                                          id="invoice-delivery-taxable"
+                                          checked={formData.delivery_taxable}
+                                          disabled={!hasValidDeliveryFee}
+                                          onCheckedChange={(val) =>
+                                            setFormData({
+                                              ...formData,
+                                              delivery_taxable: val,
+                                            })
+                                          }
+                                        />
+                                      </div>
                                     </div>
                                     {/* Treat the SO unit price as gross (tax-inclusive) */}
                                     <div className="flex items-center justify-between gap-3 rounded border bg-background p-2">
@@ -2555,7 +2676,7 @@ export default function InvoicePage() {
                                         htmlFor="invoice-tax-inclusive"
                                         className="cursor-pointer text-xs font-medium"
                                       >
-                                        {dict.LABEL_TAX_INCLUDED ||
+                                        {dict.LABEL_INVOICE_TAX_INCLUDED ||
                                           "Tax Included"}
                                       </Label>
                                       <Switch
@@ -2600,7 +2721,10 @@ export default function InvoicePage() {
                                                       ...formData,
                                                       tax_details:
                                                         formData.tax_details.map(
-                                                          (t: any, i: number) =>
+                                                          (
+                                                            t: any,
+                                                            i: number
+                                                          ) =>
                                                             i === idx
                                                               ? {
                                                                   ...t,
@@ -2656,29 +2780,30 @@ export default function InvoicePage() {
                                   </div>
                                 ) : (
                                   <>
-                                    {invoiceCalc.taxInclusive && (
-                                      <div className="flex items-center justify-between text-xs md:text-sm">
-                                        <span className="font-medium text-muted-foreground">
-                                          {dict.LABEL_TAX_INCLUDED ||
-                                            "Tax Included"}{" "}
-                                          (
-                                          {invoiceCalc.appliedTaxes
-                                            .filter((t: any) => t.enabled)
-                                            .map(
-                                              (t: any) =>
-                                                `${t.name} ${t.rate}%`
+                                    {invoiceCalc.taxInclusive &&
+                                      invoiceCalc.embeddedTax > 0 && (
+                                        <div className="flex items-center justify-between text-xs md:text-sm">
+                                          <span className="font-medium text-muted-foreground">
+                                            {dict.LABEL_INVOICE_TAX_INCLUDED ||
+                                              "Tax Included"}{" "}
+                                            (
+                                            {invoiceCalc.appliedTaxes
+                                              .filter((t: any) => t.enabled)
+                                              .map(
+                                                (t: any) =>
+                                                  `${t.name} ${t.rate}%`
+                                              )
+                                              .join(" + ")}
                                             )
-                                            .join(" + ")}
-                                          )
-                                        </span>
-                                        <span className="font-mono font-medium text-amber-600 dark:text-amber-400">
-                                          - {SITE_CONFIG.currencySymbol}{" "}
-                                          {Math.round(
-                                            invoiceCalc.embeddedTax
-                                          ).toLocaleString()}
-                                        </span>
-                                      </div>
-                                    )}
+                                          </span>
+                                          <span className="font-mono font-medium text-amber-600 dark:text-amber-400">
+                                            - {SITE_CONFIG.currencySymbol}{" "}
+                                            {Math.round(
+                                              invoiceCalc.embeddedTax
+                                            ).toLocaleString()}
+                                          </span>
+                                        </div>
+                                      )}
                                     {invoiceCalc.appliedTaxes.map(
                                       (tax: any, idx: number) => {
                                         if (!tax.enabled) return null

@@ -110,9 +110,95 @@ Exclusive mode is byte-for-byte the previous behaviour (verified numerically:
 - Legacy invoices with an empty `do_refs` still fall back to clear + fetch.
 
 ## Deployment note
-Run `nids-app/add_tax_inclusive.sql` in Supabase BEFORE deploying this code.
-The save payload now includes `tax_inclusive`; without the column every invoice
-insert/update fails with a missing-column error.
+`invoices.tax_inclusive` was verified present in the live project (PostgREST
+select succeeded; the earlier missing-column warning is obsolete). No further
+step is needed for that column.
+
+## Delivery-fee override + "price includes delivery fee"
+- The invoice dialog has an editable per-litre delivery fee, shown only to
+  users with edit permission (`canEdit && !viewOnly`).
+- It is stored in `invoices.details.delivery_price_per_litre` (JSONB) because
+  `invoices.delivery_price_per_litre` does not exist and there is no DDL access
+  from the agent. This avoids a deploy-order hazard; no migration is required.
+- Read order everywhere: invoice `details` override -> SO rate -> 0
+  (`calculateInvoiceTotals`, the dialog seed, and the invoice PDF mapping).
+- `invoiceCalc` takes the rate from `formData`, so changing it recalculates the
+  subtotal, the PPN/delivery tax (when `delivery_taxable` is on) and the grand
+  total live.
+- The save path strips `delivery_price_per_litre` from the column payload and
+  merges it into `details`, preserving other `details` keys.
+
+## Two independent "inclusive" switches (final model)
+`lib/invoice-calc.ts` now models both switches over ONE gross price:
+- `taxInclusive` — the price contains the tax. The enabled taxes are backed out
+  of the product amount (`net = gross / (1 + totalRate)`, `tax = gross − net`).
+- `deliveryInclusive` — the price contains the delivery fee. The fee is carved
+  OUT of the price (product = price − delivery) instead of being charged on
+  top of it. Stored in `details.delivery_inclusive`.
+- Combined: the delivery fee is carved out first, then the tax is backed out of
+  what remains. When the fee is taxable and inside the price, its PPN is
+  embedded as well. The discount/shrinkage apply to the product part.
+- Example (price 23,850, delivery 150, PPN 11% + PBBKB 7.5%):
+  both off -> product 23,850 + delivery 150; tax inclusive -> product 21,486;
+  delivery inclusive -> product 23,700 + delivery 150; both on -> product
+  20,000 + delivery 135 and total = 23,850 = the stated price.
+- Verified numerically over 7 switch combinations; rows always add up to the
+  grand total, and the PDF prints the net product/delivery rows so the printed
+  table stays additive.
+
+## PDF prints the deliveries only for DO-backed invoices
+- The invoice PDF's "Delivery Order:" block is now gated on `do_ids` being
+  non-empty (DO-backed). An SO-backed invoice is billed from the Sales Order
+  and must not print the SO's deliveries.
+- Needed because SO-mode saves now snapshot the SO's DOs into `do_refs` (for
+  the dialog's delivery-progress panel), which the PDF was rendering.
+- Verified on live data: 156/INV/ABS-RMKO (SO-backed, 3 refs), 162 (2 refs),
+  124 and 127 (1 ref each) no longer print DOs; all 21 DO-backed invoices
+  still print theirs.
+- The dialog's delivery-progress panel and the email's optional DO PDF
+  attachments are unaffected (the attachments already fell back to the SO's
+  DOs before this change).
+
+## PDF + dialog presentation (final)
+- The invoice PDF follows the tax-invoice convention: a tax-inclusive invoice
+  prints the NET price (the tax-exclusive price) and states the tax as its own
+  row, so the column adds up to the total. There is **no "Pajak Termasuk"
+  deduction row** — the user rejected it and asked for the layout in their
+  invoice screenshot.
+- The Qty column now uses the same 2-decimal Indonesian format as the
+  Price/Litre column (e.g. 2.000,00 instead of 2,000).
+- A delivery fee that is inside the price is listed with the product rows; a fee
+  added on top keeps the existing rule (before the tax rows when
+  delivery_taxable, after them otherwise).
+- The dialog keeps the gross working view (gross base price + a single
+  combined "Harga Termasuk Pajak" deduction line + tax rows). The separate
+  "Tax Included in Delivery Fee" line was removed because it double-counted the
+  delivery's embedded tax; the orphaned dictionary key
+  LABEL_INVOICE_DELIVERY_TAX_INCLUDED was deleted.
+- Verified: 12 switch/discount combinations, every printed row chain reconciles
+  to the TOTAL, and invoice 161 reproduces the user's screenshot exactly
+  (2.000,00 × 20.000,00 = 40.000.000,00; PBBKB 3.000.000,00; PPN 4.400.000,00;
+  OAT 300.000,00; TOTAL 47.700.000,00).
+
+## Invoice-scoped labels + merged delivery panel
+- The invoice-only dictionary keys were renamed so no other module can pick up
+  invoice wording by accident: `LABEL_TAX_INCLUDED` ->
+  `LABEL_INVOICE_TAX_INCLUDED`, `LABEL_DELIVERY_FEE` ->
+  `LABEL_INVOICE_DELIVERY_FEE`, `LABEL_DELIVERY_INCLUDED` ->
+  `LABEL_INVOICE_DELIVERY_TAX_INCLUDED`, `LABEL_PRICE_INCLUDES_DELIVERY` ->
+  `LABEL_INVOICE_PRICE_INCLUDES_DELIVERY`. The old keys were unused outside
+  the invoice page, so nothing else changed. `LABEL_DELIVERY_TAXABLE` stays
+  shared (quotations, sales order, deposit, invoice all mean the same by it).
+- The delivery fee input, "Price Includes Delivery Fee" and "Include Delivery
+  Fee in Tax" now live in ONE panel (single bordered container, rows separated
+  by `border-t pt-2`) instead of three separate gray boxes. The "Tax Included"
+  switch stays separate because it applies to the product price.
+- Both delivery switches are disabled unless the delivery fee is usable
+  (`hasValidDeliveryFee`: finite and > 0). `NumberInput` emits 0 when the field
+  is cleared and can emit a negative value, both of which would make the
+  switches meaningless no-ops. The labels are muted while disabled. The stored
+  flag is intentionally NOT auto-reset, so clearing the field while typing
+  does not discard the user's choice.
 
 ## Known limitation
 Invoice-only, per decision 3: the linked SO/quotation still show tax-exclusive

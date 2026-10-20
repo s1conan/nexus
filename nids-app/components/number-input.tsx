@@ -74,7 +74,9 @@ export function NumberInput({
         const currentRaw = displayValue.replaceAll(GROUP, "")
         const currentParsed = parseFloat(currentRaw)
         if (isNaN(currentParsed) || currentParsed !== value) {
-          startTransition(() => { setDisplayValue(formatted) })
+          startTransition(() => {
+            setDisplayValue(formatted)
+          })
         }
       }
     }

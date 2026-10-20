@@ -147,6 +147,8 @@ export interface InvoiceData {
   tax_details: { name: string; rate: number; enabled: boolean }[]
   delivery_taxable?: boolean
   tax_inclusive?: boolean
+  /** The stated price already includes the delivery fee. */
+  delivery_inclusive?: boolean
   total_amount: number
   note: string
   is_note_enabled: boolean
@@ -2085,6 +2087,7 @@ const InvoiceDocument = ({
     shrinkageTolerance: data.shrinkage_tolerance ?? 0,
     shrinkageInPrice: Boolean(data.shrinkage_in_price),
     deliveryTaxable: Boolean(data.delivery_taxable),
+    deliveryInclusive: Boolean(data.delivery_inclusive),
     taxInclusive: Boolean(data.tax_inclusive),
     taxDetails: data.tax_details || [],
   })
@@ -2092,7 +2095,9 @@ const InvoiceDocument = ({
     netBasePrice,
     netProduct,
     netShrinkageAmount,
+    netDelivery,
     deliveryTotal,
+    deliveryInclusive,
     grandTotal,
     discountPercent,
   } = amounts
@@ -2101,6 +2106,9 @@ const InvoiceDocument = ({
   const enabledTaxes = amounts.appliedTaxes.filter((t) => t.enabled)
   // Whole-rupiah display values that always chain exactly:
   // base − discount + shrinkage === product, so the column adds up.
+  // A tax-inclusive invoice prints the NET price (the tax-exclusive price
+  // that belongs on a tax invoice) and states the tax as its own row, so the
+  // column adds up to the total.
   const displayBasePrice = Math.round(netBasePrice)
   const displayProductAmount = Math.round(netProduct)
   const displayShrinkageAmount = shrinkageEnabled
@@ -2111,7 +2119,7 @@ const InvoiceDocument = ({
   const displayDiscountAmount = displayBasePrice - displayAfterDiscountBase
   const pricePerLitre = (amount: number) =>
     data.quantity > 0 ? amount / data.quantity : 0
-  const showDelivery = data.delivery_price_per_litre > 0
+  const showDelivery = deliveryTotal > 0
   const formatDateShort = (value?: string) =>
     value ? format(new Date(value), "dd-MMM-yyyy") : "-"
   const addressLines = (data.customer_address || "")
@@ -2135,7 +2143,8 @@ const InvoiceDocument = ({
       desc:
         data.product_name || (data.so_number ? `SO: ${data.so_number}` : "-"),
       bold: true,
-      qty: formatNumber(data.quantity),
+      // Same 2-decimal format as the Price/Litre column (e.g. 2.000,00)
+      qty: formatRupiah(data.quantity),
       // Tax-inclusive documents print the NET unit price so that
       // qty × price + tax rows reconciles to the stated total.
       pricePerLitre: pricePerLitre(displayBasePrice),
@@ -2168,11 +2177,21 @@ const InvoiceDocument = ({
   }
   const oatRow: InvoiceRow = {
     desc: "OAT",
-    pricePerLitreRaw: formatNumber(data.delivery_price_per_litre),
-    total: Math.round(deliveryTotal),
+    // A delivery fee that sits inside a tax-inclusive price is gross too, so
+    // its net rate is printed — matching the product row.
+    pricePerLitreRaw: formatNumber(
+      data.quantity > 0 ? netDelivery / data.quantity : 0
+    ),
+    total: Math.round(netDelivery),
+  }
+  // A delivery fee that is inside the price belongs to the price breakdown, so
+  // it is listed with the product rows; a fee added on top keeps the existing
+  // rule (before the tax rows when delivery_taxable, after them otherwise).
+  if (showDelivery && deliveryInclusive) {
+    invoiceRows.push(oatRow)
   }
   // Delivery fee only joins the tax base when delivery_taxable is set
-  if (showDelivery && data.delivery_taxable) {
+  if (showDelivery && !deliveryInclusive && data.delivery_taxable) {
     invoiceRows.push(oatRow)
   }
   enabledTaxes.forEach((tax) => {
@@ -2187,10 +2206,9 @@ const InvoiceDocument = ({
       total: tax.amount,
     })
   })
-  if (showDelivery && !data.delivery_taxable) {
+  if (showDelivery && !deliveryInclusive && !data.delivery_taxable) {
     invoiceRows.push(oatRow)
   }
-
   return (
     <Document>
       <Page size="A4" style={a4Styles.page}>
@@ -2740,6 +2758,13 @@ export async function generateStandardInvoicePDF(
   const poInfo = Array.isArray(inv.po) ? inv.po[0] || {} : inv.po || {}
 
   const doRefs = Array.isArray(inv.do_refs) ? inv.do_refs : []
+  // Only DO-backed invoices list their deliveries on the printed invoice. An
+  // SO-backed invoice is billed from the Sales Order, so it must not print
+  // the SO's deliveries (its `do_refs` is a snapshot kept for the dialog's
+  // delivery-progress panel and for the email attachments).
+  const isDoBackedInvoice =
+    Array.isArray(inv.do_ids) && inv.do_ids.length > 0
+  const printedDoRefs = isDoBackedInvoice ? doRefs : []
   const soTolerance = Number(soInfo?.shrinkage_tolerance) || 0
 
   // Billed qty must reflect what was actually SENT, not the SO ordered qty.
@@ -2779,7 +2804,10 @@ export async function generateStandardInvoicePDF(
   // reports/PDF stay stable even if the SO is later edited.
   const soQuantity = Number(inv.so_quantity) || Number(soInfo?.quantity) || 0
   const unitPrice = soInfo?.unit_price || 0
-  const deliveryPricePerLitre = soInfo?.delivery_price_per_litre || 0
+  const deliveryPricePerLitre =
+    inv.details?.delivery_price_per_litre ??
+    soInfo?.delivery_price_per_litre ??
+    0
   const discountPercent = soInfo?.discount || 0
   const basePrice = quantity * unitPrice
   const afterDiscountBase = basePrice - basePrice * (discountPercent / 100)
@@ -2849,8 +2877,8 @@ export async function generateStandardInvoicePDF(
       product_name: soInfo?.product?.name || doInfo?.product?.name,
       customer_address: inv.address || customerAddress,
       customer_npwp: companyDetails.npwp || companyRow?.npwp || undefined,
-      do_number: doRefs[0]?.do_number || doInfo?.do_number,
-      do_refs: doRefs,
+      do_number: printedDoRefs[0]?.do_number || doInfo?.do_number,
+      do_refs: printedDoRefs,
       so_number: soInfo?.so_number,
       // Customer PO reference lives on the linked Sales Order — read via the
       // DO's SO join, with the invoice's direct SO join as fallback
@@ -2872,6 +2900,7 @@ export async function generateStandardInvoicePDF(
       delivery_taxable:
         inv.delivery_taxable ?? soInfo?.delivery_taxable ?? false,
       tax_inclusive: inv.tax_inclusive ?? false,
+      delivery_inclusive: Boolean(inv.details?.delivery_inclusive),
       total_amount: inv.total_amount || 0,
       // Digital stamp/signature is opt-in per customer company — off by
       // default so the printed invoice leaves an empty box for wet signing
